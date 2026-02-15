@@ -167,7 +167,7 @@
 
 <div class="space-y-6 p-6">
 	{#if $navigating}
-		<div class="space-y-6 animate-pulse">
+		<div class="animate-pulse space-y-6">
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-4">
 					<div class="h-10 w-10 rounded-md bg-muted"></div>
@@ -271,7 +271,9 @@
 			</Card.Root>
 			<Card.Root>
 				<Card.Content class="flex items-center gap-3 p-4">
-					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+					<div
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10"
+					>
 						<CircleCheck class="h-4 w-4 text-emerald-500" />
 					</div>
 					<div>
@@ -367,7 +369,7 @@
 											<Button
 												variant="ghost"
 												size="icon"
-												class="h-8 w-8 cursor-pointer text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+												class="h-8 w-8 cursor-pointer text-blue-600 hover:bg-blue-50 hover:text-blue-700"
 												onclick={() => openStockDialog(variant)}
 												title="Update stock"
 											>
@@ -484,7 +486,7 @@
 			class="space-y-4"
 		>
 			<input type="hidden" name="variantId" value={selectedVariantId} />
-			
+
 			<div class="space-y-2">
 				<Label for="newQuantity">New Stock Quantity</Label>
 				<div class="flex items-center gap-2">
@@ -516,9 +518,16 @@
 						<Plus class="h-4 w-4" />
 					</Button>
 				</div>
-				<p class="text-xs text-center text-muted-foreground">
-					Current stock: <span class="font-bold">{selectedVariant?.stockQuantity}</span> 
-					&rarr; New stock: <span class="font-bold {newStockQuantity > (selectedVariant?.stockQuantity ?? 0) ? 'text-emerald-600' : newStockQuantity < (selectedVariant?.stockQuantity ?? 0) ? 'text-red-600' : ''}">{newStockQuantity}</span>
+				<p class="text-center text-xs text-muted-foreground">
+					Current stock: <span class="font-bold">{selectedVariant?.stockQuantity}</span>
+					&rarr; New stock:
+					<span
+						class="font-bold {newStockQuantity > (selectedVariant?.stockQuantity ?? 0)
+							? 'text-emerald-600'
+							: newStockQuantity < (selectedVariant?.stockQuantity ?? 0)
+								? 'text-red-600'
+								: ''}">{newStockQuantity}</span
+					>
 				</p>
 			</div>
 

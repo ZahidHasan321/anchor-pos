@@ -38,7 +38,8 @@ export const actions: Actions = {
 			return fail(400, { error: 'Your account has been deactivated. Contact admin.', username });
 		}
 
-		if (!verifyPassword(password, user.passwordHash)) {
+		const validPassword = await verifyPassword(password, user.passwordHash);
+		if (!validPassword) {
 			return fail(400, { error: 'Invalid username or password', username });
 		}
 

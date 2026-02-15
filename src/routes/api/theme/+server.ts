@@ -10,14 +10,14 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 	}
 
 	const { theme } = await request.json();
-	
+
 	if (!['light', 'dark', 'system'].includes(theme)) {
 		return json({ error: 'Invalid theme' }, { status: 400 });
 	}
 
 	// Save to DB
 	db.update(users).set({ theme }).where(eq(users.id, locals.user.id)).run();
-	
+
 	// Save to cookie
 	cookies.set('theme', theme, {
 		path: '/',
@@ -25,6 +25,6 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		httpOnly: false, // Allow client-side JS to read it if needed
 		sameSite: 'lax'
 	});
-	
+
 	return json({ success: true });
 };

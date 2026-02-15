@@ -3,7 +3,7 @@ import { users, rolePermissions } from './db/schema';
 import { hashPassword } from './auth';
 import { generateId } from '../utils';
 
-export function seedAdmin() {
+export async function seedAdmin() {
 	const existing = db.select().from(users).get();
 	if (existing) return; // Already seeded
 
@@ -11,7 +11,7 @@ export function seedAdmin() {
 		.values({
 			id: generateId(),
 			username: 'admin',
-			passwordHash: hashPassword('admin123'),
+			passwordHash: await hashPassword('admin123'),
 			role: 'admin',
 			name: 'Administrator',
 			isActive: true,

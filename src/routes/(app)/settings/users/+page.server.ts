@@ -73,7 +73,7 @@ export const actions: Actions = {
 				id: userId,
 				username,
 				name,
-				passwordHash: hashPassword(password),
+				passwordHash: await hashPassword(password),
 				role,
 				phone,
 				email,
@@ -126,7 +126,7 @@ export const actions: Actions = {
 		if (!password) return fail(400, { message: 'Password is required' });
 
 		db.update(users)
-			.set({ passwordHash: hashPassword(password) })
+			.set({ passwordHash: await hashPassword(password) })
 			.where(eq(users.id, id))
 			.run();
 

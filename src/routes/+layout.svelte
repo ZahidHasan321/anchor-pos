@@ -10,7 +10,7 @@
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 <Toaster richColors position="top-right" />
-<ConfirmDialog />
 <TooltipProvider>
 	{@render children()}
 </TooltipProvider>
+<ConfirmDialog />

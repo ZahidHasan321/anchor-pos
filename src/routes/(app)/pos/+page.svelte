@@ -76,8 +76,7 @@
 				!searchQuery ||
 				p.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
 				p.barcode.toLowerCase().includes(searchQuery.toLowerCase());
-			const matchesCategory =
-				selectedCategory === 'All' || p.category === selectedCategory;
+			const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
 			return matchesSearch && matchesCategory;
 		})
 	);
@@ -202,20 +201,24 @@
 	<title>Point of Sale — Clothing POS</title>
 </svelte:head>
 
-<div class="flex flex-col h-[calc(100vh-3rem)] md:h-screen">
+<div class="flex h-[calc(100vh-3rem)] flex-col md:h-screen">
 	<!-- Mobile Tab Switcher -->
 	<div class="flex border-b bg-card md:hidden">
 		<button
 			onclick={() => (activeMobileTab = 'products')}
-			class="flex-1 py-3 text-sm font-bold transition-all border-b-2 
-				{activeMobileTab === 'products' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}"
+			class="flex-1 border-b-2 py-3 text-sm font-bold transition-all
+				{activeMobileTab === 'products'
+				? 'border-primary text-primary'
+				: 'border-transparent text-muted-foreground'}"
 		>
 			Products ({filteredProducts.length})
 		</button>
 		<button
 			onclick={() => (activeMobileTab = 'cart')}
-			class="flex-1 py-3 text-sm font-bold transition-all border-b-2 relative
-				{activeMobileTab === 'cart' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}"
+			class="relative flex-1 border-b-2 py-3 text-sm font-bold transition-all
+				{activeMobileTab === 'cart'
+				? 'border-primary text-primary'
+				: 'border-transparent text-muted-foreground'}"
 		>
 			Cart
 			{#if cart.totalItems > 0}
@@ -226,18 +229,22 @@
 
 	<div class="flex flex-1 overflow-hidden">
 		<!-- Left Side: Products -->
-		<div class="flex flex-1 flex-col overflow-hidden {activeMobileTab === 'products' ? 'flex' : 'hidden md:flex'}">
+		<div
+			class="flex flex-1 flex-col overflow-hidden {activeMobileTab === 'products'
+				? 'flex'
+				: 'hidden md:flex'}"
+		>
 			<!-- Search Bar -->
 			<div class="border-b bg-card px-4 pt-3 pb-2">
 				<div class="relative">
 					<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
 					<Input
 						placeholder="Search products or scan barcode..."
-						class="h-12 border-0 bg-muted/30 pl-11 pr-16 text-base focus-visible:ring-2 focus-visible:ring-primary"
+						class="h-12 border-0 bg-muted/30 pr-16 pl-11 text-base focus-visible:ring-2 focus-visible:ring-primary"
 						bind:value={searchQuery}
 						autofocus
 					/>
-					<div class="absolute top-1/2 right-3 -translate-y-1/2 flex items-center gap-2">
+					<div class="absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-2">
 						{#if searchQuery}
 							<button
 								onclick={() => (searchQuery = '')}
@@ -254,7 +261,7 @@
 				</div>
 
 				<!-- Category Tabs -->
-				<div class="mt-2 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+				<div class="scrollbar-none mt-2 flex gap-1.5 overflow-x-auto pb-1">
 					{#each categories() as cat}
 						<button
 							onclick={() => (selectedCategory = cat)}
@@ -270,50 +277,74 @@
 			</div>
 
 			<!-- Product Grid -->
-			<div class="flex-1 min-h-0 overflow-hidden">
+			<div class="min-h-0 flex-1 overflow-hidden">
 				<ScrollArea class="h-full bg-muted/20 p-3">
-					<div class="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+					<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5">
 						{#each filteredProducts as variant}
 							<button
 								onclick={() => {
 									handleAddToCart(variant);
 								}}
-								class="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card p-2.5 sm:p-3.5
-									text-left transition-all hover:border-primary/50
-									hover:shadow-lg hover:shadow-primary/10 active:scale-[0.97]"
+								class="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card p-2.5 text-left
+									transition-all hover:border-primary/50 hover:shadow-lg
+									hover:shadow-primary/10 active:scale-[0.97] sm:p-3.5"
 							>
 								<!-- Stock Badge -->
 								<div class="absolute top-2 right-2 z-10">
 									{#if variant.stockQuantity <= 3}
-										<Badge class="bg-red-500 px-1 text-[9px] sm:px-1.5 sm:text-[10px] text-white"
+										<Badge class="bg-red-500 px-1 text-[9px] text-white sm:px-1.5 sm:text-[10px]"
 											>{variant.stockQuantity}</Badge
 										>
 									{:else if variant.stockQuantity <= 10}
-										<Badge class="bg-amber-500 px-1 text-[9px] sm:px-1.5 sm:text-[10px] text-white"
+										<Badge class="bg-amber-500 px-1 text-[9px] text-white sm:px-1.5 sm:text-[10px]"
 											>{variant.stockQuantity}</Badge
 										>
 									{:else}
-										<Badge class="bg-emerald-500 px-1 text-[9px] sm:px-1.5 sm:text-[10px] text-white"
+										<Badge
+											class="bg-emerald-500 px-1 text-[9px] text-white sm:px-1.5 sm:text-[10px]"
 											>{variant.stockQuantity}</Badge
 										>
 									{/if}
 								</div>
 
 								<!-- Product info -->
-								<h3 class="mb-1 line-clamp-2 text-xs sm:text-sm leading-tight font-semibold">
+								<h3 class="mb-1 line-clamp-2 text-xs leading-tight font-semibold sm:text-sm">
 									{variant.productName}
 								</h3>
 
 								<!-- Size & Color -->
-								<div class="mb-2 sm:mb-3 flex items-center gap-1.5">
-									<span class="rounded bg-muted px-1 py-0.5 text-[10px] sm:text-[11px] font-medium text-muted-foreground">
+								<div class="mb-2 flex items-center gap-1.5 sm:mb-3">
+									<span
+										class="rounded bg-muted px-1 py-0.5 text-[10px] font-medium text-muted-foreground sm:text-[11px]"
+									>
 										{variant.size}
 									</span>
 								</div>
 
 								<!-- Price -->
-								<div class="mt-auto">
-									<span class="text-base sm:text-lg font-black text-primary">{formatBDT(variant.price)}</span>
+								<div class="mt-auto flex items-center justify-between">
+									<div class="flex flex-col">
+										{#if variant.discount > 0}
+											<span class="text-[10px] text-muted-foreground line-through">
+												{formatBDT(variant.price)}
+											</span>
+											<span class="text-base font-black text-primary sm:text-lg">
+												{formatBDT(variant.price * (1 - variant.discount / 100))}
+											</span>
+										{:else}
+											<span class="text-base font-black text-primary sm:text-lg">
+												{formatBDT(variant.price)}
+											</span>
+										{/if}
+									</div>
+									{#if variant.discount > 0}
+										<Badge
+											variant="outline"
+											class="border-primary/30 bg-primary/5 px-1 text-[10px] text-primary"
+										>
+											-{variant.discount}%
+										</Badge>
+									{/if}
 								</div>
 
 								<!-- Hover overlay -->
@@ -340,7 +371,12 @@
 		</div>
 
 		<!-- Right Side: Cart Panel -->
-		<div class="flex w-full flex-col border-l bg-card md:w-[400px] lg:w-[420px] {activeMobileTab === 'cart' ? 'flex' : 'hidden md:flex'}">
+		<div
+			class="flex w-full flex-col border-l bg-card md:w-[400px] lg:w-[420px] {activeMobileTab ===
+			'cart'
+				? 'flex'
+				: 'hidden md:flex'}"
+		>
 			<!-- Cart Header -->
 			<div class="border-b bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-4 py-3">
 				<div class="flex items-center justify-between">
@@ -366,246 +402,245 @@
 				</div>
 			</div>
 
-		<!-- Cart Items -->
-		<ScrollArea class="flex-1 px-3 py-2">
-			<div class="space-y-2">
-				{#each cart.items as item, i}
-					{@const lineTotal = item.price * item.quantity * (1 - item.discount / 100)}
-					<div class="rounded-lg border bg-muted/30 p-3 transition-colors hover:bg-muted/50">
-						<!-- Top row: name, variant, remove -->
-						<div class="mb-2 flex items-start justify-between gap-2">
-							<div class="min-w-0 flex-1">
-								<h4 class="truncate text-sm font-medium">{item.productName}</h4>
-								<p class="text-xs text-muted-foreground">
-									{item.size}{item.color ? ` / ${item.color}` : ''} — {formatBDT(item.price)} each
-								</p>
-							</div>
-							<button
-								onclick={() => cart.removeItem(item.variantId)}
-								class="mt-0.5 shrink-0 cursor-pointer p-0.5 text-muted-foreground transition-colors hover:text-destructive"
-							>
-								<X class="h-4 w-4" />
-							</button>
-						</div>
-
-						<!-- Bottom row: discount, qty, line total -->
-						<div class="flex items-center gap-3">
-							<!-- Discount input -->
-							<div class="flex items-center gap-1 rounded-md border bg-card px-2 py-1">
-								<span class="text-[10px] text-muted-foreground">Disc</span>
-								<input
-									type="number"
-									min="0"
-									max="100"
-									class="h-5 w-10 border-0 bg-transparent p-0 text-center text-xs focus:ring-0"
-									value={item.discount}
-									oninput={(e) =>
-										cart.updateItemDiscount(
-											item.variantId,
-											parseFloat(e.currentTarget.value) || 0
-										)}
-								/>
-								<span class="text-[10px] text-muted-foreground">%</span>
-							</div>
-
-							<!-- Qty controls -->
-							<div class="flex items-center">
+			<!-- Cart Items -->
+			<ScrollArea class="flex-1 px-3 py-2">
+				<div class="space-y-2">
+					{#each cart.items as item, i}
+						{@const lineTotal = item.price * item.quantity * (1 - item.discount / 100)}
+						<div class="rounded-lg border bg-muted/30 p-3 transition-colors hover:bg-muted/50">
+							<!-- Top row: name, variant, remove -->
+							<div class="mb-2 flex items-start justify-between gap-2">
+								<div class="min-w-0 flex-1">
+									<h4 class="truncate text-sm font-medium">{item.productName}</h4>
+									<p class="text-xs text-muted-foreground">
+										{item.size}{item.color ? ` / ${item.color}` : ''} — {formatBDT(item.price)} each
+									</p>
+								</div>
 								<button
-									onclick={() => cart.updateQuantity(item.variantId, item.quantity - 1)}
-									class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-l-md border bg-card hover:bg-muted"
+									onclick={() => cart.removeItem(item.variantId)}
+									class="mt-0.5 shrink-0 cursor-pointer p-0.5 text-muted-foreground transition-colors hover:text-destructive"
 								>
-									<Minus class="h-3 w-3" />
-								</button>
-								<span
-									class="flex h-7 w-8 items-center justify-center border-y bg-card text-xs font-bold"
-									>{item.quantity}</span
-								>
-								<button
-									onclick={() => cart.updateQuantity(item.variantId, item.quantity + 1)}
-									class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-r-md border bg-card hover:bg-muted"
-									disabled={item.quantity >= item.maxStock}
-								>
-									<Plus class="h-3 w-3" />
+									<X class="h-4 w-4" />
 								</button>
 							</div>
 
-							<!-- Line total -->
-							<div class="ml-auto text-right">
-								<span class="text-sm font-bold text-primary">{formatBDT(lineTotal)}</span>
+							<!-- Bottom row: discount, qty, line total -->
+							<div class="flex items-center gap-3">
+								<!-- Discount input -->
+								<div class="flex items-center gap-1 rounded-md border bg-card px-2 py-1">
+									<span class="text-[10px] text-muted-foreground">Disc</span>
+									<input
+										type="number"
+										min="0"
+										max="100"
+										class="h-5 w-10 border-0 bg-transparent p-0 text-center text-xs focus:ring-0"
+										value={item.discount}
+										oninput={(e) =>
+											cart.updateItemDiscount(
+												item.variantId,
+												parseFloat(e.currentTarget.value) || 0
+											)}
+									/>
+									<span class="text-[10px] text-muted-foreground">%</span>
+								</div>
+
+								<!-- Qty controls -->
+								<div class="flex items-center">
+									<button
+										onclick={() => cart.updateQuantity(item.variantId, item.quantity - 1)}
+										class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-l-md border bg-card hover:bg-muted"
+									>
+										<Minus class="h-3 w-3" />
+									</button>
+									<span
+										class="flex h-7 w-8 items-center justify-center border-y bg-card text-xs font-bold"
+										>{item.quantity}</span
+									>
+									<button
+										onclick={() => cart.updateQuantity(item.variantId, item.quantity + 1)}
+										class="flex h-7 w-7 cursor-pointer items-center justify-center rounded-r-md border bg-card hover:bg-muted"
+										disabled={item.quantity >= item.maxStock}
+									>
+										<Plus class="h-3 w-3" />
+									</button>
+								</div>
+
+								<!-- Line total -->
+								<div class="ml-auto text-right">
+									<span class="text-sm font-bold text-primary">{formatBDT(lineTotal)}</span>
+								</div>
 							</div>
 						</div>
-					</div>
-				{/each}
+					{/each}
 
-				{#if cart.items.length === 0}
-					<div class="flex flex-col items-center justify-center py-16 text-muted-foreground">
-						<ShoppingCart class="mb-3 h-10 w-10 opacity-15" />
-						<p class="text-sm font-medium">Cart is empty</p>
-						<p class="text-xs">Select products from the left</p>
-					</div>
-				{/if}
-			</div>
-		</ScrollArea>
-
-		<!-- Sticky Cart Footer -->
-		<div class="space-y-3 border-t bg-card p-3 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
-			<!-- Customer Search -->
-			<div class="relative w-full">
-				<div class="flex items-center gap-2">
-					{#if cart.customer}
-						<div class="flex flex-1 items-center gap-2 rounded-md border bg-muted/30 px-3 py-1.5">
-							<Users class="h-3.5 w-3.5 shrink-0 text-primary" />
-							<div class="min-w-0 flex-1">
-								<span class="block truncate text-xs font-medium">{cart.customer.name}</span>
-								{#if cart.customer.phone}
-									<span class="text-[10px] text-muted-foreground">{cart.customer.phone}</span>
-								{/if}
-							</div>
-							<button
-								onclick={() => {
-									cart.setCustomer(null);
-									customerSearch = '';
-								}}
-								class="cursor-pointer text-muted-foreground hover:text-destructive"
-							>
-								<X class="h-3.5 w-3.5" />
-							</button>
+					{#if cart.items.length === 0}
+						<div class="flex flex-col items-center justify-center py-16 text-muted-foreground">
+							<ShoppingCart class="mb-3 h-10 w-10 opacity-15" />
+							<p class="text-sm font-medium">Cart is empty</p>
+							<p class="text-xs">Select products from the left</p>
 						</div>
-					{:else}
-						<div class="relative flex-1">
-							<Input
-								placeholder="Customer (phone or name)..."
-								class="h-8 pr-8 text-xs"
-								bind:value={customerSearch}
-								onfocus={() => (showCustomerResults = true)}
-								onblur={() => setTimeout(() => (showCustomerResults = false), 200)}
-							/>
-							{#if customerSearch}
+					{/if}
+				</div>
+			</ScrollArea>
+
+			<!-- Sticky Cart Footer -->
+			<div class="space-y-3 border-t bg-card p-3 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+				<!-- Customer Search -->
+				<div class="relative w-full">
+					<div class="flex items-center gap-2">
+						{#if cart.customer}
+							<div class="flex flex-1 items-center gap-2 rounded-md border bg-muted/30 px-3 py-1.5">
+								<Users class="h-3.5 w-3.5 shrink-0 text-primary" />
+								<div class="min-w-0 flex-1">
+									<span class="block truncate text-xs font-medium">{cart.customer.name}</span>
+									{#if cart.customer.phone}
+										<span class="text-[10px] text-muted-foreground">{cart.customer.phone}</span>
+									{/if}
+								</div>
 								<button
 									onclick={() => {
+										cart.setCustomer(null);
 										customerSearch = '';
-										showCustomerResults = false;
 									}}
-									class="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+									class="cursor-pointer text-muted-foreground hover:text-destructive"
 								>
 									<X class="h-3.5 w-3.5" />
 								</button>
+							</div>
+						{:else}
+							<div class="relative flex-1">
+								<Input
+									placeholder="Customer (phone or name)..."
+									class="h-8 pr-8 text-xs"
+									bind:value={customerSearch}
+									onfocus={() => (showCustomerResults = true)}
+									onblur={() => setTimeout(() => (showCustomerResults = false), 200)}
+								/>
+								{#if customerSearch}
+									<button
+										onclick={() => {
+											customerSearch = '';
+											showCustomerResults = false;
+										}}
+										class="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+									>
+										<X class="h-3.5 w-3.5" />
+									</button>
+								{/if}
+							</div>
+							<Button
+								variant="outline"
+								size="icon"
+								class="h-8 w-8 shrink-0 cursor-pointer"
+								onclick={() => (customerDialogOpen = true)}
+							>
+								<UserPlus class="h-3.5 w-3.5" />
+							</Button>
+						{/if}
+					</div>
+
+					<!-- Search Results Dropdown -->
+					{#if showCustomerResults && customerSearch.length >= 2}
+						<div
+							class="absolute right-0 bottom-full left-0 z-50 mb-1 max-h-48 overflow-y-auto rounded-lg border bg-popover shadow-lg"
+						>
+							{#if matchedCustomers.length > 0}
+								{#each matchedCustomers as customer}
+									<button
+										class="flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent"
+										onmousedown={(e) => {
+											e.preventDefault();
+											cart.setCustomer({
+												id: customer.id,
+												name: customer.name,
+												phone: customer.phone
+											});
+											customerSearch = '';
+											showCustomerResults = false;
+										}}
+									>
+										<div
+											class="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary"
+										>
+											{customer.name.charAt(0)}
+										</div>
+										<div>
+											<div class="text-xs font-medium">{customer.name}</div>
+											<div class="text-[10px] text-muted-foreground">
+												{customer.phone || 'No phone'}
+											</div>
+										</div>
+									</button>
+								{/each}
+							{:else}
+								<div class="p-3 text-center">
+									<p class="mb-2 text-xs text-muted-foreground">
+										No customer found for "{customerSearch}"
+									</p>
+									<Button
+										variant="outline"
+										size="sm"
+										class="cursor-pointer text-xs"
+										onmousedown={(e) => {
+											e.preventDefault();
+											customerDialogOpen = true;
+											showCustomerResults = false;
+										}}
+									>
+										<UserPlus class="mr-1 h-3 w-3" />
+										Create New Customer
+									</Button>
+								</div>
 							{/if}
 						</div>
-						<Button
-							variant="outline"
-							size="icon"
-							class="h-8 w-8 shrink-0 cursor-pointer"
-							onclick={() => (customerDialogOpen = true)}
-						>
-							<UserPlus class="h-3.5 w-3.5" />
-						</Button>
 					{/if}
 				</div>
 
-				<!-- Search Results Dropdown -->
-				{#if showCustomerResults && customerSearch.length >= 2}
-					<div
-						class="absolute right-0 bottom-full left-0 z-50 mb-1 max-h-48 overflow-y-auto rounded-lg border bg-popover shadow-lg"
-					>
-						{#if matchedCustomers.length > 0}
-							{#each matchedCustomers as customer}
-								<button
-									class="flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent"
-									onmousedown={(e) => {
-										e.preventDefault();
-										cart.setCustomer({
-											id: customer.id,
-											name: customer.name,
-											phone: customer.phone
-										});
-										customerSearch = '';
-										showCustomerResults = false;
-									}}
-								>
-									<div
-										class="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary"
-									>
-										{customer.name.charAt(0)}
-									</div>
-									<div>
-										<div class="text-xs font-medium">{customer.name}</div>
-										<div class="text-[10px] text-muted-foreground">
-											{customer.phone || 'No phone'}
-										</div>
-									</div>
-								</button>
-							{/each}
-						{:else}
-							<div class="p-3 text-center">
-								<p class="mb-2 text-xs text-muted-foreground">
-									No customer found for "{customerSearch}"
-								</p>
-								<Button
-									variant="outline"
-									size="sm"
-									class="cursor-pointer text-xs"
-									onmousedown={(e) => {
-										e.preventDefault();
-										customerDialogOpen = true;
-										showCustomerResults = false;
-									}}
-								>
-									<UserPlus class="mr-1 h-3 w-3" />
-									Create New Customer
-								</Button>
-							</div>
-						{/if}
+				<!-- Discount + Total -->
+				<div class="space-y-1.5">
+					<div class="flex items-center justify-between text-xs">
+						<span class="text-muted-foreground">Order Discount</span>
+						<div class="flex items-center gap-1">
+							<Input
+								type="number"
+								min="0"
+								max="100"
+								class="h-7 w-14 text-right text-xs"
+								bind:value={() => cart.globalDiscount, (v) => (cart.globalDiscount = Number(v))}
+							/>
+							<span class="text-muted-foreground">%</span>
+						</div>
 					</div>
-				{/if}
-			</div>
-
-			<!-- Discount + Total -->
-			<div class="space-y-1.5">
-				<div class="flex items-center justify-between text-xs">
-					<span class="text-muted-foreground">Order Discount</span>
-					<div class="flex items-center gap-1">
-						<Input
-							type="number"
-							min="0"
-							max="100"
-							class="h-7 w-14 text-right text-xs"
-							bind:value={() => cart.globalDiscount, (v) => (cart.globalDiscount = Number(v))}
-						/>
-						<span class="text-muted-foreground">%</span>
+					<div class="flex items-center justify-between rounded-lg bg-primary/5 px-4 py-3">
+						<span class="text-sm font-semibold">Total</span>
+						<span class="text-2xl font-black text-primary">{formatBDT(cart.subtotal)}</span>
 					</div>
 				</div>
-				<div class="flex items-center justify-between rounded-lg bg-primary/5 px-4 py-3">
-					<span class="text-sm font-semibold">Total</span>
-					<span class="text-2xl font-black text-primary">{formatBDT(cart.subtotal)}</span>
-				</div>
-			</div>
 
-			<!-- Charge Button -->
-			<Button
-				class="h-14 w-full cursor-pointer bg-gradient-to-r from-primary to-primary/80 text-lg font-bold shadow-lg shadow-primary/25 hover:from-primary/90 hover:to-primary/70"
-				disabled={cart.items.length === 0}
-				onclick={async () => {
-					if (!cart.customer) {
-						const confirmed = await confirmState.confirm({
-							title: 'Walk-in Sale',
-							message:
-								'No customer is selected. Proceeding will record this as a walk-in sale.',
-							confirmText: 'Proceed to Payment',
-							cancelText: 'Cancel',
-							variant: 'default'
-						});
-						if (!confirmed) return;
-					}
-					checkoutOpen = true;
-				}}
-			>
-				<ShoppingCart class="mr-2 h-5 w-5" />
-				Charge {formatBDT(cart.subtotal)}
-			</Button>
+				<!-- Charge Button -->
+				<Button
+					class="h-14 w-full cursor-pointer bg-gradient-to-r from-primary to-primary/80 text-lg font-bold shadow-lg shadow-primary/25 hover:from-primary/90 hover:to-primary/70"
+					disabled={cart.items.length === 0}
+					onclick={async () => {
+						if (!cart.customer) {
+							const confirmed = await confirmState.confirm({
+								title: 'Walk-in Sale',
+								message: 'No customer is selected. Proceeding will record this as a walk-in sale.',
+								confirmText: 'Proceed to Payment',
+								cancelText: 'Cancel',
+								variant: 'default'
+							});
+							if (!confirmed) return;
+						}
+						checkoutOpen = true;
+					}}
+				>
+					<ShoppingCart class="mr-2 h-5 w-5" />
+					Charge {formatBDT(cart.subtotal)}
+				</Button>
+			</div>
 		</div>
 	</div>
-</div>
 </div>
 
 <!-- Checkout Dialog -->
@@ -674,7 +709,15 @@
 			{#if cart.paymentMethod === 'cash'}
 				<div class="space-y-4">
 					<div class="space-y-2">
-						<Label for="cashReceived" class="text-sm">Cash Received (৳)</Label>
+						<div class="flex items-center justify-between">
+							<Label for="cashReceived" class="text-sm">Cash Received (৳)</Label>
+							<button
+								onclick={() => (cart.cashReceived = 0)}
+								class="text-xs text-muted-foreground hover:text-destructive"
+							>
+								Clear
+							</button>
+						</div>
 						<Input
 							id="cashReceived"
 							type="number"
@@ -687,9 +730,9 @@
 							<Button
 								variant="outline"
 								class="cursor-pointer text-sm font-semibold"
-								onclick={() => (cart.cashReceived = amount)}
+								onclick={() => (cart.cashReceived += amount)}
 							>
-								৳{amount}
+								+৳{amount}
 							</Button>
 						{/each}
 					</div>

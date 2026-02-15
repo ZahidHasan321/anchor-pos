@@ -3,14 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import {
-		Store,
-		Users,
-		ClipboardList,
-		ShieldAlert,
-		Save,
-		Loader2
-	} from '@lucide/svelte';
+	import { Store, Users, ClipboardList, ShieldAlert, Save, Loader2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { page } from '$app/state';
 	import { roleLabels } from '$lib/utils';
@@ -69,7 +62,9 @@
 <div class="space-y-6 p-3 sm:p-6">
 	<div>
 		<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
-		<p class="text-sm text-muted-foreground sm:text-base">Configure your store and manage system settings.</p>
+		<p class="text-sm text-muted-foreground sm:text-base">
+			Configure your store and manage system settings.
+		</p>
 	</div>
 
 	<!-- Settings Navigation Tabs -->
@@ -98,9 +93,7 @@
 			<Card.Root>
 				<Card.Header>
 					<Card.Title>{roleLabels[role] ?? role}</Card.Title>
-					<Card.Description>
-						Select which pages this role can access.
-					</Card.Description>
+					<Card.Description>Select which pages this role can access.</Card.Description>
 				</Card.Header>
 				<Card.Content>
 					<form
@@ -117,7 +110,7 @@
 						<input type="hidden" name="role" value={role} />
 						<div class="space-y-3">
 							{#each data.allResources as resource}
-								<label class="flex items-center gap-3 cursor-pointer">
+								<label class="flex cursor-pointer items-center gap-3">
 									<input
 										type="checkbox"
 										name="resources"
@@ -164,22 +157,12 @@
 				<div class="flex flex-wrap gap-4">
 					{#each data.allResources as resource}
 						<label class="flex items-center gap-2 opacity-60">
-							<input
-								type="checkbox"
-								checked
-								disabled
-								class="h-4 w-4 rounded border-input"
-							/>
+							<input type="checkbox" checked disabled class="h-4 w-4 rounded border-input" />
 							<span class="text-sm font-medium">{resourceLabels[resource] ?? resource}</span>
 						</label>
 					{/each}
 					<label class="flex items-center gap-2 opacity-60">
-						<input
-							type="checkbox"
-							checked
-							disabled
-							class="h-4 w-4 rounded border-input"
-						/>
+						<input type="checkbox" checked disabled class="h-4 w-4 rounded border-input" />
 						<span class="text-sm font-medium">Settings</span>
 					</label>
 				</div>

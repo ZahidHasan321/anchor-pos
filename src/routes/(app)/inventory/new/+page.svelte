@@ -106,7 +106,7 @@
 								<p class="text-sm text-destructive">{form.errors.name}</p>
 							{/if}
 						</div>
-						
+
 						<div class="space-y-2">
 							<Label for="description">Description (Optional)</Label>
 							<Textarea
@@ -170,7 +170,9 @@
 					<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 						<div>
 							<Label class="text-lg font-bold">Size Variants</Label>
-							<p class="text-sm text-muted-foreground">Select the sizes you want to create and set initial stock.</p>
+							<p class="text-sm text-muted-foreground">
+								Select the sizes you want to create and set initial stock.
+							</p>
 						</div>
 						<div class="w-[200px]">
 							<Select.Root type="single" bind:value={selectedTemplate}>
@@ -197,7 +199,7 @@
 								/>
 								<Label
 									for="size-{size}"
-									class="cursor-pointer text-sm font-semibold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+									class="cursor-pointer text-sm leading-none font-semibold peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
 								>
 									{size}
 								</Label>
@@ -206,7 +208,7 @@
 					</div>
 
 					<!-- Custom size input -->
-					<div class="flex items-center gap-2 max-w-md">
+					<div class="flex max-w-md items-center gap-2">
 						<Input
 							placeholder="Custom size (e.g. OneSize, Free, 27)"
 							bind:value={customSizeInput}
@@ -218,31 +220,32 @@
 							}}
 							class="h-10"
 						/>
-						<Button
-							type="button"
-							variant="outline"
-							onclick={addCustomSize}
-							class="cursor-pointer"
-						>
+						<Button type="button" variant="outline" onclick={addCustomSize} class="cursor-pointer">
 							<Plus class="mr-2 h-4 w-4" /> Add Size
 						</Button>
 					</div>
 
 					{#if selectedSizes.length > 0}
-						<div class="space-y-6 pt-4 border-t border-muted-foreground/10">
+						<div class="space-y-6 border-t border-muted-foreground/10 pt-4">
 							<div class="space-y-3">
-								<Label class="text-sm font-bold uppercase tracking-wider text-muted-foreground">Quantity per size</Label>
-								<div class="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+								<Label class="text-sm font-bold tracking-wider text-muted-foreground uppercase"
+									>Quantity per size</Label
+								>
+								<div
+									class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8"
+								>
 									{#each selectedSizes as size}
-										<div class="relative flex flex-col gap-1 rounded-lg border bg-background p-3 shadow-sm group">
+										<div
+											class="group relative flex flex-col gap-1 rounded-lg border bg-background p-3 shadow-sm"
+										>
 											<button
 												type="button"
-												class="absolute top-1 right-1 cursor-pointer rounded-full p-1 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+												class="absolute top-1 right-1 cursor-pointer rounded-full p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
 												onclick={() => removeSize(size)}
 											>
 												<X class="h-3 w-3" />
 											</button>
-											<span class="text-xs font-bold text-center">{size}</span>
+											<span class="text-center text-xs font-bold">{size}</span>
 											<Input
 												type="number"
 												min="0"
@@ -251,7 +254,7 @@
 													const val = parseInt((e.target as HTMLInputElement).value) || 0;
 													sizeQuantities = { ...sizeQuantities, [size]: val };
 												}}
-												class="h-8 text-center text-sm border-0 bg-muted/50 focus-visible:ring-1"
+												class="h-8 border-0 bg-muted/50 text-center text-sm focus-visible:ring-1"
 												placeholder="0"
 											/>
 										</div>
@@ -259,7 +262,7 @@
 								</div>
 							</div>
 
-							<div class="space-y-2 max-w-xl p-4 rounded-lg bg-primary/5 border border-primary/10">
+							<div class="max-w-xl space-y-2 rounded-lg border border-primary/10 bg-primary/5 p-4">
 								<Label for="stockReason" class="text-sm font-bold">Stock Adjustment Reason</Label>
 								<Input
 									id="stockReason"
@@ -269,7 +272,9 @@
 									required
 									class="h-11 bg-background"
 								/>
-								<p class="text-[11px] text-muted-foreground">This will be recorded in the stock logs for all variants with quantity > 0.</p>
+								<p class="text-[11px] text-muted-foreground">
+									This will be recorded in the stock logs for all variants with quantity > 0.
+								</p>
 							</div>
 						</div>
 					{/if}
@@ -281,13 +286,19 @@
 					{/each}
 
 					{#if form?.errors?.sizes}
-						<p class="text-sm text-destructive font-medium">{form.errors.sizes}</p>
+						<p class="text-sm font-medium text-destructive">{form.errors.sizes}</p>
 					{/if}
 				</div>
 
 				<div class="flex justify-end gap-4 pt-4">
-					<Button variant="outline" href="/inventory" class="w-32 cursor-pointer h-12">Cancel</Button>
-					<Button type="submit" class="w-48 cursor-pointer h-12 text-base font-bold" disabled={loading}>
+					<Button variant="outline" href="/inventory" class="h-12 w-32 cursor-pointer"
+						>Cancel</Button
+					>
+					<Button
+						type="submit"
+						class="h-12 w-48 cursor-pointer text-base font-bold"
+						disabled={loading}
+					>
 						{#if loading}
 							<Loader2 class="mr-2 h-5 w-5 animate-spin" />
 							Creating...

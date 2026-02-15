@@ -5,7 +5,15 @@ import { rolePermissions } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { logAuditEvent } from '$lib/server/audit';
 
-const ALL_RESOURCES = ['dashboard', 'inventory', 'pos', 'orders', 'customers', 'cashbook', 'reports'];
+const ALL_RESOURCES = [
+	'dashboard',
+	'inventory',
+	'pos',
+	'orders',
+	'customers',
+	'cashbook',
+	'reports'
+];
 const CONFIGURABLE_ROLES = ['manager', 'sales'];
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -17,9 +25,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	const permissionsByRole: Record<string, string[]> = {};
 	for (const role of CONFIGURABLE_ROLES) {
-		permissionsByRole[role] = allPerms
-			.filter((p) => p.role === role)
-			.map((p) => p.resource);
+		permissionsByRole[role] = allPerms.filter((p) => p.role === role).map((p) => p.resource);
 	}
 
 	return {

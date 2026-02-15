@@ -39,9 +39,19 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			name: customers.name,
 			phone: customers.phone,
 			email: customers.email,
-			orderCount: sql<number>`(SELECT COUNT(*) FROM \`order\` WHERE customer_id = "customer"."id" AND status = 'completed')`.as('orderCount'),
-			totalSpent: sql<number>`COALESCE((SELECT SUM(total_amount) FROM \`order\` WHERE customer_id = "customer"."id" AND status = 'completed'), 0)`.as('totalSpent'),
-			lastOrderDate: sql<number | null>`(SELECT MAX(created_at) FROM \`order\` WHERE customer_id = "customer"."id" AND status = 'completed')`.as('lastOrderDate')
+			orderCount:
+				sql<number>`(SELECT COUNT(*) FROM \`order\` WHERE customer_id = "customer"."id" AND status = 'completed')`.as(
+					'orderCount'
+				),
+			totalSpent:
+				sql<number>`COALESCE((SELECT SUM(total_amount) FROM \`order\` WHERE customer_id = "customer"."id" AND status = 'completed'), 0)`.as(
+					'totalSpent'
+				),
+			lastOrderDate: sql<
+				number | null
+			>`(SELECT MAX(created_at) FROM \`order\` WHERE customer_id = "customer"."id" AND status = 'completed')`.as(
+				'lastOrderDate'
+			)
 		})
 		.from(customers)
 		.where(whereClause)

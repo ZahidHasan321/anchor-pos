@@ -142,7 +142,9 @@
 		detailPage = page;
 		isDetailLoading = true;
 		try {
-			const res = await fetch(`/api/reports/details?type=${type}&from=${data.startDate}&to=${data.endDate}&page=${page}`);
+			const res = await fetch(
+				`/api/reports/details?type=${type}&from=${data.startDate}&to=${data.endDate}&page=${page}`
+			);
 			if (res.ok) {
 				const newData = await res.json();
 				if (page === 1) {
@@ -239,12 +241,7 @@
 				{periodLabel} &middot; {data.startDate} to {data.endDate}
 			</p>
 		</div>
-		<Button
-			variant="outline"
-			size="sm"
-			onclick={() => window.print()}
-			class="cursor-pointer"
-		>
+		<Button variant="outline" size="sm" onclick={() => window.print()} class="cursor-pointer">
 			<Printer class="mr-2 h-4 w-4" /> Print
 		</Button>
 	</div>
@@ -268,26 +265,31 @@
 
 		<div class="flex flex-wrap items-end gap-2">
 			<div class="space-y-1">
-				<Label for="from" class="text-[11px] text-muted-foreground font-semibold">From</Label>
+				<Label for="from" class="text-[11px] font-semibold text-muted-foreground">From</Label>
 				<Input id="from" type="date" bind:value={customFrom} class="h-8 w-[150px] text-xs" />
 			</div>
 			<div class="space-y-1">
-				<Label for="to" class="text-[11px] text-muted-foreground font-semibold">To</Label>
+				<Label for="to" class="text-[11px] font-semibold text-muted-foreground">To</Label>
 				<Input id="to" type="date" bind:value={customTo} class="h-8 w-[150px] text-xs" />
 			</div>
-			<Button size="sm" onclick={applyCustomRange} class="h-8 cursor-pointer text-xs"> Apply </Button>
+			<Button size="sm" onclick={applyCustomRange} class="h-8 cursor-pointer text-xs">Apply</Button>
 		</div>
 	</div>
 
 	<!-- ==================== SALES OVERVIEW ==================== -->
 	<div>
-		<h2 class="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:text-sm">
+		<h2
+			class="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:text-sm"
+		>
 			Sales Overview
 		</h2>
 		<div class="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-5">
-			<div class="rounded-lg border bg-card p-3 sm:p-4 animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both">
+			<div
+				class="animate-in rounded-lg border bg-card p-3 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+			>
 				<div class="flex items-center justify-between">
-					<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Total Revenue</span>
+					<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Total Revenue</span
+					>
 					<div class="hidden rounded-md bg-blue-500/10 p-1.5 sm:block">
 						<DollarSign class="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
 					</div>
@@ -300,7 +302,9 @@
 				</p>
 			</div>
 
-			<div class="rounded-lg border bg-card p-3 sm:p-4 animate-in fade-in slide-in-from-bottom-2 duration-300 delay-75 fill-mode-both">
+			<div
+				class="animate-in rounded-lg border bg-card p-3 delay-75 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+			>
 				<div class="flex items-center justify-between">
 					<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Items Sold</span>
 					<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
@@ -313,11 +317,15 @@
 				</p>
 			</div>
 
-			<div class="rounded-lg border bg-card p-3 sm:p-4 animate-in fade-in slide-in-from-bottom-2 duration-300 delay-150 fill-mode-both">
+			<div
+				class="animate-in rounded-lg border bg-card p-3 delay-150 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+			>
 				<div class="flex items-center justify-between">
 					<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Gross Profit</span>
 					<div
-						class="hidden rounded-md p-1.5 sm:block {data.grossProfit >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10'}"
+						class="hidden rounded-md p-1.5 sm:block {data.grossProfit >= 0
+							? 'bg-emerald-500/10'
+							: 'bg-red-500/10'}"
 					>
 						{#if data.grossProfit >= 0}
 							<TrendingUp class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -327,7 +335,9 @@
 					</div>
 				</div>
 				<div
-					class="mt-1.5 text-lg font-bold sm:mt-2 sm:text-2xl {data.grossProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}"
+					class="mt-1.5 text-lg font-bold sm:mt-2 sm:text-2xl {data.grossProfit >= 0
+						? 'text-emerald-600'
+						: 'text-red-600'}"
 				>
 					{formatBDT(data.grossProfit)}
 				</div>
@@ -336,9 +346,12 @@
 				</p>
 			</div>
 
-			<div class="rounded-lg border bg-card p-3 sm:p-4 animate-in fade-in slide-in-from-bottom-2 duration-300 delay-200 fill-mode-both">
+			<div
+				class="animate-in rounded-lg border bg-card p-3 delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+			>
 				<div class="flex items-center justify-between">
-					<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Total Stocked</span>
+					<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Total Stocked</span
+					>
 					<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
 						<Plus class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
 					</div>
@@ -346,12 +359,12 @@
 				<div class="mt-1.5 text-lg font-bold text-emerald-600 sm:mt-2 sm:text-2xl">
 					{data.stockSummary.totalStocked}
 				</div>
-				<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
-					Units added
-				</p>
+				<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">Units added</p>
 			</div>
 
-			<div class="rounded-lg border bg-card p-3 sm:p-4 animate-in fade-in slide-in-from-bottom-2 duration-300 delay-300 fill-mode-both">
+			<div
+				class="animate-in rounded-lg border bg-card p-3 delay-300 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+			>
 				<div class="flex items-center justify-between">
 					<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Discounts</span>
 					<div class="hidden rounded-md bg-amber-500/10 p-1.5 sm:block">
@@ -375,12 +388,22 @@
 		<Card.Header class="px-3 pb-2 sm:px-6">
 			<Card.Title class="flex items-center gap-2 text-sm sm:text-base">
 				<BarChart3 class="h-4 w-4 text-muted-foreground" />
-				Revenue Trend <span class="text-muted-foreground font-normal text-xs ml-1">({({ hour: 'Hourly', day: 'Daily', month: 'Monthly', year: 'Yearly' } as Record<string, string>)[data.chartGrouping] ?? 'Daily'})</span>
+				Revenue Trend
+				<span class="ml-1 text-xs font-normal text-muted-foreground"
+					>({(
+						{ hour: 'Hourly', day: 'Daily', month: 'Monthly', year: 'Yearly' } as Record<
+							string,
+							string
+						>
+					)[data.chartGrouping] ?? 'Daily'})</span
+				>
 			</Card.Title>
 		</Card.Header>
 		<Card.Content class="px-3 sm:px-6">
 			{#if data.chartData.length === 0 || data.chartData.every((d: any) => d.amount === 0)}
-				<div class="flex h-[180px] items-center justify-center text-sm text-muted-foreground sm:h-[240px]">
+				<div
+					class="flex h-[180px] items-center justify-center text-sm text-muted-foreground sm:h-[240px]"
+				>
 					No sales data for this period.
 				</div>
 			{:else}
@@ -416,12 +439,12 @@
 									</div>
 									<span class="tabular-nums">{formatBDT(m.data.total)}</span>
 								</div>
-									<div class="h-2 w-full rounded-full bg-muted overflow-hidden">
-										<div
-											class="h-full rounded-full {m.color} transition-all duration-500 ease-out animate-in slide-in-from-left fill-mode-forwards"
-											style="width: {pct(m.data.total, totalSales)}%"
-										></div>
-									</div>
+								<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
+									<div
+										class="h-full rounded-full {m.color} animate-in transition-all duration-500 ease-out fill-mode-forwards slide-in-from-left"
+										style="width: {pct(m.data.total, totalSales)}%"
+									></div>
+								</div>
 								<p class="text-[10px] text-muted-foreground sm:text-[11px]">
 									{m.data.count} orders &middot; {pct(m.data.total, totalSales)}%
 								</p>
@@ -448,13 +471,13 @@
 							<div class="space-y-1">
 								<div class="flex items-center justify-between gap-2 text-xs sm:text-sm">
 									<span class="min-w-0 truncate">{exp.description}</span>
-									<span class="shrink-0 tabular-nums text-muted-foreground">
+									<span class="shrink-0 text-muted-foreground tabular-nums">
 										{formatBDT(exp.total)}
 									</span>
 								</div>
-								<div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+								<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
 									<div
-										class="h-full rounded-full bg-orange-500/70 transition-all duration-500 ease-out animate-in slide-in-from-left fill-mode-forwards"
+										class="h-full animate-in rounded-full bg-orange-500/70 transition-all duration-500 ease-out fill-mode-forwards slide-in-from-left"
 										style="width: {(exp.total / maxExpenseTotal) * 100}%"
 									></div>
 								</div>
@@ -496,7 +519,7 @@
 						<Separator />
 						{#each data.refundSummary as r}
 							<div class="flex items-center justify-between text-xs sm:text-sm">
-								<span class="capitalize text-muted-foreground">{r.status}</span>
+								<span class="text-muted-foreground capitalize">{r.status}</span>
 								<span class="font-medium">
 									{formatBDT(r.total)}
 									<span class="text-muted-foreground">({r.count})</span>
@@ -516,7 +539,9 @@
 
 	<!-- ==================== PRODUCT PERFORMANCE ==================== -->
 	<div>
-		<h2 class="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:text-sm">
+		<h2
+			class="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:text-sm"
+		>
 			Product Performance
 		</h2>
 		<div class="grid gap-3 sm:gap-4 lg:grid-cols-2">
@@ -529,7 +554,16 @@
 				</Card.Header>
 				<Card.Content class="px-3 sm:px-6">
 					{#if data.categoryBreakdown.length > 0}
-						{@const barColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#f43f5e', '#06b6d4', '#f97316', '#14b8a6']}
+						{@const barColors = [
+							'#3b82f6',
+							'#10b981',
+							'#8b5cf6',
+							'#f59e0b',
+							'#f43f5e',
+							'#06b6d4',
+							'#f97316',
+							'#14b8a6'
+						]}
 						<div class="space-y-2.5 sm:space-y-3">
 							{#each data.categoryBreakdown as cat, i}
 								{@const barColor = barColors[i % barColors.length]}
@@ -549,10 +583,11 @@
 											</span>
 										</div>
 									</div>
-									<div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+									<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
 										<div
-											class="h-full rounded-full transition-all duration-500 ease-out animate-in slide-in-from-left fill-mode-forwards"
-											style="width: {(cat.totalRevenue / maxCategoryRevenue) * 100}%; background-color: {barColor}; opacity: 0.7"
+											class="h-full animate-in rounded-full transition-all duration-500 ease-out fill-mode-forwards slide-in-from-left"
+											style="width: {(cat.totalRevenue / maxCategoryRevenue) *
+												100}%; background-color: {barColor}; opacity: 0.7"
 										></div>
 									</div>
 								</div>
@@ -572,7 +607,12 @@
 							Top Selling Products
 						</Card.Title>
 						{#if data.topProducts.length >= 10}
-							<Button variant="ghost" size="sm" class="h-7 px-2 text-[11px]" onclick={() => openDetail('products')}>
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-7 px-2 text-[11px]"
+								onclick={() => openDetail('products')}
+							>
 								View All <ExternalLink class="ml-1 h-3 w-3" />
 							</Button>
 						{/if}
@@ -582,7 +622,14 @@
 					{#if displayProducts.length > 0}
 						<div class="divide-y sm:hidden">
 							{#each displayProducts as p, i}
-								<div class="flex items-center justify-between px-3 py-2.5">
+								<!-- svelte-ignore a11y_click_events_have_key_events -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="flex items-center justify-between px-3 py-2.5 {p.productId
+										? 'cursor-pointer hover:bg-muted/50'
+										: ''}"
+									onclick={() => p.productId && goto(`/inventory/${p.productId}`)}
+								>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2">
 											<span class="text-xs text-muted-foreground">{i + 1}.</span>
@@ -608,7 +655,10 @@
 								</Table.Header>
 								<Table.Body>
 									{#each displayProducts as p, i}
-										<Table.Row class="text-sm">
+										<Table.Row
+											class="text-sm {p.productId ? 'cursor-pointer hover:bg-muted/50' : ''}"
+											onclick={() => p.productId && goto(`/inventory/${p.productId}`)}
+										>
 											<Table.Cell class="pl-6 text-muted-foreground">{i + 1}</Table.Cell>
 											<Table.Cell class="font-medium">{p.productName}</Table.Cell>
 											<Table.Cell class="text-right tabular-nums">{p.totalQty}</Table.Cell>
@@ -630,7 +680,9 @@
 
 	<!-- ==================== INVENTORY ACTIVITY ==================== -->
 	<div>
-		<h2 class="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:text-sm">
+		<h2
+			class="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:text-sm"
+		>
 			Inventory Activity
 		</h2>
 		<Card.Root>
@@ -641,7 +693,12 @@
 						Recent Stock Updates
 					</Card.Title>
 					{#if data.stockUpdates.length >= 10}
-						<Button variant="ghost" size="sm" class="h-7 px-2 text-[11px]" onclick={() => openDetail('inventory')}>
+						<Button
+							variant="ghost"
+							size="sm"
+							class="h-7 px-2 text-[11px]"
+							onclick={() => openDetail('inventory')}
+						>
 							View All <ExternalLink class="ml-1 h-3 w-3" />
 						</Button>
 					{/if}
@@ -651,7 +708,14 @@
 				{#if data.stockUpdates.length > 0}
 					<div class="divide-y sm:hidden">
 						{#each data.stockUpdates as update}
-							<div class="flex items-center justify-between px-3 py-2.5">
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="flex items-center justify-between px-3 py-2.5 {update.productId
+									? 'cursor-pointer hover:bg-muted/50'
+									: ''}"
+								onclick={() => update.productId && goto(`/inventory/${update.productId}`)}
+							>
 								<div class="min-w-0">
 									<div class="text-sm font-medium">
 										{update.productName} ({update.size})
@@ -661,7 +725,11 @@
 									</div>
 								</div>
 								<div class="shrink-0 text-right">
-									<div class="text-sm font-bold {update.changeAmount > 0 ? 'text-emerald-600' : 'text-red-600'}">
+									<div
+										class="text-sm font-bold {update.changeAmount > 0
+											? 'text-emerald-600'
+											: 'text-red-600'}"
+									>
 										{update.changeAmount > 0 ? '+' : ''}{update.changeAmount}
 									</div>
 									<div class="text-[10px] text-muted-foreground">
@@ -685,13 +753,20 @@
 							</Table.Header>
 							<Table.Body>
 								{#each data.stockUpdates as update}
-									<Table.Row class="text-sm">
+									<Table.Row
+										class="text-sm {update.productId ? 'cursor-pointer hover:bg-muted/50' : ''}"
+										onclick={() => update.productId && goto(`/inventory/${update.productId}`)}
+									>
 										<Table.Cell class="pl-6 text-muted-foreground">
 											{formatDateTime(update.createdAt)}
 										</Table.Cell>
 										<Table.Cell class="font-medium">{update.productName}</Table.Cell>
 										<Table.Cell>{update.size}</Table.Cell>
-										<Table.Cell class="text-right font-bold {update.changeAmount > 0 ? 'text-emerald-600' : 'text-red-600'}">
+										<Table.Cell
+											class="text-right font-bold {update.changeAmount > 0
+												? 'text-emerald-600'
+												: 'text-red-600'}"
+										>
 											{update.changeAmount > 0 ? '+' : ''}{update.changeAmount}
 										</Table.Cell>
 										<Table.Cell class="text-muted-foreground">{update.reason}</Table.Cell>
@@ -702,7 +777,9 @@
 						</Table.Root>
 					</div>
 				{:else}
-					<p class="py-6 text-center text-sm text-muted-foreground">No stock updates in this period.</p>
+					<p class="py-6 text-center text-sm text-muted-foreground">
+						No stock updates in this period.
+					</p>
 				{/if}
 			</Card.Content>
 		</Card.Root>
@@ -710,7 +787,9 @@
 
 	<!-- ==================== TEAM & CUSTOMERS ==================== -->
 	<div>
-		<h2 class="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:text-sm">
+		<h2
+			class="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:text-sm"
+		>
 			Team & Customers
 		</h2>
 		<div class="grid gap-3 sm:gap-4 lg:grid-cols-2">
@@ -722,7 +801,12 @@
 							Sales Staff Performance
 						</Card.Title>
 						{#if data.cashierPerformance.length > 5}
-							<Button variant="ghost" size="sm" class="h-7 px-2 text-[11px]" onclick={() => openDetail('staff')}>
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-7 px-2 text-[11px]"
+								onclick={() => openDetail('staff')}
+							>
 								View All <ExternalLink class="ml-1 h-3 w-3" />
 							</Button>
 						{/if}
@@ -732,7 +816,14 @@
 					{#if displayStaff.length > 0}
 						<div class="divide-y sm:hidden">
 							{#each displayStaff as c}
-								<div class="flex items-center justify-between px-3 py-2.5">
+								<!-- svelte-ignore a11y_click_events_have_key_events -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="flex items-center justify-between px-3 py-2.5 {c.userId
+										? 'cursor-pointer hover:bg-muted/50'
+										: ''}"
+									onclick={() => c.userId && goto(`/settings/users/${c.userId}`)}
+								>
 									<div>
 										<div class="text-sm font-medium">{c.cashierName}</div>
 										<span class="text-[11px] text-muted-foreground">
@@ -757,10 +848,13 @@
 								</Table.Header>
 								<Table.Body>
 									{#each displayStaff as c}
-										<Table.Row class="text-sm">
+										<Table.Row
+											class="text-sm {c.userId ? 'cursor-pointer hover:bg-muted/50' : ''}"
+											onclick={() => c.userId && goto(`/settings/users/${c.userId}`)}
+										>
 											<Table.Cell class="pl-6 font-medium">{c.cashierName}</Table.Cell>
 											<Table.Cell class="text-right tabular-nums">{c.orderCount}</Table.Cell>
-											<Table.Cell class="text-right tabular-nums text-muted-foreground">
+											<Table.Cell class="text-right text-muted-foreground tabular-nums">
 												{formatBDT(c.avgOrder)}
 											</Table.Cell>
 											<Table.Cell class="pr-6 text-right font-semibold tabular-nums">
@@ -785,7 +879,12 @@
 							Top Customers
 						</Card.Title>
 						{#if data.topCustomers.length >= 10}
-							<Button variant="ghost" size="sm" class="h-7 px-2 text-[11px]" onclick={() => openDetail('customers')}>
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-7 px-2 text-[11px]"
+								onclick={() => openDetail('customers')}
+							>
 								View All <ExternalLink class="ml-1 h-3 w-3" />
 							</Button>
 						{/if}
@@ -795,7 +894,14 @@
 					{#if displayCustomers.length > 0}
 						<div class="divide-y sm:hidden">
 							{#each displayCustomers as c}
-								<div class="flex items-center justify-between px-3 py-2.5">
+								<!-- svelte-ignore a11y_click_events_have_key_events -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="flex items-center justify-between px-3 py-2.5 {c.customerId
+										? 'cursor-pointer hover:bg-muted/50'
+										: ''}"
+									onclick={() => c.customerId && goto(`/customers/${c.customerId}`)}
+								>
 									<div class="min-w-0">
 										<div class="truncate text-sm font-medium">{c.customerName}</div>
 										<span class="text-[11px] text-muted-foreground">
@@ -819,7 +925,10 @@
 								</Table.Header>
 								<Table.Body>
 									{#each displayCustomers as c}
-										<Table.Row class="text-sm">
+										<Table.Row
+											class="text-sm {c.customerId ? 'cursor-pointer hover:bg-muted/50' : ''}"
+											onclick={() => c.customerId && goto(`/customers/${c.customerId}`)}
+										>
 											<Table.Cell class="pl-6">
 												<div class="font-medium">{c.customerName}</div>
 												{#if c.customerPhone}
@@ -845,10 +954,11 @@
 </div>
 
 <Dialog.Root bind:open={isDialogOpen}>
-	<Dialog.Content class="max-h-[90vh] max-w-4xl overflow-hidden p-0 flex flex-col">
+	<Dialog.Content class="flex max-h-[90vh] max-w-4xl flex-col overflow-hidden p-0">
 		<Dialog.Header class="p-6 pb-2">
 			<Dialog.Title class="text-xl">
-				{#if detailType === 'products'}Top Selling Products{:else if detailType === 'staff'}Staff Performance{:else if detailType === 'inventory'}Stock Update Logs{:else}Top Customers{/if}
+				{#if detailType === 'products'}Top Selling Products{:else if detailType === 'staff'}Staff
+					Performance{:else if detailType === 'inventory'}Stock Update Logs{:else}Top Customers{/if}
 			</Dialog.Title>
 			<Dialog.Description>
 				Showing records for the period: {data.startDate} to {data.endDate}
@@ -891,22 +1001,51 @@
 					</Table.Header>
 					<Table.Body>
 						{#each detailData as item, i}
-							<Table.Row class="text-sm">
+							{@const navUrl =
+								detailType === 'products' || detailType === 'inventory'
+									? item.productId
+										? `/inventory/${item.productId}`
+										: null
+									: detailType === 'staff'
+										? item.userId
+											? `/settings/users/${item.userId}`
+											: null
+										: detailType === 'customers'
+											? item.customerId
+												? `/customers/${item.customerId}`
+												: null
+											: null}
+							<Table.Row
+								class="text-sm {navUrl ? 'cursor-pointer hover:bg-muted/50' : ''}"
+								onclick={() => navUrl && goto(navUrl)}
+							>
 								{#if detailType === 'products'}
 									<Table.Cell class="text-muted-foreground">{i + 1}</Table.Cell>
 									<Table.Cell class="font-medium">{item.productName}</Table.Cell>
 									<Table.Cell class="text-right tabular-nums">{item.totalQty}</Table.Cell>
-									<Table.Cell class="text-right font-semibold tabular-nums">{formatBDT(item.totalRevenue)}</Table.Cell>
+									<Table.Cell class="text-right font-semibold tabular-nums"
+										>{formatBDT(item.totalRevenue)}</Table.Cell
+									>
 								{:else if detailType === 'staff'}
 									<Table.Cell class="font-medium">{item.cashierName}</Table.Cell>
 									<Table.Cell class="text-right tabular-nums">{item.orderCount}</Table.Cell>
-									<Table.Cell class="text-right tabular-nums text-muted-foreground">{formatBDT(item.avgOrder)}</Table.Cell>
-									<Table.Cell class="text-right font-semibold tabular-nums">{formatBDT(item.totalSales)}</Table.Cell>
+									<Table.Cell class="text-right text-muted-foreground tabular-nums"
+										>{formatBDT(item.avgOrder)}</Table.Cell
+									>
+									<Table.Cell class="text-right font-semibold tabular-nums"
+										>{formatBDT(item.totalSales)}</Table.Cell
+									>
 								{:else if detailType === 'inventory'}
-									<Table.Cell class="text-muted-foreground whitespace-nowrap">{formatDateTime(item.createdAt)}</Table.Cell>
+									<Table.Cell class="whitespace-nowrap text-muted-foreground"
+										>{formatDateTime(item.createdAt)}</Table.Cell
+									>
 									<Table.Cell class="font-medium">{item.productName}</Table.Cell>
 									<Table.Cell>{item.size}</Table.Cell>
-									<Table.Cell class="text-right font-bold {item.changeAmount > 0 ? 'text-emerald-600' : 'text-red-600'}">
+									<Table.Cell
+										class="text-right font-bold {item.changeAmount > 0
+											? 'text-emerald-600'
+											: 'text-red-600'}"
+									>
 										{item.changeAmount > 0 ? '+' : ''}{item.changeAmount}
 									</Table.Cell>
 									<Table.Cell class="text-xs text-muted-foreground">{item.reason}</Table.Cell>
@@ -914,13 +1053,17 @@
 									<Table.Cell class="font-medium">{item.customerName}</Table.Cell>
 									<Table.Cell class="text-muted-foreground">{item.customerPhone || '-'}</Table.Cell>
 									<Table.Cell class="text-right tabular-nums">{item.orderCount}</Table.Cell>
-									<Table.Cell class="text-right font-semibold tabular-nums">{formatBDT(item.totalSpent)}</Table.Cell>
+									<Table.Cell class="text-right font-semibold tabular-nums"
+										>{formatBDT(item.totalSpent)}</Table.Cell
+									>
 								{/if}
 							</Table.Row>
 						{/each}
 						{#if detailData.length === 0}
 							<Table.Row>
-								<Table.Cell colspan={5} class="py-10 text-center text-muted-foreground">No data found for this period.</Table.Cell>
+								<Table.Cell colspan={5} class="py-10 text-center text-muted-foreground"
+									>No data found for this period.</Table.Cell
+								>
 							</Table.Row>
 						{/if}
 					</Table.Body>
@@ -955,7 +1098,13 @@
 		<h1>{data.storeName}</h1>
 		<h2>Sales Report</h2>
 		<p>{periodLabel} &mdash; {data.startDate} to {data.endDate}</p>
-		<p class="print-date">Generated on {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+		<p class="print-date">
+			Generated on {new Date().toLocaleDateString('en-GB', {
+				day: '2-digit',
+				month: 'long',
+				year: 'numeric'
+			})}
+		</p>
 	</div>
 
 	<div class="print-divider-double"></div>

@@ -65,7 +65,9 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				.orderBy(orders.createdAt)
 				.limit(1)
 				.get();
-			startDate = firstOrder ? new Date(firstOrder.date) : new Date(now.getFullYear(), now.getMonth(), 1);
+			startDate = firstOrder
+				? new Date(firstOrder.date)
+				: new Date(now.getFullYear(), now.getMonth(), 1);
 			startDate.setHours(0, 0, 0, 0);
 			break;
 	}
@@ -141,6 +143,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	// Top selling products
 	const topProducts = db
 		.select({
+			productId: products.id,
 			productName: orderItems.productName,
 			totalQty: sql<number>`sum(${orderItems.quantity})`.as('totalQty'),
 			totalRevenue:
@@ -150,6 +153,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		})
 		.from(orderItems)
 		.innerJoin(orders, eq(orderItems.orderId, orders.id))
+		.leftJoin(productVariants, eq(orderItems.variantId, productVariants.id))
+		.leftJoin(products, eq(productVariants.productId, products.id))
 		.where(
 			and(
 				eq(orders.status, 'completed'),
@@ -157,7 +162,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				lt(orders.createdAt, endDate)
 			)
 		)
-		.groupBy(orderItems.productName)
+		.groupBy(orderItems.productName, products.id)
 		.orderBy(desc(sql`totalQty`))
 		.limit(10)
 		.all();
@@ -203,7 +208,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				.orderBy(orders.createdAt)
 				.limit(1)
 				.get();
-			
+
 			const startYear = firstOrder ? new Date(firstOrder.date).getFullYear() : now.getFullYear();
 			// Ensure we show at least 10 years back from now
 			const minStartYear = now.getFullYear() - 9;
@@ -246,7 +251,9 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		.all();
 
 	const chartData: { date: string; fullDate: string; amount: number; count: number }[] = [];
-	const salesByDate = new Map(chartDataRaw.map((d) => [d.date, { amount: d.total, count: d.count }]));
+	const salesByDate = new Map(
+		chartDataRaw.map((d) => [d.date, { amount: d.total, count: d.count }])
+	);
 
 	const currentDate = new Date(startDate);
 	currentDate.setMinutes(0, 0, 0);
@@ -327,6 +334,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	// Cashier performance
 	const cashierPerformance = db
 		.select({
+			userId: users.id,
 			cashierName: users.name,
 			orderCount: sql<number>`count(*)`.as('orderCount'),
 			totalSales: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('totalSales'),
@@ -425,6 +433,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const stockUpdates = db
 		.select({
 			id: stockLogs.id,
+			productId: products.id,
 			productName: products.name,
 			size: productVariants.size,
 			changeAmount: stockLogs.changeAmount,

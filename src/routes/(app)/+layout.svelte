@@ -112,7 +112,7 @@
 <div class="flex min-h-screen bg-background text-foreground">
 	<!-- Desktop Sidebar -->
 	<aside
-		class="fixed top-0 left-0 z-30 hidden h-screen border-r bg-card transition-all duration-300 print:hidden md:flex md:flex-col {collapsed
+		class="fixed top-0 left-0 z-30 hidden h-screen border-r bg-card transition-all duration-300 md:flex md:flex-col print:hidden {collapsed
 			? 'w-16'
 			: 'w-64'}"
 	>
@@ -126,7 +126,11 @@
 				<div class="flex min-w-0 items-center gap-3">
 					<Avatar class="h-8 w-8 shrink-0">
 						{#if user?.imageUrl}
-							<img src={user.imageUrl} alt={user.name} class="h-full w-full object-cover rounded-full" />
+							<img
+								src={user.imageUrl}
+								alt={user.name}
+								class="h-full w-full rounded-full object-cover"
+							/>
 						{:else}
 							<AvatarFallback class="bg-primary text-xs font-bold text-primary-foreground">
 								{user?.name?.charAt(0) ?? 'U'}
@@ -135,7 +139,9 @@
 					</Avatar>
 					<div class="min-w-0">
 						<p class="truncate text-sm font-semibold">{user?.name}</p>
-						<p class="text-xs text-muted-foreground">{roleLabels[user?.role ?? ''] ?? user?.role}</p>
+						<p class="text-xs text-muted-foreground">
+							{roleLabels[user?.role ?? ''] ?? user?.role}
+						</p>
 					</div>
 				</div>
 			{/if}
@@ -293,7 +299,7 @@
 
 	<!-- Mobile Top Bar (minimal — just menu button) -->
 	<div
-		class="fixed top-0 right-0 left-0 z-20 flex h-12 items-center border-b bg-card/95 px-4 backdrop-blur-sm print:hidden md:hidden"
+		class="fixed top-0 right-0 left-0 z-20 flex h-12 items-center border-b bg-card/95 px-4 backdrop-blur-sm md:hidden print:hidden"
 	>
 		<Sheet.Root bind:open={isMobileMenuOpen}>
 			<Sheet.Trigger>
@@ -308,7 +314,11 @@
 				<div class="flex h-16 items-center gap-3 border-b px-6">
 					<Avatar class="h-8 w-8">
 						{#if user?.imageUrl}
-							<img src={user.imageUrl} alt={user.name} class="h-full w-full object-cover rounded-full" />
+							<img
+								src={user.imageUrl}
+								alt={user.name}
+								class="h-full w-full rounded-full object-cover"
+							/>
 						{:else}
 							<AvatarFallback class="bg-primary text-xs font-bold text-primary-foreground">
 								{user?.name?.charAt(0) ?? 'U'}
@@ -317,7 +327,9 @@
 					</Avatar>
 					<div>
 						<p class="text-sm font-semibold">{user?.name}</p>
-						<p class="text-xs text-muted-foreground">{roleLabels[user?.role ?? ''] ?? user?.role}</p>
+						<p class="text-xs text-muted-foreground">
+							{roleLabels[user?.role ?? ''] ?? user?.role}
+						</p>
 					</div>
 				</div>
 				<nav class="space-y-1 p-4">
@@ -390,7 +402,11 @@
 			: 'md:ml-64'}"
 	>
 		{#if $navigating}
-			<div class="fixed top-12 left-0 right-0 z-50 h-1 md:top-0 {collapsed ? 'md:left-16' : 'md:left-64'}">
+			<div
+				class="fixed top-12 right-0 left-0 z-50 h-1 md:top-0 {collapsed
+					? 'md:left-16'
+					: 'md:left-64'}"
+			>
 				<div class="h-full w-full overflow-hidden bg-primary/20">
 					<div class="progress-bar-value h-full bg-primary"></div>
 				</div>

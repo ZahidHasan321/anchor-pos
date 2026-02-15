@@ -100,7 +100,9 @@
 	<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 		<div>
 			<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
-			<p class="text-sm text-muted-foreground sm:text-base">Configure your store and manage system settings.</p>
+			<p class="text-sm text-muted-foreground sm:text-base">
+				Configure your store and manage system settings.
+			</p>
 		</div>
 	</div>
 
@@ -301,7 +303,9 @@
 							</div>
 						</div>
 
-						<div class="flex flex-col gap-4 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
+						<div
+							class="flex flex-col gap-4 border-t pt-6 sm:flex-row sm:items-center sm:justify-between"
+						>
 							<div class="order-2 flex gap-2 sm:order-1">
 								<Button
 									variant="outline"
@@ -407,7 +411,9 @@
 										<td class="py-1 text-right">Price</td>
 									</tr>
 									<tr>
-										<td class="py-1">SAMPLE PRODUCT<br /><span class="text-[9px]">Size: XL</span></td>
+										<td class="py-1"
+											>SAMPLE PRODUCT<br /><span class="text-[9px]">Size: XL</span></td
+										>
 										<td class="py-1 text-center">1</td>
 										<td class="py-1 text-right">1,200</td>
 									</tr>

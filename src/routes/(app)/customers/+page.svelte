@@ -68,13 +68,15 @@
 	<title>Customers — Clothing POS</title>
 </svelte:head>
 
-<div class="space-y-6 p-3 sm:p-6 pb-24 md:pb-6">
+<div class="space-y-6 p-3 pb-24 sm:p-6 md:pb-6">
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div>
 			<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Customers</h1>
-			<p class="text-sm text-muted-foreground sm:text-base">Manage your customer database and purchase history.</p>
+			<p class="text-sm text-muted-foreground sm:text-base">
+				Manage your customer database and purchase history.
+			</p>
 		</div>
-		<Button onclick={() => (createDialogOpen = true)} class="hidden md:flex cursor-pointer">
+		<Button onclick={() => (createDialogOpen = true)} class="hidden cursor-pointer md:flex">
 			<Plus class="mr-2 h-4 w-4" /> Add Customer
 		</Button>
 	</div>
@@ -84,7 +86,7 @@
 			<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 			<Input
 				placeholder="Search customers by name or phone..."
-				class="pl-10 pr-9"
+				class="pr-9 pl-10"
 				bind:value={searchQuery}
 			/>
 			{#if searchQuery}
@@ -205,7 +207,7 @@
 				<p class="text-sm text-muted-foreground">
 					Showing {data.customers.length} of {data.pagination.total} customers
 				</p>
-				
+
 				{#if data.pagination.totalPages > 1}
 					<div class="flex flex-wrap items-center justify-center gap-1 sm:gap-2">
 						<Button
@@ -224,7 +226,7 @@
 							}
 							const pageNum = start + i;
 							return pageNum > 0 && pageNum <= data.pagination.totalPages ? pageNum : null;
-						}).filter(p => p !== null) as pageNum}
+						}).filter((p) => p !== null) as pageNum}
 							<Button
 								variant={pageNum === data.pagination.currentPage ? 'default' : 'outline'}
 								size="icon"
@@ -291,11 +293,11 @@
 </Dialog.Root>
 
 <!-- Mobile FAB -->
-<div class="fixed bottom-20 right-4 z-40 md:hidden">
+<div class="fixed right-4 bottom-20 z-40 md:hidden">
 	<Button
 		onclick={() => (createDialogOpen = true)}
 		size="icon"
-		class="h-14 w-14 rounded-full shadow-2xl shadow-primary/40 bg-primary text-primary-foreground hover:scale-110 active:scale-95 transition-all"
+		class="h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-2xl shadow-primary/40 transition-all hover:scale-110 active:scale-95"
 	>
 		<Plus class="h-7 w-7" />
 	</Button>

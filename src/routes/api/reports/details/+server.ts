@@ -1,7 +1,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
-import { orders, orderItems, users, customers, stockLogs, products, productVariants } from '$lib/server/db/schema';
+import {
+	orders,
+	orderItems,
+	users,
+	customers,
+	stockLogs,
+	products,
+	productVariants
+} from '$lib/server/db/schema';
 import { eq, sql, gte, lt, and, desc } from 'drizzle-orm';
 import { hasPermission } from '$lib/server/permissions';
 
@@ -28,14 +36,26 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	if (type === 'products') {
 		const data = db
 			.select({
+				productId: products.id,
 				productName: orderItems.productName,
 				totalQty: sql<number>`sum(${orderItems.quantity})`.as('totalQty'),
-				totalRevenue: sql<number>`sum(${orderItems.priceAtSale} * ${orderItems.quantity} * (1 - ${orderItems.discount} / 100))`.as('totalRevenue')
+				totalRevenue:
+					sql<number>`sum(${orderItems.priceAtSale} * ${orderItems.quantity} * (1 - ${orderItems.discount} / 100))`.as(
+						'totalRevenue'
+					)
 			})
 			.from(orderItems)
 			.innerJoin(orders, eq(orderItems.orderId, orders.id))
-			.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate)))
-			.groupBy(orderItems.productName)
+			.leftJoin(productVariants, eq(orderItems.variantId, productVariants.id))
+			.leftJoin(products, eq(productVariants.productId, products.id))
+			.where(
+				and(
+					eq(orders.status, 'completed'),
+					gte(orders.createdAt, startDate),
+					lt(orders.createdAt, endDate)
+				)
+			)
+			.groupBy(orderItems.productName, products.id)
 			.orderBy(desc(sql`totalQty`))
 			.limit(limit)
 			.offset(offset)
@@ -46,6 +66,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	if (type === 'staff') {
 		const data = db
 			.select({
+				userId: users.id,
 				cashierName: users.name,
 				orderCount: sql<number>`count(*)`.as('orderCount'),
 				totalSales: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('totalSales'),
@@ -53,7 +74,13 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			})
 			.from(orders)
 			.innerJoin(users, eq(orders.userId, users.id))
-			.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate)))
+			.where(
+				and(
+					eq(orders.status, 'completed'),
+					gte(orders.createdAt, startDate),
+					lt(orders.createdAt, endDate)
+				)
+			)
 			.groupBy(users.id)
 			.orderBy(desc(sql`totalSales`))
 			.limit(limit)
@@ -65,6 +92,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	if (type === 'customers') {
 		const data = db
 			.select({
+				customerId: customers.id,
 				customerName: customers.name,
 				customerPhone: customers.phone,
 				orderCount: sql<number>`count(*)`.as('orderCount'),
@@ -72,7 +100,13 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			})
 			.from(orders)
 			.innerJoin(customers, eq(orders.customerId, customers.id))
-			.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate)))
+			.where(
+				and(
+					eq(orders.status, 'completed'),
+					gte(orders.createdAt, startDate),
+					lt(orders.createdAt, endDate)
+				)
+			)
 			.groupBy(customers.id)
 			.orderBy(desc(sql`totalSpent`))
 			.limit(limit)
@@ -85,6 +119,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		const data = db
 			.select({
 				id: stockLogs.id,
+				productId: products.id,
 				productName: products.name,
 				size: productVariants.size,
 				changeAmount: stockLogs.changeAmount,
@@ -93,15 +128,18 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				createdAt: stockLogs.createdAt
 			})
 			.from(stockLogs)
-					.innerJoin(productVariants, eq(stockLogs.variantId, productVariants.id))
-					.innerJoin(products, eq(productVariants.productId, products.id))
-					.innerJoin(users, eq(stockLogs.userId, users.id))
-					.where(and(
-						sql`${stockLogs.reason} != 'sale'`,
-						gte(stockLogs.createdAt, startDate), 
-						lt(stockLogs.createdAt, endDate)
-					))
-					.orderBy(desc(stockLogs.createdAt))			.limit(limit)
+			.innerJoin(productVariants, eq(stockLogs.variantId, productVariants.id))
+			.innerJoin(products, eq(productVariants.productId, products.id))
+			.innerJoin(users, eq(stockLogs.userId, users.id))
+			.where(
+				and(
+					sql`${stockLogs.reason} != 'sale'`,
+					gte(stockLogs.createdAt, startDate),
+					lt(stockLogs.createdAt, endDate)
+				)
+			)
+			.orderBy(desc(stockLogs.createdAt))
+			.limit(limit)
 			.offset(offset)
 			.all();
 		return json(data);

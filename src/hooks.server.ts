@@ -52,7 +52,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 			let modifiedHtml = html;
 
 			if (modifiedHtml.includes('%sveltekit.head%')) {
-				modifiedHtml = modifiedHtml.replace('%sveltekit.head%', `${bgStyle}${themeScript}%sveltekit.head%`);
+				modifiedHtml = modifiedHtml.replace(
+					'%sveltekit.head%',
+					`${bgStyle}${themeScript}%sveltekit.head%`
+				);
 			} else if (modifiedHtml.includes('</head>')) {
 				modifiedHtml = modifiedHtml.replace('</head>', `${bgStyle}${themeScript}</head>`);
 			}

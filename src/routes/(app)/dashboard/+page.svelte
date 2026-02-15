@@ -145,7 +145,8 @@
 								<Table.Cell class="py-2">
 									<div class="flex items-center gap-2">
 										<span
-											class="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold {i < 3
+											class="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold {i <
+											3
 												? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
 												: 'bg-muted text-muted-foreground'}"
 										>

@@ -4,6 +4,7 @@ import { db } from './db';
 import { sessions, users } from './db/schema';
 import { eq } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
+import argon2 from 'argon2';
 
 export function generateSessionToken(): string {
 	const bytes = new Uint8Array(20);
@@ -11,13 +12,21 @@ export function generateSessionToken(): string {
 	return encodeBase32LowerCaseNoPadding(bytes);
 }
 
-export function hashPassword(password: string): string {
-	// Simple SHA-256 hash (for production, use bcrypt/argon2)
-	return encodeHexLowerCase(sha256(new TextEncoder().encode(password)));
+export async function hashPassword(password: string): Promise<string> {
+	return await argon2.hash(password);
 }
 
-export function verifyPassword(password: string, hash: string): boolean {
-	return hashPassword(password) === hash;
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+	if (hash.startsWith('$argon2')) {
+		try {
+			return await argon2.verify(hash, password);
+		} catch {
+			return false;
+		}
+	}
+	// Fallback for legacy SHA-256 hashes
+	const legacyHash = encodeHexLowerCase(sha256(new TextEncoder().encode(password)));
+	return legacyHash === hash;
 }
 
 export function createSession(token: string, userId: string) {

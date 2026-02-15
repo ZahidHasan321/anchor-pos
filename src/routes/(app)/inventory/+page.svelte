@@ -99,69 +99,93 @@
 	<title>Inventory — Clothing POS</title>
 </svelte:head>
 
-<div class="space-y-6 p-3 sm:p-6 pb-24 md:pb-6">
+<div class="space-y-6 p-3 pb-24 sm:p-6 md:pb-6">
 	<!-- Header -->
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div>
 			<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Inventory</h1>
-			<p class="text-sm text-muted-foreground sm:text-base">Manage your products and stock levels.</p>
+			<p class="text-sm text-muted-foreground sm:text-base">
+				Manage your products and stock levels.
+			</p>
 		</div>
-		<Button href="/inventory/new" class="hidden md:flex cursor-pointer">
+		<Button href="/inventory/new" class="hidden cursor-pointer md:flex">
 			<Plus class="mr-2 h-4 w-4" /> New Product
 		</Button>
 	</div>
 
 	<!-- Summary Stat Cards -->
-	<div class="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-		<div class="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+		<div
+			class="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-md"
+		>
 			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
 				<Package class="h-5 w-5 text-blue-600 dark:text-blue-400" />
 			</div>
 			<div class="min-w-0">
-				<p class="truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Products</p>
-				<p class="text-xl font-black text-blue-600 dark:text-blue-400 leading-none mt-1">
+				<p class="truncate text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+					Total Products
+				</p>
+				<p class="mt-1 text-xl leading-none font-black text-blue-600 dark:text-blue-400">
 					{data.stats.totalProducts}
 				</p>
 			</div>
 		</div>
 
-		<div class="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+		<div
+			class="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-md"
+		>
 			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10">
 				<TrendingUp class="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
 			</div>
 			<div class="min-w-0">
-				<p class="truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Retail Value</p>
-				<p class="text-xl font-black text-indigo-600 dark:text-indigo-400 leading-none mt-1">
+				<p class="truncate text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+					Retail Value
+				</p>
+				<p class="mt-1 text-xl leading-none font-black text-indigo-600 dark:text-indigo-400">
 					{formatBDT(data.stats.totalInventoryValue)}
 				</p>
 			</div>
 		</div>
 
 		<button
-			class="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-md hover:border-amber-500/50 group text-left {selectedStock === 'low' ? 'ring-2 ring-amber-500 border-amber-500' : ''}"
+			class="group flex items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:border-amber-500/50 hover:shadow-md {selectedStock ===
+			'low'
+				? 'border-amber-500 ring-2 ring-amber-500'
+				: ''}"
 			onclick={() => setStockFilter(selectedStock === 'low' ? '' : 'low')}
 		>
-			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
+			<div
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 transition-colors group-hover:bg-amber-500/20"
+			>
 				<AlertTriangle class="h-5 w-5 text-amber-600 dark:text-amber-400" />
 			</div>
 			<div class="min-w-0">
-				<p class="truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Low Stock</p>
-				<p class="text-xl font-black text-amber-600 dark:text-amber-400 leading-none mt-1">
+				<p class="truncate text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+					Low Stock
+				</p>
+				<p class="mt-1 text-xl leading-none font-black text-amber-600 dark:text-amber-400">
 					{data.stats.lowStockVariants ?? 0}
 				</p>
 			</div>
 		</button>
 
 		<button
-			class="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-md hover:border-red-500/50 group text-left {selectedStock === 'out' ? 'ring-2 ring-red-500 border-red-500' : ''}"
+			class="group flex items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:border-red-500/50 hover:shadow-md {selectedStock ===
+			'out'
+				? 'border-red-500 ring-2 ring-red-500'
+				: ''}"
 			onclick={() => setStockFilter(selectedStock === 'out' ? '' : 'out')}
 		>
-			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
+			<div
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 transition-colors group-hover:bg-red-500/20"
+			>
 				<PackageX class="h-5 w-5 text-red-600 dark:text-red-400" />
 			</div>
 			<div class="min-w-0">
-				<p class="truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Out of Stock</p>
-				<p class="text-xl font-black text-red-600 dark:text-red-400 leading-none mt-1">
+				<p class="truncate text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+					Out of Stock
+				</p>
+				<p class="mt-1 text-xl leading-none font-black text-red-600 dark:text-red-400">
 					{data.stats.outOfStockVariants ?? 0}
 				</p>
 			</div>
@@ -174,7 +198,11 @@
 			<div class="flex flex-col gap-4 lg:flex-row lg:items-center">
 				<div class="relative w-full max-w-md">
 					<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-					<Input placeholder="Search products..." class="h-10 pl-10 pr-9 bg-muted/20 border-0 focus-visible:ring-primary shadow-inner" bind:value={searchQuery} />
+					<Input
+						placeholder="Search products..."
+						class="h-10 border-0 bg-muted/20 pr-9 pl-10 shadow-inner focus-visible:ring-primary"
+						bind:value={searchQuery}
+					/>
 					{#if searchQuery}
 						<button
 							onclick={() => (searchQuery = '')}
@@ -185,12 +213,14 @@
 						</button>
 					{/if}
 				</div>
-				
+
 				<div class="flex flex-wrap items-center gap-3">
 					<div class="flex items-center gap-2">
-						<span class="text-xs font-bold text-muted-foreground uppercase tracking-tight">Category:</span>
+						<span class="text-xs font-bold tracking-tight text-muted-foreground uppercase"
+							>Category:</span
+						>
 						<Select.Root type="single" bind:value={selectedCategory} onValueChange={applyFilters}>
-							<Select.Trigger class="w-[160px] h-9 text-xs bg-muted/20 border-0">
+							<Select.Trigger class="h-9 w-[160px] border-0 bg-muted/20 text-xs">
 								{selectedCategory || 'All'}
 							</Select.Trigger>
 							<Select.Content>
@@ -203,9 +233,15 @@
 					</div>
 
 					<div class="flex items-center gap-2">
-						<span class="text-xs font-bold text-muted-foreground uppercase tracking-tight">Stock:</span>
-						<Select.Root type="single" bind:value={selectedStock} onValueChange={(v) => setStockFilter(v)}>
-							<Select.Trigger class="w-[160px] h-9 text-xs bg-muted/20 border-0">
+						<span class="text-xs font-bold tracking-tight text-muted-foreground uppercase"
+							>Stock:</span
+						>
+						<Select.Root
+							type="single"
+							bind:value={selectedStock}
+							onValueChange={(v) => setStockFilter(v)}
+						>
+							<Select.Trigger class="h-9 w-[160px] border-0 bg-muted/20 text-xs">
 								{selectedStock === 'low'
 									? 'Low Stock'
 									: selectedStock === 'out'
@@ -224,10 +260,14 @@
 					</div>
 
 					{#if searchQuery || selectedCategory || selectedStock}
-						<Button 
-							variant="ghost" 
-							size="sm" 
-							onclick={() => { searchQuery = ''; selectedCategory = ''; setStockFilter(''); }}
+						<Button
+							variant="ghost"
+							size="sm"
+							onclick={() => {
+								searchQuery = '';
+								selectedCategory = '';
+								setStockFilter('');
+							}}
 							class="h-9 px-3 text-xs text-muted-foreground hover:text-destructive"
 						>
 							<X class="mr-2 h-3.5 w-3.5" /> Reset
@@ -240,111 +280,114 @@
 
 	<!-- Product Table -->
 	<Card.Root>
-		<Card.Content class="p-0 overflow-hidden">
+		<Card.Content class="overflow-hidden p-0">
 			<div class="overflow-x-auto">
 				<Table.Root class="min-w-[800px] lg:min-w-full">
-			<Table.Header>
-				<Table.Row>
-					<Table.Head>Product</Table.Head>
-					<Table.Head>Price</Table.Head>
-					<Table.Head>Variants / Inventory</Table.Head>
-					<Table.Head class="text-right">Actions</Table.Head>
-				</Table.Row>
-			</Table.Header>
-			<Table.Body>
-				{#each data.products as product}
-					<Table.Row class="cursor-pointer" onclick={() => goto(`/inventory/${product.id}`)}>
-						<Table.Cell>
-							<div class="flex flex-col">
-								<span class="text-base font-medium">{product.name}</span>
-								<div class="mt-0.5 flex items-center gap-2">
-									<Badge variant="secondary" class="h-4 px-1.5 py-0 text-[10px]"
-										>{product.category}</Badge
-									>
-									<span class="text-xs text-muted-foreground"
-										>{product.variants.length} variant{product.variants.length === 1
-											? ''
-											: 's'}</span
-									>
-								</div>
-							</div>
-						</Table.Cell>
-						<Table.Cell>
-							<span class="font-semibold">{getPriceRange(product)}</span>
-							{#if product.defaultDiscount && product.defaultDiscount > 0}
-								<div class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-									-{product.defaultDiscount}% Default Discount
-								</div>
-							{/if}
-						</Table.Cell>
-						<Table.Cell>
-							{@const variantTotal = product.variants.reduce((sum, v) => sum + v.stockQuantity, 0)}
-							<div class="flex flex-col gap-1.5">
-								<div class="flex items-center gap-2">
-									<Badge variant={stockColor(variantTotal)} class="font-bold">
-										{variantTotal} in stock
-									</Badge>
-								</div>
-								{#if product.variants.length > 0}
-									<div class="flex flex-wrap gap-1">
-										{#each product.variants as variant}
-											<span
-												class="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium {stockChipClass(
-													variant.stockQuantity
-												)}"
-												title="{variant.size}: {variant.stockQuantity} in stock"
+					<Table.Header>
+						<Table.Row>
+							<Table.Head>Product</Table.Head>
+							<Table.Head>Price</Table.Head>
+							<Table.Head>Variants / Inventory</Table.Head>
+							<Table.Head class="text-right">Actions</Table.Head>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body>
+						{#each data.products as product}
+							<Table.Row class="cursor-pointer" onclick={() => goto(`/inventory/${product.id}`)}>
+								<Table.Cell>
+									<div class="flex flex-col">
+										<span class="text-base font-medium">{product.name}</span>
+										<div class="mt-0.5 flex items-center gap-2">
+											<Badge variant="secondary" class="h-4 px-1.5 py-0 text-[10px]"
+												>{product.category}</Badge
 											>
-												{variant.size}: {variant.stockQuantity}
-											</span>
-										{/each}
+											<span class="text-xs text-muted-foreground"
+												>{product.variants.length} variant{product.variants.length === 1
+													? ''
+													: 's'}</span
+											>
+										</div>
 									</div>
-								{/if}
-							</div>
-						</Table.Cell>
-						<Table.Cell class="text-right">
-							<!-- svelte-ignore a11y_click_events_have_key_events -->
-							<!-- svelte-ignore a11y_no_static_element_interactions -->
-							<span class="flex justify-end gap-1" onclick={(e) => e.stopPropagation()}>
-								<Button
-									variant="ghost"
-									size="icon"
-									href="/inventory/{product.id}"
-									title="View Details"
-									class="cursor-pointer"
-								>
-									<Eye class="h-4 w-4" />
-								</Button>
-								<Button
-									variant="ghost"
-									size="icon"
-									href="/inventory/{product.id}/labels"
-									title="Print Labels"
-									class="cursor-pointer"
-								>
-									<Printer class="h-4 w-4" />
-								</Button>
-							</span>
-						</Table.Cell>
-					</Table.Row>
-				{/each}
-				{#if data.products.length === 0}
-					<Table.Row>
-						<Table.Cell colspan={4} class="h-24 text-center">
-							<div class="flex flex-col items-center justify-center gap-2 py-4">
-								<Package class="h-10 w-10 text-muted-foreground/40" />
-								<p class="text-muted-foreground">No products found.</p>
-								<Button href="/inventory/new" size="sm" class="mt-1 cursor-pointer">
-									<Plus class="mr-2 h-4 w-4" /> New Product
-								</Button>
-							</div>
-						</Table.Cell>
-					</Table.Row>
-				{/if}
-			</Table.Body>
-		</Table.Root>
-		</div>
-	</Card.Content>
-</Card.Root>
+								</Table.Cell>
+								<Table.Cell>
+									<span class="font-semibold">{getPriceRange(product)}</span>
+									{#if product.defaultDiscount && product.defaultDiscount > 0}
+										<div class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+											-{product.defaultDiscount}% Default Discount
+										</div>
+									{/if}
+								</Table.Cell>
+								<Table.Cell>
+									{@const variantTotal = product.variants.reduce(
+										(sum, v) => sum + v.stockQuantity,
+										0
+									)}
+									<div class="flex flex-col gap-1.5">
+										<div class="flex items-center gap-2">
+											<Badge variant={stockColor(variantTotal)} class="font-bold">
+												{variantTotal} in stock
+											</Badge>
+										</div>
+										{#if product.variants.length > 0}
+											<div class="flex flex-wrap gap-1">
+												{#each product.variants as variant}
+													<span
+														class="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium {stockChipClass(
+															variant.stockQuantity
+														)}"
+														title="{variant.size}: {variant.stockQuantity} in stock"
+													>
+														{variant.size}: {variant.stockQuantity}
+													</span>
+												{/each}
+											</div>
+										{/if}
+									</div>
+								</Table.Cell>
+								<Table.Cell class="text-right">
+									<!-- svelte-ignore a11y_click_events_have_key_events -->
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<span class="flex justify-end gap-1" onclick={(e) => e.stopPropagation()}>
+										<Button
+											variant="ghost"
+											size="icon"
+											href="/inventory/{product.id}"
+											title="View Details"
+											class="cursor-pointer"
+										>
+											<Eye class="h-4 w-4" />
+										</Button>
+										<Button
+											variant="ghost"
+											size="icon"
+											href="/inventory/{product.id}/labels"
+											title="Print Labels"
+											class="cursor-pointer"
+										>
+											<Printer class="h-4 w-4" />
+										</Button>
+									</span>
+								</Table.Cell>
+							</Table.Row>
+						{/each}
+						{#if data.products.length === 0}
+							<Table.Row>
+								<Table.Cell colspan={4} class="h-24 text-center">
+									<div class="flex flex-col items-center justify-center gap-2 py-4">
+										<Package class="h-10 w-10 text-muted-foreground/40" />
+										<p class="text-muted-foreground">No products found.</p>
+										<Button href="/inventory/new" size="sm" class="mt-1 cursor-pointer">
+											<Plus class="mr-2 h-4 w-4" /> New Product
+										</Button>
+									</div>
+								</Table.Cell>
+							</Table.Row>
+						{/if}
+					</Table.Body>
+				</Table.Root>
+			</div>
+		</Card.Content>
+	</Card.Root>
 
 	<!-- Pagination -->
 	{#if data.pagination.totalPages > 1}
@@ -382,11 +425,11 @@
 	{/if}
 
 	<!-- Mobile FAB -->
-	<div class="fixed bottom-20 right-4 z-40 md:hidden">
+	<div class="fixed right-4 bottom-20 z-40 md:hidden">
 		<Button
 			href="/inventory/new"
 			size="icon"
-			class="h-14 w-14 rounded-full shadow-2xl shadow-primary/40 bg-primary text-primary-foreground hover:scale-110 active:scale-95 transition-all"
+			class="h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-2xl shadow-primary/40 transition-all hover:scale-110 active:scale-95"
 		>
 			<Plus class="h-7 w-7" />
 		</Button>

@@ -54,7 +54,9 @@
 <div class="space-y-6 p-3 sm:p-6">
 	<div>
 		<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
-		<p class="text-sm text-muted-foreground sm:text-base">Configure your store and manage system settings.</p>
+		<p class="text-sm text-muted-foreground sm:text-base">
+			Configure your store and manage system settings.
+		</p>
 	</div>
 
 	<!-- Settings Navigation Tabs -->
@@ -120,7 +122,12 @@
 							</Table.Cell>
 							<Table.Cell class="pr-6 text-right">
 								<div class="flex items-center justify-end gap-2">
-									<Button variant="outline" size="icon" href="/settings/users/{user.id}" class="h-8 w-8">
+									<Button
+										variant="outline"
+										size="icon"
+										href="/settings/users/{user.id}"
+										class="h-8 w-8"
+									>
 										<ExternalLink class="h-4 w-4" />
 									</Button>
 									<form action="?/toggleActive" method="POST" use:enhance class="inline">
@@ -186,10 +193,7 @@
 			class="space-y-4"
 		>
 			<div class="flex justify-center pb-4">
-				<label
-					class="group relative cursor-pointer"
-					for="create-image-upload"
-				>
+				<label class="group relative cursor-pointer" for="create-image-upload">
 					<Avatar.Root
 						class="h-20 w-20 border-2 border-muted transition-colors group-hover:border-primary"
 					>

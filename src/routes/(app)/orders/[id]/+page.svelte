@@ -56,7 +56,9 @@
 			</Button>
 			<div>
 				<h1 class="text-3xl font-bold tracking-tight">Order #{data.order.orderNumber}</h1>
-				<p class="text-xs text-muted-foreground uppercase tracking-widest opacity-50">Reference: {data.order.id}</p>
+				<p class="text-xs tracking-widest text-muted-foreground uppercase opacity-50">
+					Reference: {data.order.id}
+				</p>
 			</div>
 		</div>
 		<div class="flex gap-2">

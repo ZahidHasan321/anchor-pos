@@ -121,17 +121,22 @@
 					<Label for="date-filter" class="sr-only">Date</Label>
 					<div class="relative flex-1 sm:flex-none">
 						<Calendar
-							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none"
+							class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
 						/>
 						<Input
 							id="date-filter"
 							type="date"
-							class="w-full sm:w-44 cursor-pointer pl-10 h-9"
+							class="h-9 w-full cursor-pointer pl-10 sm:w-44"
 							bind:value={selectedDate}
 							onchange={handleDateChange}
 						/>
 					</div>
-					<Button variant="outline" size="icon" class="h-9 w-9 cursor-pointer" onclick={() => navigateDay(1)}>
+					<Button
+						variant="outline"
+						size="icon"
+						class="h-9 w-9 cursor-pointer"
+						onclick={() => navigateDay(1)}
+					>
 						<ChevronRight class="h-4 w-4" />
 					</Button>
 					{#if !isToday}
@@ -142,7 +147,7 @@
 				</div>
 			{/if}
 			<!-- View Toggle -->
-			<div class="flex items-center rounded-lg border bg-muted p-1 self-start sm:self-auto">
+			<div class="flex items-center self-start rounded-lg border bg-muted p-1 sm:self-auto">
 				<Button
 					variant={!isAllView ? 'default' : 'ghost'}
 					size="sm"
@@ -163,18 +168,18 @@
 		</div>
 	</div>
 
-	<div class="grid grid-cols-1 grid-rows-1 overflow-hidden min-h-[400px]">
+	<div class="grid min-h-[400px] grid-cols-1 grid-rows-1 overflow-hidden">
 		{#key isAllView}
-			<div 
-				in:fly={{ x: 100, duration: 400 }} 
-				out:fly={{ x: -100, duration: 400 }} 
+			<div
+				in:fly={{ x: 100, duration: 400 }}
+				out:fly={{ x: -100, duration: 400 }}
 				class="col-start-1 row-start-1 w-full space-y-6"
 			>
 				{#if !isAllView}
 					<!-- Daily View -->
 					<div class="space-y-6">
 						<!-- Summary Totals -->
-						<div class="grid gap-3 grid-cols-2 md:grid-cols-3">
+						<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
 							<Card.Root class="border-l-4 border-l-emerald-500">
 								<Card.Header class="flex flex-row items-center justify-between pb-2">
 									<Card.Title class="text-sm font-medium">Cash In</Card.Title>
@@ -273,9 +278,7 @@
 							<Card.Root class="min-w-0 lg:col-span-2">
 								<Card.Header>
 									<Card.Title>Entries</Card.Title>
-									<Card.Description
-										>Transactions for {formatDate(data.date)}</Card.Description
-									>
+									<Card.Description>Transactions for {formatDate(data.date)}</Card.Description>
 								</Card.Header>
 								<Card.Content class="p-0">
 									<Table.Root class="min-w-[600px]">
@@ -293,7 +296,9 @@
 												<Table.Row>
 													<Table.Cell class="text-xs">{formatDateTime(entry.createdAt)}</Table.Cell>
 													<Table.Cell class="font-medium">{entry.description}</Table.Cell>
-													<Table.Cell class="text-xs text-muted-foreground">{entry.userName}</Table.Cell>
+													<Table.Cell class="text-xs text-muted-foreground"
+														>{entry.userName}</Table.Cell
+													>
 													<Table.Cell>
 														<Badge
 															variant={entry.type === 'in' ? 'secondary' : 'destructive'}
@@ -314,7 +319,10 @@
 											{/each}
 											{#if data.entries.length === 0}
 												<Table.Row>
-													<Table.Cell colspan={5} class="h-32 text-center text-muted-foreground italic">
+													<Table.Cell
+														colspan={5}
+														class="h-32 text-center text-muted-foreground italic"
+													>
 														No entries for this date.
 													</Table.Cell>
 												</Table.Row>
@@ -343,7 +351,7 @@
 										id="tx-search"
 										type="text"
 										placeholder="Search descriptions..."
-										class="pl-10 pr-9 h-9"
+										class="h-9 pr-9 pl-10"
 										bind:value={txSearchInput}
 									/>
 									{#if txSearchInput}
@@ -358,14 +366,18 @@
 								</div>
 
 								<div class="flex items-center gap-2">
-									<span class="text-xs text-muted-foreground whitespace-nowrap">Filter by:</span>
+									<span class="text-xs whitespace-nowrap text-muted-foreground">Filter by:</span>
 									<Select.Root
 										type="single"
 										bind:value={txTypeFilter}
 										onValueChange={() => applyTxFilters()}
 									>
-										<Select.Trigger class="w-full sm:w-[160px] h-9">
-											{txTypeFilter === 'in' ? 'Cash In' : txTypeFilter === 'out' ? 'Cash Out' : 'All Types'}
+										<Select.Trigger class="h-9 w-full sm:w-[160px]">
+											{txTypeFilter === 'in'
+												? 'Cash In'
+												: txTypeFilter === 'out'
+													? 'Cash Out'
+													: 'All Types'}
 										</Select.Trigger>
 										<Select.Content>
 											<Select.Item value="all" class="cursor-pointer">All Types</Select.Item>
@@ -425,7 +437,9 @@
 
 							<!-- Pagination -->
 							{#if data.txTotalPages > 1}
-								<div class="flex flex-col items-center justify-between gap-4 border-t p-4 sm:flex-row">
+								<div
+									class="flex flex-col items-center justify-between gap-4 border-t p-4 sm:flex-row"
+								>
 									<p class="text-xs text-muted-foreground sm:text-sm">
 										Showing {data.transactions.length} entries of {data.txTotalEntries || 'total'}
 									</p>
@@ -439,14 +453,14 @@
 										>
 											<ChevronLeft class="h-4 w-4" />
 										</Button>
-										
+
 										{#each Array.from({ length: Math.min(data.txTotalPages, 5) }, (_, i) => {
 											let start = Math.max(1, data.txPage - 2);
 											if (start + 4 > data.txTotalPages) {
 												start = Math.max(1, data.txPage - 4);
 											}
 											return start + i;
-										}).filter(p => p > 0 && p <= data.txTotalPages) as pageNum}
+										}).filter((p) => p > 0 && p <= data.txTotalPages) as pageNum}
 											<Button
 												variant={pageNum === data.txPage ? 'default' : 'outline'}
 												size="icon"

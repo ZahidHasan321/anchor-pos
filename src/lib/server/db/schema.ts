@@ -69,7 +69,10 @@ export const productVariants = sqliteTable(
 	(table) => ({
 		productIdIdx: index('product_variant_product_id_idx').on(table.productId),
 		stockIdx: index('product_variant_stock_idx').on(table.stockQuantity),
-		productIdStockIdx: index('product_variant_id_stock_idx').on(table.productId, table.stockQuantity)
+		productIdStockIdx: index('product_variant_id_stock_idx').on(
+			table.productId,
+			table.stockQuantity
+		)
 	})
 );
 

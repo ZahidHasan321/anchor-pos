@@ -14,7 +14,11 @@
 		if (!open) confirmState.handleCancel();
 	}}
 >
-	<Dialog.Content class="max-w-[400px] p-0 overflow-hidden border-none shadow-2xl" showCloseButton={false}>
+	<Dialog.Content
+		class="z-[100] max-w-[400px] overflow-hidden border-none p-0 shadow-2xl"
+		overlayClass="z-[100]"
+		showCloseButton={false}
+	>
 		<div class="flex flex-col items-center p-8 text-center">
 			<div
 				class="mb-4 flex h-16 w-16 items-center justify-center rounded-full {isDestructive
@@ -32,7 +36,7 @@
 				{options.title ?? (isDestructive ? 'Are you sure?' : 'Confirm Action')}
 			</h2>
 
-			<p class="text-sm text-muted-foreground leading-relaxed">
+			<p class="text-sm leading-relaxed text-muted-foreground">
 				{options.message}
 			</p>
 		</div>
@@ -40,7 +44,7 @@
 		<div class="flex border-t bg-muted/30">
 			<button
 				type="button"
-				class="flex-1 px-4 py-4 text-sm font-medium transition-colors hover:bg-muted active:bg-muted/80 border-r"
+				class="flex-1 border-r px-4 py-4 text-sm font-medium transition-colors hover:bg-muted active:bg-muted/80"
 				onclick={() => confirmState.handleCancel()}
 			>
 				{options.cancelText ?? 'Cancel'}
@@ -57,4 +61,3 @@
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
-

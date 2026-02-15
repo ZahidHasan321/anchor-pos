@@ -65,7 +65,7 @@ export const actions: Actions = {
 		const customerId = (data.get('customerId') as string) || null;
 		const paymentMethod = (data.get('paymentMethod') as 'cash' | 'card') || 'cash';
 		const cashReceived = parseFloat(data.get('cashReceived') as string) || 0;
-		const globalDiscount = parseFloat(data.get('globalDiscount') as string) || 0;
+		const globalDiscount = Math.min(100, Math.max(0, parseFloat(data.get('globalDiscount') as string) || 0));
 
 		let cartItems: any[] = [];
 		try {
@@ -78,16 +78,55 @@ export const actions: Actions = {
 			return fail(400, { error: 'Cart is empty' });
 		}
 
+		// Fetch actual prices from DB to prevent client-side price manipulation
+		const variantIds = cartItems.map((item) => item.variantId);
+		const dbVariants = db
+			.select({
+				id: productVariants.id,
+				price: productVariants.price,
+				productName: products.name,
+				size: productVariants.size,
+				color: productVariants.color,
+				stockQuantity: productVariants.stockQuantity
+			})
+			.from(productVariants)
+			.innerJoin(products, eq(productVariants.productId, products.id))
+			.where(
+				sql`${productVariants.id} IN (${sql.join(
+					variantIds.map((id) => sql`${id}`),
+					sql`, `
+				)})`
+			)
+			.all();
+
+		const dbVariantsMap = new Map(dbVariants.map((v) => [v.id, v]));
+
 		const orderId = generateId();
 		let totalAmount = 0;
 		let nextOrderNumber = 0;
 
-		// Calculate total
-		cartItems.forEach((item) => {
+		// Validate and update prices from DB, and calculate total
+		for (const item of cartItems) {
+			const dbVariant = dbVariantsMap.get(item.variantId);
+			if (!dbVariant) {
+				return fail(400, { error: `Invalid product in cart: ${item.variantId}` });
+			}
+			if (dbVariant.stockQuantity < item.quantity) {
+				return fail(400, {
+					error: `Insufficient stock for ${dbVariant.productName}. Available: ${dbVariant.stockQuantity}`
+				});
+			}
+			item.price = dbVariant.price;
+			item.productName = dbVariant.productName;
+			item.size = dbVariant.size;
+			item.color = dbVariant.color;
+			item.discount = Math.min(100, Math.max(0, item.discount || 0));
+
 			const linePrice = item.price * item.quantity;
 			const lineDiscount = linePrice * (item.discount / 100);
 			totalAmount += linePrice - lineDiscount;
-		});
+		}
+
 		totalAmount = totalAmount * (1 - globalDiscount / 100);
 
 		const discountAmount =

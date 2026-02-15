@@ -29,7 +29,9 @@
 <div class="space-y-6 p-3 sm:p-6">
 	<div>
 		<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
-		<p class="text-sm text-muted-foreground sm:text-base">Configure your store and manage system settings.</p>
+		<p class="text-sm text-muted-foreground sm:text-base">
+			Configure your store and manage system settings.
+		</p>
 	</div>
 
 	<!-- Settings Navigation Tabs -->
@@ -87,7 +89,7 @@
 								</div>
 							</Table.Cell>
 							<Table.Cell>
-								<Badge variant="outline" class="text-[9px] tracking-tighter uppercase px-1.5 h-4">
+								<Badge variant="outline" class="h-4 px-1.5 text-[9px] tracking-tighter uppercase">
 									{log.action}
 								</Badge>
 							</Table.Cell>
