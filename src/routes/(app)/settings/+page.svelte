@@ -86,6 +86,11 @@
 			store_bin: data.settings.store_bin || '',
 			low_stock_threshold: data.settings.low_stock_threshold || '5'
 		};
+
+		// Auto-enable editing if store name is empty
+		if (!previewData.store_name) {
+			isEditing = true;
+		}
 	});
 
 	$effect(() => {
@@ -130,6 +135,28 @@
 			<p class="text-sm text-muted-foreground sm:text-base">
 				Configure your store and manage system settings.
 			</p>
+		</div>
+		<div class="flex gap-2">
+			<Button
+				variant="outline"
+				type="button"
+				size="sm"
+				class="h-9 cursor-pointer text-xs sm:text-sm"
+				onclick={() => (showReceiptPreview = true)}
+			>
+				<Eye class="mr-2 h-4 w-4" />
+				Preview Receipt
+			</Button>
+			<Button
+				variant="outline"
+				type="button"
+				size="sm"
+				class="h-9 cursor-pointer text-xs sm:text-sm"
+				onclick={printTestReceipt}
+			>
+				<Printer class="mr-2 h-4 w-4" />
+				Print Test
+			</Button>
 		</div>
 	</div>
 
@@ -548,30 +575,7 @@
 		<div
 			class="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:border-t-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none"
 		>
-			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-				<div class="flex gap-2">
-					<Button
-						variant="outline"
-						type="button"
-						size="sm"
-						class="h-9 cursor-pointer text-xs sm:text-sm"
-						onclick={() => (showReceiptPreview = true)}
-					>
-						<Eye class="mr-2 h-4 w-4" />
-						Preview Receipt
-					</Button>
-					<Button
-						variant="outline"
-						type="button"
-						size="sm"
-						class="h-9 cursor-pointer text-xs sm:text-sm"
-						onclick={printTestReceipt}
-					>
-						<Printer class="mr-2 h-4 w-4" />
-						Print Test
-					</Button>
-				</div>
-
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
 				<div class="flex items-center gap-2">
 					{#if !isEditing}
 						<Button

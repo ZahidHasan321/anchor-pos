@@ -33,6 +33,7 @@
 		"compression": "maximum",
 		"appId": "com.anchor.pos",
 		"productName": "Anchor POS",
+		"artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
 		"directories": {
 			"output": "dist-electron",
 			"buildResources": "resources"
@@ -45,6 +46,7 @@
 		"files": [
 			"build/**/*",
 			"static/**/*",
+			"drizzle/**/*",
 			"electron-main.cjs",
 			"preload.cjs",
 			"package.json",
@@ -60,7 +62,15 @@
 			"target": [
 				"AppImage"
 			],
-			"category": "Office"
+			"category": "Office",
+			"executableName": "clothing-pos",
+			"synopsis": "A modern Point of Sale system for clothing stores",
+			"description": "A robust POS system built with SvelteKit and Electron for modern retail management.",
+			"maintainer": "Anchor POS <support@anchorpos.com>",
+			"icon": "resources/icons",
+			"extraFiles": [
+				".env"
+			]
 		},
 		"win": {
 			"target": "nsis",
@@ -68,6 +78,12 @@
 			"extraFiles": [
 				".env"
 			]
+		},
+		"nsis": {
+			"installerIcon": "resources/icon.ico",
+			"uninstallerIcon": "resources/icon.ico",
+			"oneClick": false,
+			"allowToChangeInstallationDirectory": true
 		}
 	},
 	"devDependencies": {
@@ -119,6 +135,7 @@
 		"chart.js": "^4.5.1",
 		"crypto-js": "^4.2.0",
 		"dotenv": "^17.3.1",
+		"electron-log": "^5.4.3",
 		"jsbarcode": "^3.12.3",
 		"portfinder": "^1.0.38",
 		"postgres": "^3.4.8"

@@ -1,4 +1,4 @@
-import CryptoJS from 'crypto-js';
+import { createHash } from 'node:crypto';
 import { db } from './db';
 import { auditLogs } from './db/schema';
 import { desc } from 'drizzle-orm';
@@ -26,7 +26,7 @@ function computeHash(data: {
 		data.previousHash,
 		String(data.createdAt)
 	].join('|');
-	return CryptoJS.SHA256(payload).toString(CryptoJS.enc.Hex);
+	return createHash('sha256').update(payload).digest('hex');
 }
 
 export async function logAuditEvent(params: {

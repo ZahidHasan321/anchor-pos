@@ -1,5 +1,23 @@
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { validateSessionToken } from '$lib/server/auth';
+
+export const handleError: HandleServerError = ({ error, event }) => {
+	const message = error instanceof Error ? error.message : String(error);
+	console.error('Server error at:', event.url.pathname, '| Error:', message);
+
+	// Detect database connection errors (common when offline with remote DB)
+	if (message.includes('ECONNREFUSED') || message.includes('ETIMEDOUT') || message.includes('database connection failed')) {
+		return {
+			message: 'Database connection failed. Please check your internet connection or database status.',
+			code: 'DB_CONNECTION_ERROR'
+		};
+	}
+
+	return {
+		message: 'An unexpected server error occurred.',
+		code: 'INTERNAL_ERROR'
+	};
+};
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const token = event.cookies.get('session');

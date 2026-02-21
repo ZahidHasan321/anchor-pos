@@ -4,9 +4,8 @@ import { sessions, users } from './db/schema';
 import { eq } from 'drizzle-orm';
 import { dev } from '$app/environment';
 import type { RequestEvent } from '@sveltejs/kit';
-import { scrypt, randomBytes, timingSafeEqual, randomFillSync } from 'node:crypto';
+import { scrypt, randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import CryptoJS from 'crypto-js';
 
 const scryptAsync = promisify(scrypt);
 
@@ -42,14 +41,14 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 		return false;
 	}
 
-	// Fallback for legacy SHA-256 hashes (using CryptoJS for robustness in Electron)
-    const legacyHash = CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
+	// Fallback for legacy SHA-256 hashes (using node:crypto for robustness)
+    const legacyHash = createHash('sha256').update(password).digest('hex');
 	return legacyHash === hash;
 }
 
 export async function createSession(token: string, userId: string) {
 
-	const sessionId = CryptoJS.SHA256(token).toString(CryptoJS.enc.Hex);
+	const sessionId = createHash('sha256').update(token).digest('hex');
 	const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
 	await db.insert(sessions).values({
@@ -62,7 +61,7 @@ export async function createSession(token: string, userId: string) {
 }
 
 export async function validateSessionToken(token: string) {
-	const sessionId = CryptoJS.SHA256(token).toString(CryptoJS.enc.Hex);
+	const sessionId = createHash('sha256').update(token).digest('hex');
 
 	const results = await db
 		.select({

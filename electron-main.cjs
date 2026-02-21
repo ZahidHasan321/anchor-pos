@@ -1,32 +1,123 @@
 
-const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const portfinder = require('portfinder');
 const dotenv = require('dotenv');
 const { pathToFileURL } = require('url');
+const log = require('electron-log');
+
+// --- Power Management ---
+let powerBlockerId = null;
+
+function preventSleep() {
+    if (powerBlockerId === null) {
+        powerBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+        log.info('Power sleep prevention started');
+    }
+}
+
+function allowSleep() {
+    if (powerBlockerId !== null) {
+        powerSaveBlocker.stop(powerBlockerId);
+        powerBlockerId = null;
+        log.info('Power sleep prevention stopped');
+    }
+}
+
+// Configure logging
+log.transports.file.level = 'info';
+log.initialize({ preload: true });
+console.log = log.log;
+console.warn = log.warn;
+console.error = log.error;
+
+log.info('App starting...');
+
+// --- Database Migrations ---
+async function runMigrations() {
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) {
+        log.warn('DATABASE_URL not set, skipping migrations');
+        return;
+    }
+
+    try {
+        const { migrate } = require('drizzle-orm/postgres-js/migrator');
+        const { drizzle } = require('drizzle-orm/postgres-js');
+        const postgres = require('postgres');
+
+        log.info('Running database migrations...');
+        const migrationClient = postgres(dbUrl, { max: 1 });
+        const db = drizzle(migrationClient);
+
+        // Path to migrations (packaged vs dev)
+        const migrationsPath = app.isPackaged 
+            ? path.join(process.resourcesPath, 'app.asar', 'drizzle')
+            : path.join(__dirname, 'drizzle');
+
+        if (fs.existsSync(migrationsPath)) {
+            await migrate(db, { migrationsFolder: migrationsPath });
+            log.info('Database migrations completed successfully');
+        } else {
+            log.warn('Migrations folder not found at:', migrationsPath);
+        }
+        await migrationClient.end();
+    } catch (e) {
+        log.error('Database migration failed:', e);
+        // We don't necessarily want to crash the app if migration fails, 
+        // as the server might still start if schema is compatible.
+    }
+}
 
 // --- Robust .env Loading ---
 const isDev = !app.isPackaged;
 const exeDir = path.dirname(app.getPath('exe'));
 const rootDir = __dirname;
+const cwd = process.cwd();
 
 
-// Try loading from executable directory first (Production)
-const envExePath = path.join(exeDir, '.env');
-// Try loading from source root (Development / Unpacked test)
-const envRootPath = path.join(rootDir, '.env');
+// Try loading from different locations in order
+const envPaths = [
+    path.join(exeDir, '.env'),       // Next to exe (Windows standard)
+    path.join(cwd, '.env'),          // Current working directory (Linux standard for portable)
+    path.join(rootDir, '.env'),      // Source root (Development)
+    path.join(app.getPath('userData'), '.env') // Data directory (User-specific config)
+];
 
-if (fs.existsSync(envExePath)) {
-    dotenv.config({ path: envExePath });
-} else if (fs.existsSync(envRootPath)) {
-    dotenv.config({ path: envRootPath });
-} else {
-    dotenv.config(); // Fallback to current working directory
+for (const envPath of envPaths) {
+    if (fs.existsSync(envPath)) {
+        dotenv.config({ path: envPath, override: true });
+        console.log('Loaded config from:', envPath);
+    }
 }
 
 let mainWindow;
 let splashWindow;
+
+// --- Window State Persistence ---
+const windowStatePath = path.join(app.getPath('userData'), 'window-state.json');
+
+function saveWindowState() {
+    if (!mainWindow) return;
+    const bounds = mainWindow.getBounds();
+    try {
+        fs.writeFileSync(windowStatePath, JSON.stringify(bounds));
+    } catch (e) {
+        console.error('Failed to save window state:', e);
+    }
+}
+
+function loadWindowState() {
+    try {
+        if (fs.existsSync(windowStatePath)) {
+            return JSON.parse(fs.readFileSync(windowStatePath, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Failed to load window state:', e);
+    }
+    return { width: 1280, height: 800 }; // Default
+}
 
 async function createSplashWindow() {
     splashWindow = new BrowserWindow({
@@ -57,9 +148,13 @@ async function createWindow() {
         ? path.join(process.resourcesPath, 'app.asar', 'static', 'favicon.png')
         : path.join(__dirname, 'static', 'favicon.png');
 
+    const state = loadWindowState();
+
     mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
+        x: state.x,
+        y: state.y,
+        width: state.width,
+        height: state.height,
         title: "Anchor POS",
         show: false, // Don't show until ready
         backgroundColor: '#ffffff',
@@ -70,6 +165,10 @@ async function createWindow() {
             contextIsolation: true
         }
     });
+
+    // Save window state on change
+    mainWindow.on('resize', saveWindowState);
+    mainWindow.on('move', saveWindowState);
 
     // Ensure menu is hidden on Windows/Linux
     mainWindow.setMenuBarVisibility(false);
@@ -93,17 +192,6 @@ async function createWindow() {
         });
     } else {
         try {
-            // Re-load dotenv to ensure process.env is fully populated before import
-            const dotenv = require('dotenv');
-            dotenv.config();
-            
-            // Try loading from executable directory first (Production)
-            // On Windows, the .env file is often placed next to the executable
-            const envExePath = path.join(path.dirname(app.getPath('exe')), '.env');
-            if (fs.existsSync(envExePath)) {
-                dotenv.config({ path: envExePath, override: true });
-            }
-
             let buildPath = path.join(__dirname, 'build', 'index.js');
             // If packed, check for unpacked build files to avoid ASAR issues with native modules/ESM
             if (app.isPackaged) {
@@ -130,9 +218,38 @@ async function createWindow() {
 
             await import(buildUrl); 
             
-            mainWindow.loadURL(`http://localhost:${port}`).catch(e => {
+            // Function to wait for server to be ready (Polling)
+            const waitForServer = async (targetUrl, maxRetries = 20) => {
+                const http = require('http');
+                for (let i = 0; i < maxRetries; i++) {
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const req = http.get(targetUrl, (res) => {
+                                if (res.statusCode < 500) resolve();
+                                else reject();
+                            });
+                            req.on('error', reject);
+                            req.setTimeout(500);
+                            req.end();
+                        });
+                        return true;
+                    } catch (e) {
+                        await new Promise(r => setTimeout(r, 250));
+                    }
+                }
+                return false;
+            };
+
+            const appUrl = `http://localhost:${port}`;
+            const serverReady = await waitForServer(appUrl);
+            
+            if (!serverReady) {
+                console.warn('Server failed to respond in time, attempting load anyway.');
+            }
+
+            mainWindow.loadURL(appUrl).catch(e => {
                 console.error('Failed to load URL:', e);
-                dialog.showErrorBox('Navigation Error', `Failed to load app at http://localhost:${port}\nError: ${e.message}`);
+                dialog.showErrorBox('Navigation Error', `Failed to load app at ${appUrl}\nError: ${e.message}\n\nPlease ensure your database is running.`);
             });
             
             // Failsafe: Show window after 5 seconds if ready-to-show doesn't fire
@@ -171,13 +288,14 @@ async function createWindow() {
 
     mainWindow.on('closed', () => {
         mainWindow = null;
+        allowSleep();
     });
 }
 
 // IPC listener for native printing
-ipcMain.on('print-native', (event, html) => {
+ipcMain.on('print-native', (event, html, preview = false) => {
     let printWindow = new BrowserWindow({
-        show: false,
+        show: false, // Always hidden, the print dialog is what matters
         webPreferences: {
             offscreen: true
         }
@@ -186,28 +304,43 @@ ipcMain.on('print-native', (event, html) => {
     printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
     printWindow.webContents.on('did-finish-load', () => {
-        // Use silent: true for true POS behavior (no dialog)
+        // Use silent: false to show the native system print dialog (with preview, Save as PDF, etc.)
         printWindow.webContents.print({
-            silent: false, // Set to true for auto-printing without dialog
+            silent: !preview, 
             printBackground: true,
             margins: {
                 marginType: 'none'
-            },
-            pageSize: {
-                width: 72000, // 72mm in microns
-                height: 200000 
             }
         }, (success, failureReason) => {
-            if (!success) console.error('Print failed:', failureReason);
+            if (!success && failureReason !== 'Cancelled') {
+                console.error('Print failed:', failureReason);
+            }
             printWindow.close();
         });
     });
 });
 
-app.on('ready', () => {
-    createSplashWindow();
-    createWindow();
-});
+// --- Single Instance Lock ---
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', (event, commandLine, workingDirectory) => {
+        // Someone tried to run a second instance, we should focus our window.
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+        }
+    });
+
+    app.on('ready', async () => {
+        preventSleep();
+        await runMigrations();
+        createSplashWindow();
+        createWindow();
+    });
+}
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {

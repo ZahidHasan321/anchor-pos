@@ -33,7 +33,7 @@ export type ReceiptData = {
 	isReprint?: boolean;
 };
 
-export function printReceipt(data: ReceiptData) {
+export function printReceipt(data: ReceiptData, preview = false) {
 	const s = data.storeSettings;
 	const symbol = getCurrencySymbol();
 
@@ -53,6 +53,9 @@ export function printReceipt(data: ReceiptData) {
 	@page {
 		size: 72mm auto;
 		margin: 0;
+	}
+	@media print {
+		.no-print { display: none !important; }
 	}
 	* {
 		box-sizing: border-box;
@@ -91,6 +94,16 @@ export function printReceipt(data: ReceiptData) {
 		height: 15mm;
 		width: 100%;
 		display: block;
+	}
+	.no-print-btn {
+		background: #000;
+		color: #fff;
+		border: none;
+		padding: 10px 20px;
+		width: 100%;
+		font-weight: bold;
+		margin-bottom: 10px;
+		cursor: pointer;
 	}
 </style></head><body>
 	<div id="receipt">
@@ -189,7 +202,7 @@ export function printReceipt(data: ReceiptData) {
 	// @ts-ignore - window.electron is injected by preload script
 	if (typeof window !== 'undefined' && window.electron?.printNative) {
 		// @ts-ignore
-		window.electron.printNative(html);
+		window.electron.printNative(html, preview);
 		return;
 	}
 

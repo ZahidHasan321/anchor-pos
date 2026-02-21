@@ -1,4 +1,6 @@
 node_modules
+*.log
+pnpm-debug.log*
 
 # Output
 .output
@@ -22,5 +24,11 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-# SQLite
+
+# IDEs
+.vscode/
+.idea/
+
+# SQLite (if used locally)
 *.db
+*.db-journal

@@ -136,7 +136,8 @@ export const orderItems = pgTable(
 		priceAtSale: doublePrecision('price_at_sale').notNull(), // Price at the moment of sale
 		discount: doublePrecision('discount').default(0),
 		productName: text('product_name').notNull(),
-		variantLabel: text('variant_label').notNull() // e.g., "M / Black"
+		variantLabel: text('variant_label').notNull(), // e.g., "M / Black"
+		status: text('status').notNull().default('completed') // enum: ['completed', 'refunded']
 	},
 	(table) => ({
 		orderIdIdx: index('order_item_order_id_idx').on(table.orderId),

@@ -11,7 +11,7 @@ export type ConfirmOptions = {
 
 class ConfirmState {
 	#open = $state(false);
-	#options = $state<ConfirmOptions>({ message: '' });
+	#options = $state<ConfirmOptions>({ message: '', title: '' });
 	#resolve = $state<(value: boolean) => void>();
 
 	get open() {

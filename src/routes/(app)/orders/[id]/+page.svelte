@@ -114,23 +114,31 @@
 							<Table.Head class="text-center">Quantity</Table.Head>
 							<Table.Head class="text-right">Price</Table.Head>
 							<Table.Head class="text-right">Total</Table.Head>
+							<Table.Head class="text-right"></Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
 						{#each data.items as item}
-							<Table.Row>
+							<Table.Row class={item.status === 'refunded' ? 'opacity-50 grayscale bg-muted/30' : ''}>
 								<Table.Cell>
-									{#if item.productId}
-										<a
-											href="/inventory/{item.productId}"
-											class="font-medium text-primary hover:underline"
-										>
-											{item.productName}
-										</a>
-									{:else}
-										<div class="font-medium">{item.productName}</div>
-									{/if}
-									<div class="text-xs text-muted-foreground">{item.variantLabel}</div>
+									<div class="flex items-center gap-2">
+										{#if item.status === 'refunded'}
+											<Badge variant="destructive" class="h-5 px-1.5 text-[9px] uppercase tracking-wider">Refunded</Badge>
+										{/if}
+										<div>
+											{#if item.productId}
+												<a
+													href="/inventory/{item.productId}"
+													class="font-medium text-primary hover:underline"
+												>
+													{item.productName}
+												</a>
+											{:else}
+												<div class="font-medium">{item.productName}</div>
+											{/if}
+											<div class="text-xs text-muted-foreground">{item.variantLabel}</div>
+										</div>
+									</div>
 								</Table.Cell>
 								<Table.Cell class="text-center">{item.quantity}</Table.Cell>
 								<Table.Cell class="text-right">{formatCurrency(item.priceAtSale)}</Table.Cell>
@@ -138,6 +146,32 @@
 									{formatCurrency(
 										item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100)
 									)}
+								</Table.Cell>
+								<Table.Cell class="text-right">
+									{#if item.status !== 'refunded' && data.order.status === 'completed' && data.user?.role !== 'sales'}
+										<form method="POST" action="?/refundItem" use:enhance>
+											<input type="hidden" name="itemId" value={item.id} />
+											<Button
+												variant="ghost"
+												size="sm"
+												type="button"
+												class="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+												onclick={async (e) => {
+													const formElement = e.currentTarget.closest('form');
+													if (await confirmState.confirm({
+														title: 'Refund Item',
+														message: `Refund ${item.productName} (${item.variantLabel})? This will restore stock and update order total.`,
+														confirmText: 'Refund',
+														variant: 'destructive'
+													})) {
+														formElement?.requestSubmit();
+													}
+												}}
+											>
+												Refund
+											</Button>
+										</form>
+									{/if}
 								</Table.Cell>
 							</Table.Row>
 						{/each}

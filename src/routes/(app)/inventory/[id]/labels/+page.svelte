@@ -27,9 +27,7 @@
 
 	function printLabels() {
 		if (!labelContainer) return;
-		const printWindow = window.open('', '_blank');
-		if (!printWindow) return;
-		printWindow.document.write(`<!DOCTYPE html><html><head>
+		const html = `<!DOCTYPE html><html><head>
 <style>
   @page { size: 50.8mm 25.4mm; margin: 0; }
   body { margin: 0; padding: 0; }
@@ -47,15 +45,23 @@
   .price { font-size: 9px; font-weight: bold; margin-top: 1mm; }
   svg { max-width: 44mm; }
   @media print { body { -webkit-print-color-adjust: exact; } }
-</style></head><body>${labelContainer.innerHTML}</body>
-<script>window.onload=function(){window.print();}<\/script></html>`);
-		printWindow.document.close();
+</style></head><body>${labelContainer.innerHTML}</body></html>`;
+
+		// @ts-ignore
+		if (window.electron?.printNative) {
+			// @ts-ignore
+			window.electron.printNative(html, true);
+		} else {
+			const printWindow = window.open('', '_blank');
+			if (!printWindow) return;
+			printWindow.document.write(html);
+			printWindow.document.close();
+			printWindow.onload = () => printWindow.print();
+		}
 	}
 
 	function printSingleLabel(element: HTMLElement) {
-		const printWindow = window.open('', '_blank');
-		if (!printWindow) return;
-		printWindow.document.write(`<!DOCTYPE html><html><head>
+		const html = `<!DOCTYPE html><html><head>
 <style>
   @page { size: 50.8mm 25.4mm; margin: 0; }
   body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; height: 100vh; }
@@ -71,9 +77,19 @@
   .price { font-size: 9px; font-weight: bold; margin-top: 1mm; }
   svg { max-width: 44mm; }
   @media print { body { -webkit-print-color-adjust: exact; } }
-</style></head><body>${element.outerHTML}</body>
-<script>window.onload=function(){window.print();}<\/script></html>`);
-		printWindow.document.close();
+</style></head><body>${element.outerHTML}</body></html>`;
+
+		// @ts-ignore
+		if (window.electron?.printNative) {
+			// @ts-ignore
+			window.electron.printNative(html, true);
+		} else {
+			const printWindow = window.open('', '_blank');
+			if (!printWindow) return;
+			printWindow.document.write(html);
+			printWindow.document.close();
+			printWindow.onload = () => printWindow.print();
+		}
 	}
 </script>
 

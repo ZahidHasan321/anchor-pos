@@ -1,0 +1,1 @@
+ALTER TABLE "order_items" ADD COLUMN "status" text DEFAULT 'completed' NOT NULL;

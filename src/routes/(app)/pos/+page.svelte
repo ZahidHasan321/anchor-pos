@@ -168,7 +168,7 @@
 
 	let activeMobileTab = $state<'products' | 'cart'>('products');
 
-	function handlePrintReceipt() {
+	function handlePrintReceipt(preview = true) {
 		if (!completedOrder) return;
 		data.streamed.then((s) => {
 			printReceipt({
@@ -187,7 +187,7 @@
 				cashReceived: completedOrder.cashReceived,
 				changeGiven: completedOrder.changeGiven,
 				footerNote: 'Printed on ' + formatDateTime(new Date())
-			});
+			}, preview);
 		});
 	}
 </script>
@@ -277,13 +277,16 @@
 						{:else}
 							<div class="flex flex-wrap gap-2 sm:gap-3">
 								{#each displayedProducts as variant (variant.id)}
+									{@const cartQty = cart.items.find(i => i.variantId === variant.id)?.quantity ?? 0}
+									{@const availableStock = variant.stockQuantity - cartQty}
 									<button
 										onclick={() => handleAddToCart(variant)}
-										class="group relative flex max-w-[360px] min-w-[240px] flex-1 cursor-pointer flex-col rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-lg active:scale-[0.98]"
+										disabled={availableStock <= 0}
+										class="group relative flex max-w-[360px] min-w-[240px] flex-1 cursor-pointer flex-col rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
 									>
 										<div class="absolute top-2 right-2">
-											<Badge variant={variant.stockQuantity <= 5 ? 'destructive' : 'secondary'}
-												>{variant.stockQuantity}</Badge
+											<Badge variant={availableStock <= 5 ? 'destructive' : 'secondary'}
+												>{availableStock}</Badge
 											>
 										</div>
 										<h3 class="mb-1 line-clamp-2 text-sm font-semibold">{variant.productName}</h3>
@@ -466,7 +469,12 @@
 					class="h-14 w-full text-lg font-bold"
 					disabled={cart.items.length === 0}
 					onclick={async () => {
-						if (!cart.customer && !(await confirmState.confirm('Walk-in sale?'))) return;
+						if (!cart.customer && !(await confirmState.confirm({
+							title: 'Walk-in Sale',
+							message: 'Proceed without a customer profile?',
+							confirmText: 'Continue',
+							variant: 'default'
+						}))) return;
 						checkoutOpen = true;
 					}}>Charge {formatCurrency(cart.subtotal)}</Button
 				>
@@ -476,7 +484,9 @@
 </div>
 
 <!-- Checkout Dialog -->
-<Dialog.Root bind:open={checkoutOpen}>
+<Dialog.Root bind:open={checkoutOpen} onOpenChange={(open) => {
+	if (open) cart.cashReceived = 0;
+}}>
 	<Dialog.Content class="max-w-md">
 		<Dialog.Header
 			><Dialog.Title>Complete Payment</Dialog.Title><Dialog.Description
@@ -506,7 +516,9 @@
 					<Label>Cash Received</Label><Input
 						type="number"
 						class="h-14 text-center text-2xl font-bold"
-						bind:value={() => cart.cashReceived, (v) => (cart.cashReceived = Number(v))}
+						placeholder="0"
+						value={cart.cashReceived || ''}
+						oninput={(e) => (cart.cashReceived = Number(e.currentTarget.value))}
 					/>
 				</div>
 				<div class="grid grid-cols-4 gap-2">
@@ -593,7 +605,7 @@
 					Change: {formatCurrency(completedOrder.changeGiven)}
 				</div>{/if}
 			<div class="flex gap-2">
-				<Button class="h-14 flex-1" onclick={handlePrintReceipt}
+				<Button class="h-14 flex-1" onclick={() => handlePrintReceipt(true)}
 					><Printer class="mr-2 h-5 w-5" /> Print</Button
 				><Button variant="outline" class="h-14 flex-1" onclick={() => (completedOrder = null)}
 					>Done</Button
