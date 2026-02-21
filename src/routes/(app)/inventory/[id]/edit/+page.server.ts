@@ -6,23 +6,22 @@ import { eq } from 'drizzle-orm';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	if (!locals.user || !hasPermission(locals.user.role, 'inventory')) {
-		redirect(302, locals.user ? getDefaultRedirect(locals.user.role) : '/login');
+	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
+		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
 
-	const product = db.select().from(products).where(eq(products.id, params.id)).get();
+	const productRows = await db.select().from(products).where(eq(products.id, params.id)).limit(1);
+	const product = productRows[0];
 
 	if (!product) {
 		redirect(302, '/inventory');
 	}
 
-	const categories = db
-		.selectDistinct({ category: products.category })
-		.from(products)
-		.all()
-		.map((r) => r.category);
+	const categoryRows = await db.selectDistinct({ category: products.category }).from(products);
 
-	return { product, categories };
+	const categories = categoryRows.map((r) => r.category);
+
+	return { product, categories: categories.sort() };
 };
 
 export const actions: Actions = {
@@ -37,11 +36,9 @@ export const actions: Actions = {
 		const templatePrice = parseFloat(data.get('templatePrice') as string);
 
 		// Normalize category by finding existing case-insensitive match
-		const existingCategories = db
-			.selectDistinct({ category: products.category })
-			.from(products)
-			.all()
-			.map((r) => r.category);
+		const catRows = await db.selectDistinct({ category: products.category }).from(products);
+
+		const existingCategories = catRows.map((r) => r.category);
 
 		const normalizedCategory =
 			existingCategories.find((c) => c.toLowerCase() === category?.toLowerCase()) || category;
@@ -60,7 +57,8 @@ export const actions: Actions = {
 		}
 
 		try {
-			db.update(products)
+			await db
+				.update(products)
 				.set({
 					name,
 					description,
@@ -68,8 +66,7 @@ export const actions: Actions = {
 					templatePrice,
 					defaultDiscount
 				})
-				.where(eq(products.id, params.id))
-				.run();
+				.where(eq(products.id, params.id));
 		} catch (e) {
 			console.error('Failed to update product:', e);
 			return fail(500, { error: 'Database error' });

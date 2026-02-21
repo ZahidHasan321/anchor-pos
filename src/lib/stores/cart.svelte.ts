@@ -8,7 +8,7 @@ type CartItem = {
 	color: string | null;
 	barcode: string;
 	price: number;
-	discount: number;
+	discount: number | null;
 	quantity: number;
 	maxStock: number;
 };
@@ -23,16 +23,17 @@ function createCart() {
 	let items = $state<CartItem[]>([]);
 	let customer = $state<CustomerInfo>(null);
 	let paymentMethod = $state<'cash' | 'card'>('cash');
-	let cashReceived = $state(0);
-	let globalDiscount = $state(0);
+	let cashReceived = $state<number>(0);
+	let globalDiscount = $state<number | null>(null);
 
 	const subtotal = $derived(
 		items.reduce((sum, item) => {
 			const linePrice = item.price * item.quantity;
-			const lineDiscount = linePrice * (item.discount / 100);
+			const discountVal = item.discount ?? 0;
+			const lineDiscount = linePrice * (discountVal / 100);
 			return sum + (linePrice - lineDiscount);
 		}, 0) *
-			(1 - globalDiscount / 100)
+			(1 - (globalDiscount ?? 0) / 100)
 	);
 
 	const totalItems = $derived(items.reduce((sum, item) => sum + item.quantity, 0));
@@ -60,7 +61,7 @@ function createCart() {
 		get globalDiscount() {
 			return globalDiscount;
 		},
-		set globalDiscount(v: number) {
+		set globalDiscount(v: number | null) {
 			globalDiscount = v;
 		},
 		get subtotal() {
@@ -98,9 +99,15 @@ function createCart() {
 			}
 		},
 
-		updateItemDiscount(variantId: string, discount: number) {
+		updateItemDiscount(variantId: string, discount: number | null) {
 			const item = items.find((i) => i.variantId === variantId);
-			if (item) item.discount = Math.max(0, Math.min(100, discount));
+			if (item) {
+				if (discount === null) {
+					item.discount = null;
+				} else {
+					item.discount = Math.max(0, Math.min(100, discount));
+				}
+			}
 		},
 
 		setCustomer(c: CustomerInfo) {
@@ -112,7 +119,7 @@ function createCart() {
 			customer = null;
 			paymentMethod = 'cash';
 			cashReceived = 0;
-			globalDiscount = 0;
+			globalDiscount = null;
 		}
 	};
 }

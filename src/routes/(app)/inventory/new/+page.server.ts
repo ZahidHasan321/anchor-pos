@@ -7,16 +7,14 @@ import { logAuditEvent } from '$lib/server/audit';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	if (!locals.user || !hasPermission(locals.user.role, 'inventory')) {
-		redirect(302, locals.user ? getDefaultRedirect(locals.user.role) : '/login');
+	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
+		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
-	const categories = db
-		.selectDistinct({ category: products.category })
-		.from(products)
-		.all()
-		.map((r) => r.category);
+	const rows = await db.selectDistinct({ category: products.category }).from(products);
 
-	return { categories };
+	const categories = rows.map((r) => r.category);
+
+	return { categories: categories.sort() };
 };
 
 export const actions: Actions = {
@@ -50,11 +48,9 @@ export const actions: Actions = {
 		const shortId = productId.substring(0, 4).toUpperCase();
 
 		// Normalize category by finding existing case-insensitive match
-		const existingCategories = db
-			.selectDistinct({ category: products.category })
-			.from(products)
-			.all()
-			.map((r) => r.category);
+		const catRows = await db.selectDistinct({ category: products.category }).from(products);
+
+		const existingCategories = catRows.map((r) => r.category);
 
 		const normalizedCategory =
 			existingCategories.find((c) => c.toLowerCase() === category.toLowerCase()) || category;
@@ -62,17 +58,15 @@ export const actions: Actions = {
 		const catPrefix = normalizedCategory.substring(0, 3).toUpperCase();
 
 		try {
-			db.transaction((tx) => {
-				tx.insert(products)
-					.values({
-						id: productId,
-						name,
-						description,
-						category: normalizedCategory,
-						templatePrice,
-						defaultDiscount
-					})
-					.run();
+			await db.transaction(async (tx) => {
+				await tx.insert(products).values({
+					id: productId,
+					name,
+					description,
+					category: normalizedCategory,
+					templatePrice,
+					defaultDiscount
+				});
 
 				for (let i = 0; i < sizes.length; i++) {
 					const size = sizes[i];
@@ -81,37 +75,33 @@ export const actions: Actions = {
 					// Format: {CATEGORY_PREFIX}-{PRODUCT_ID_SHORT}-{SIZE}
 					const barcode = `${catPrefix}-${shortId}-${size}`;
 
-					tx.insert(productVariants)
-						.values({
-							id: variantId,
-							productId,
-							size,
-							barcode,
-							stockQuantity: quantity,
-							price: templatePrice,
-							discount: defaultDiscount
-						})
-						.run();
+					await tx.insert(productVariants).values({
+						id: variantId,
+						productId,
+						size,
+						barcode,
+						stockQuantity: quantity,
+						price: templatePrice,
+						discount: defaultDiscount
+					});
 
 					if (quantity > 0) {
-						tx.insert(stockLogs)
-							.values({
-								id: generateId(),
-								variantId,
-								changeAmount: quantity,
-								reason: stockReason,
-								userId: locals.user!.id
-							})
-							.run();
+						await tx.insert(stockLogs).values({
+							id: generateId(),
+							variantId,
+							changeAmount: quantity,
+							reason: stockReason,
+							userId: locals.user!.id
+						});
 					}
 				}
 			});
 
-			logAuditEvent({
-				userId: locals.user.id,
-				userName: locals.user.name,
+			await logAuditEvent({
+				userId: locals.user!.id,
+				userName: locals.user!.name,
 				action: 'CREATE_PRODUCT',
-				entity: 'product',
+				entity: 'products',
 				entityId: productId,
 				details: `Created product: ${name} with ${sizes.length} variants`
 			});

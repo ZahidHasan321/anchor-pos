@@ -8,7 +8,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { ArrowLeft, Phone, Mail, ChevronLeft, ChevronRight, Pencil } from '@lucide/svelte';
-	import { formatBDT, formatDateTime } from '$lib/format';
+	import { formatCurrency, formatDateTime } from '$lib/format';
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 	import { confirmState } from '$lib/confirm.svelte';
@@ -27,7 +27,7 @@
 	});
 
 	function goToPage(page: number) {
-		goto(`?page=${page}`);
+		goto(`?page=${page}`, { noScroll: true, keepFocus: true });
 	}
 </script>
 
@@ -84,7 +84,7 @@
 						</div>
 						<div>
 							<div class="text-xs text-muted-foreground">Total Spent</div>
-							<div class="text-xl font-bold text-primary">{formatBDT(data.totalSpent)}</div>
+							<div class="text-xl font-bold text-primary">{formatCurrency(data.totalSpent)}</div>
 						</div>
 					</div>
 				</div>
@@ -126,7 +126,7 @@
 										{order.status}
 									</Badge>
 								</Table.Cell>
-								<Table.Cell class="font-bold">{formatBDT(order.totalAmount)}</Table.Cell>
+								<Table.Cell class="font-bold">{formatCurrency(order.totalAmount)}</Table.Cell>
 							</Table.Row>
 						{/each}
 						{#if data.orders.length === 0}

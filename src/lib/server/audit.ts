@@ -1,5 +1,4 @@
-import { sha256 } from '@oslojs/crypto/sha2';
-import { encodeHexLowerCase } from '@oslojs/encoding';
+import CryptoJS from 'crypto-js';
 import { db } from './db';
 import { auditLogs } from './db/schema';
 import { desc } from 'drizzle-orm';
@@ -27,24 +26,24 @@ function computeHash(data: {
 		data.previousHash,
 		String(data.createdAt)
 	].join('|');
-	return encodeHexLowerCase(sha256(new TextEncoder().encode(payload)));
+	return CryptoJS.SHA256(payload).toString(CryptoJS.enc.Hex);
 }
 
-export function logAuditEvent(params: {
+export async function logAuditEvent(params: {
 	userId: string | null;
 	userName: string;
 	action: string;
 	entity: string;
 	entityId?: string | null;
 	details?: string | null;
-}): void {
-	const lastEntry = db
+}): Promise<void> {
+	const lastEntryRows = await db
 		.select({ hash: auditLogs.hash })
 		.from(auditLogs)
 		.orderBy(desc(auditLogs.createdAt))
-		.limit(1)
-		.get();
+		.limit(1);
 
+	const lastEntry = lastEntryRows[0];
 	const previousHash = lastEntry?.hash ?? GENESIS_HASH;
 	const now = Date.now();
 
@@ -59,24 +58,26 @@ export function logAuditEvent(params: {
 		createdAt: now
 	});
 
-	db.insert(auditLogs)
-		.values({
-			id: generateId(),
-			userId: params.userId,
-			userName: params.userName,
-			action: params.action,
-			entity: params.entity,
-			entityId: params.entityId ?? null,
-			details: params.details ?? null,
-			previousHash,
-			hash,
-			createdAt: new Date(now)
-		})
-		.run();
+	await db.insert(auditLogs).values({
+		id: generateId(),
+		userId: params.userId,
+		userName: params.userName,
+		action: params.action,
+		entity: params.entity,
+		entityId: params.entityId ?? null,
+		details: params.details ?? null,
+		previousHash,
+		hash,
+		createdAt: new Date(now)
+	});
 }
 
-export function verifyAuditChain(): { valid: boolean; brokenAt?: number; total: number } {
-	const allLogs = db.select().from(auditLogs).orderBy(auditLogs.createdAt).all();
+export async function verifyAuditChain(): Promise<{
+	valid: boolean;
+	brokenAt?: number;
+	total: number;
+}> {
+	const allLogs = await db.select().from(auditLogs).orderBy(auditLogs.createdAt);
 	if (allLogs.length === 0) return { valid: true, total: 0 };
 
 	for (let i = 0; i < allLogs.length; i++) {

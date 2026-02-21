@@ -4,13 +4,35 @@
 	import { Toaster } from 'svelte-sonner';
 	import { TooltipProvider } from '$lib/components/ui/tooltip';
 	import ConfirmDialog from '$lib/components/ui/confirm-dialog.svelte';
+	import { ModeWatcher } from 'mode-watcher';
+	import { globalSettings } from '$lib/settings.svelte';
 
-	let { children, data } = $props();
+	let props = $props();
+
+	// Initialize state immediately (works on server and client)
+	if (props.data.storeSettings) {
+		globalSettings.update(
+			props.data.storeSettings.store_locale,
+			props.data.storeSettings.store_timezone,
+			props.data.storeSettings.store_currency
+		);
+	}
+
+	$effect(() => {
+		if (props.data.storeSettings) {
+			globalSettings.update(
+				props.data.storeSettings.store_locale,
+				props.data.storeSettings.store_timezone,
+				props.data.storeSettings.store_currency
+			);
+		}
+	});
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<ModeWatcher />
 <Toaster richColors position="top-right" />
 <TooltipProvider>
-	{@render children()}
+	{@render props.children()}
 </TooltipProvider>
 <ConfirmDialog />

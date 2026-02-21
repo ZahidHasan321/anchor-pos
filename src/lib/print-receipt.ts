@@ -1,3 +1,5 @@
+import { getCurrencySymbol } from './format';
+
 export type ReceiptData = {
 	storeSettings: {
 		store_name?: string;
@@ -10,6 +12,14 @@ export type ReceiptData = {
 		return_policy?: string;
 		exchange_policy?: string;
 		terms_conditions?: string;
+		tax_enabled?: string;
+		tax_rate?: string;
+		sd_enabled?: string;
+		sd_rate?: string;
+		store_facebook?: string;
+		store_instagram?: string;
+		store_currency?: string;
+		store_bin?: string;
 	};
 	orderId: string;
 	orderUuid?: string;
@@ -25,6 +35,7 @@ export type ReceiptData = {
 
 export function printReceipt(data: ReceiptData) {
 	const s = data.storeSettings;
+	const symbol = getCurrencySymbol();
 
 	const itemsHtml = data.items
 		.map(
@@ -89,6 +100,7 @@ export function printReceipt(data: ReceiptData) {
 			${s.store_phone ? `<div style="font-size: 11px;">Phone: ${s.store_phone}</div>` : ''}
 			${s.store_email ? `<div style="font-size: 11px;">${s.store_email}</div>` : ''}
 			${s.store_tax_id ? `<div style="font-size: 11px; margin-top: 2px;">VAT/TAX ID: ${s.store_tax_id}</div>` : ''}
+			${s.store_bin ? `<div style="font-size: 11px; margin-top: 2px;">BIN: ${s.store_bin}</div>` : ''}
 		</div>
 
 		<div class="line"></div>
@@ -119,15 +131,15 @@ export function printReceipt(data: ReceiptData) {
 		<table>
 			<tr class="total-line">
 				<td>TOTAL</td>
-				<td style="text-align:right">৳${data.total.toFixed(2)}</td>
+				<td style="text-align:right">${symbol}${data.total.toFixed(2)}</td>
 			</tr>
 			<tr style="font-size: 11px;">
 				<td>Cash Received</td>
-				<td style="text-align:right">৳${data.cashReceived.toFixed(2)}</td>
+				<td style="text-align:right">${symbol}${data.cashReceived.toFixed(2)}</td>
 			</tr>
 			<tr style="font-size: 11px;">
 				<td>Change Given</td>
-				<td style="text-align:right">৳${data.changeGiven.toFixed(2)}</td>
+				<td style="text-align:right">${symbol}${data.changeGiven.toFixed(2)}</td>
 			</tr>
 		</table>
 
@@ -137,36 +149,51 @@ export function printReceipt(data: ReceiptData) {
 		${s.exchange_policy ? `<div class="policy-box"><strong>Exchange Policy:</strong><br/>${s.exchange_policy}</div>` : ''}
 		${s.terms_conditions ? `<div class="policy-box"><strong>Terms & Conditions:</strong><br/>${s.terms_conditions}</div>` : ''}
 
+		<div class="center" style="margin-top: 10px; font-size: 10px;">
+			${s.store_facebook ? `<div>FB: ${s.store_facebook}</div>` : ''}
+			${s.store_instagram ? `<div>IG: ${s.store_instagram}</div>` : ''}
+		</div>
+
 		<div class="center footer">
 			<div style="font-weight: bold; margin-bottom: 4px;">
 				${s.receipt_footer ?? 'Thank you for shopping with us!'}
 			</div>
 			${data.footerNote ? `<div style="font-size: 9px; opacity: 0.8;">${data.footerNote}</div>` : ''}
-			<div style="margin: 8px 0;">
-				<svg id="barcode"></svg>
+			<div style="margin: 10px 0; display: flex; justify-content: center;">
+				<div id="qrcode"></div>
 			</div>
 			<div style="margin-top: 4px; font-size: 9px;">*** End of Receipt ***</div>
 		</div>
 		<div class="feed-cut"></div>
 	</div>
-	<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 	<script>
 		window.onload = function() {
 			try {
-				JsBarcode("#barcode", "${data.orderUuid || data.orderId}", {
-					format: "CODE128",
-					width: 1.5,
-					height: 40,
-					displayValue: false,
-					margin: 0
+				new QRCode(document.getElementById("qrcode"), {
+					text: "${data.orderUuid || data.orderId}",
+					width: 80,
+					height: 80,
+					colorDark : "#000000",
+					colorLight : "#ffffff",
+					correctLevel : QRCode.CorrectLevel.M
 				});
 			} catch (e) {
-				console.error("Barcode generation failed", e);
+				console.error("QR Code generation failed", e);
 			}
 		};
 	</script>
 </body></html>`;
 
+	// --- Native Electron Printing ---
+	// @ts-ignore - window.electron is injected by preload script
+	if (typeof window !== 'undefined' && window.electron?.printNative) {
+		// @ts-ignore
+		window.electron.printNative(html);
+		return;
+	}
+
+	// --- Standard Web Printing (Fallback) ---
 	// Use a hidden iframe — avoids popup blockers and works across Chrome, Firefox, Safari
 	const iframe = document.createElement('iframe');
 	iframe.style.position = 'fixed';

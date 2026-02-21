@@ -7,6 +7,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import * as Card from '$lib/components/ui/card';
 	import { ArrowLeft, Loader2 } from '@lucide/svelte';
+	import { getCurrencySymbol } from '$lib/format';
 	import { toast } from 'svelte-sonner';
 	import { confirmState } from '$lib/confirm.svelte';
 
@@ -86,12 +87,13 @@
 
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div class="space-y-2">
-						<Label for="templatePrice">Base Price (৳)</Label>
+						<Label for="templatePrice">Base Price ({getCurrencySymbol()})</Label>
 						<Input
 							id="templatePrice"
 							name="templatePrice"
 							type="number"
 							step="0.01"
+							placeholder="0.00"
 							value={(form?.data?.templatePrice as string) ?? initialData.templatePrice}
 						/>
 						{#if form?.errors?.templatePrice}
@@ -105,7 +107,8 @@
 							name="defaultDiscount"
 							type="number"
 							step="0.01"
-							value={(form?.data?.defaultDiscount as string) ?? initialData.defaultDiscount}
+							placeholder="0"
+							value={(form?.data?.defaultDiscount as string) ?? (initialData.defaultDiscount || '')}
 						/>
 					</div>
 				</div>

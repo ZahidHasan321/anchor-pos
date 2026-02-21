@@ -2,7 +2,6 @@
 	import { enhance } from '$app/forms';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
-	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Store, Users, ClipboardList, ShieldAlert, Save, Loader2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { page } from '$app/state';
@@ -27,21 +26,23 @@
 		reports: 'Reports'
 	};
 
-	// Track checked state per role
-	let checkedState: Record<string, Record<string, boolean>> = $state({});
+	// Use a more stable state management
+	let checkedState = $state<Record<string, Record<string, boolean>>>(
+		(() => {
+			const state: Record<string, Record<string, boolean>> = {};
+			for (const role of data.configurableRoles) {
+				state[role] = {};
+				for (const resource of data.allResources) {
+					state[role][resource] = data.permissionsByRole[role]?.includes(resource) ?? false;
+				}
+			}
+			return state;
+		})()
+	);
 	let savingRole = $state<string | null>(null);
 
-	// Initialize checked state from server data
-	$effect(() => {
-		const state: Record<string, Record<string, boolean>> = {};
-		for (const role of data.configurableRoles) {
-			state[role] = {};
-			for (const resource of data.allResources) {
-				state[role][resource] = data.permissionsByRole[role]?.includes(resource) ?? false;
-			}
-		}
-		checkedState = state;
-	});
+	// No need for $effect to sync back from data.permissionsByRole after save
+	// because we keep the local state. Only sync on mount/initial load.
 
 	$effect(() => {
 		if (form?.success) {
@@ -51,11 +52,10 @@
 		}
 	});
 
-	function getCheckedResources(role: string): string[] {
-		if (!checkedState[role]) return [];
-		return Object.entries(checkedState[role])
-			.filter(([, checked]) => checked)
-			.map(([resource]) => resource);
+	function isRoleEmpty(role: string) {
+		const roleState = checkedState[role];
+		if (!roleState) return true;
+		return !Object.values(roleState).some(v => v);
 	}
 </script>
 
@@ -67,7 +67,6 @@
 		</p>
 	</div>
 
-	<!-- Settings Navigation Tabs -->
 	<div class="flex flex-wrap gap-2 border-b pb-4">
 		{#each navItems as item}
 			<Button
@@ -101,9 +100,17 @@
 						method="POST"
 						use:enhance={() => {
 							savingRole = role;
-							return async ({ update }) => {
+							// Optimization: We don't call update() which would re-run all load functions.
+							// Instead we handle the result manually to keep the UI snappy.
+							return async ({ result }) => {
 								savingRole = null;
-								await update();
+								if (result.type === 'success') {
+									toast.success(`Permissions updated for ${roleLabels[role] ?? role}`);
+								} else if (result.type === 'failure' && result.data?.error) {
+									toast.error(result.data.error as string);
+								} else {
+									toast.error('Failed to update permissions');
+								}
 							};
 						}}
 					>
@@ -115,13 +122,8 @@
 										type="checkbox"
 										name="resources"
 										value={resource}
-										checked={checkedState[role]?.[resource] ?? false}
-										onchange={(e) => {
-											if (checkedState[role]) {
-												checkedState[role][resource] = e.currentTarget.checked;
-											}
-										}}
-										class="h-4 w-4 rounded border-input text-primary accent-primary"
+										bind:checked={checkedState[role][resource]}
+										class="h-4 w-4 rounded border-input text-primary accent-primary cursor-pointer"
 									/>
 									<span class="text-sm font-medium">{resourceLabels[resource] ?? resource}</span>
 								</label>
@@ -131,7 +133,7 @@
 							<Button
 								type="submit"
 								class="cursor-pointer"
-								disabled={savingRole === role || getCheckedResources(role).length === 0}
+								disabled={savingRole === role || isRoleEmpty(role)}
 							>
 								{#if savingRole === role}
 									<Loader2 class="mr-2 h-4 w-4 animate-spin" />

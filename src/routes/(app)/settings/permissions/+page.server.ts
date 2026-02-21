@@ -21,7 +21,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		redirect(302, '/dashboard');
 	}
 
-	const allPerms = db.select().from(rolePermissions).all();
+	const allPerms = await db.select().from(rolePermissions);
 
 	const permissionsByRole: Record<string, string[]> = {};
 	for (const role of CONFIGURABLE_ROLES) {
@@ -56,28 +56,33 @@ export const actions: Actions = {
 		}
 
 		try {
-			db.transaction((tx) => {
-				// Delete existing permissions for this role
-				tx.delete(rolePermissions).where(eq(rolePermissions.role, role)).run();
+			await db.transaction(async (tx) => {
+				// 1. Clear existing
+				await tx.delete(rolePermissions).where(eq(rolePermissions.role, role));
 
-				// Insert new permissions
-				for (const resource of validResources) {
-					tx.insert(rolePermissions).values({ role, resource }).run();
-				}
+				// 2. Bulk Insert (Industry Standard Performance)
+				// Drizzle supports passing an array to .values() for bulk insert
+				await tx.insert(rolePermissions).values(
+					validResources.map((resource) => ({
+						role,
+						resource
+					}))
+				);
 			});
 
-			logAuditEvent({
+			await logAuditEvent({
 				userId: locals.user.id,
 				userName: locals.user.name,
 				action: 'UPDATE_PERMISSIONS',
-				entity: 'role_permission',
+				entity: 'role_permissions',
 				entityId: role,
 				details: `Updated permissions for ${role}: ${validResources.join(', ')}`
 			});
-		} catch (e) {
-			return fail(500, { error: 'Failed to update permissions' });
-		}
 
-		return { success: true, role };
+			return { success: true, role };
+		} catch (e) {
+			console.error('Failed to update permissions:', e);
+			return fail(500, { error: 'Database error' });
+		}
 	}
 };

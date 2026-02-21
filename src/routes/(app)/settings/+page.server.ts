@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		redirect(302, '/dashboard');
 	}
 
-	const rows = db.select().from(storeSettings).all();
+	const rows = await db.select().from(storeSettings);
 	const settings = rows.reduce(
 		(acc, row) => {
 			acc[row.key] = row.value;
@@ -36,23 +36,31 @@ export const actions: Actions = {
 			'receipt_footer',
 			'return_policy',
 			'exchange_policy',
-			'terms_conditions'
+			'terms_conditions',
+			'tax_enabled',
+			'tax_rate',
+			'sd_enabled',
+			'sd_rate',
+			'store_facebook',
+			'store_instagram',
+			'store_bin',
+			'low_stock_threshold'
 		];
 
 		try {
-			db.transaction((tx) => {
+			await db.transaction(async (tx) => {
 				for (const key of keys) {
 					const value = (data.get(key) as string)?.trim() || '';
-					tx.insert(storeSettings)
+					await tx
+						.insert(storeSettings)
 						.values({ key, value })
-						.onConflictDoUpdate({ target: storeSettings.key, set: { value } })
-						.run();
+						.onConflictDoUpdate({ target: storeSettings.key, set: { value } });
 				}
 			});
 
-			logAuditEvent({
-				userId: locals.user.id,
-				userName: locals.user.name,
+			await logAuditEvent({
+				userId: locals.user!.id,
+				userName: locals.user!.name,
 				action: 'UPDATE_SETTINGS',
 				entity: 'store_settings',
 				details: 'Updated store contact info and receipt settings'

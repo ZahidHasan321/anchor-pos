@@ -1,11 +1,17 @@
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '../src/lib/server/db/schema';
 import argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
+import { eq } from 'drizzle-orm';
 
-const dbPath = process.env.DATABASE_URL || 'local.db';
-const client = new Database(dbPath);
+const dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) {
+	console.error('DATABASE_URL is not set');
+	process.exit(1);
+}
+
+const client = postgres(dbUrl);
 const db = drizzle(client, { schema });
 
 function generateId() {
@@ -88,27 +94,27 @@ async function seed() {
 	for (let i = 0; i < userRoles.length; i++) {
 		const role = userRoles[i];
 		const username = i === 0 ? 'admin' : `${role}${i}`;
-		// Use a raw query for simplicity to check existence since drizzle-orm with better-sqlite3 get() might behave differently in script context
-		const existing = client.prepare('SELECT id FROM user WHERE username = ?').get(username) as
-			| { id: string }
-			| undefined;
+
+		const existing = await db
+			.select({ id: schema.users.id })
+			.from(schema.users)
+			.where(eq(schema.users.username, username))
+			.limit(1);
 
 		let userId;
-		if (existing) {
-			userId = existing.id;
+		if (existing.length > 0) {
+			userId = existing[0].id;
 			console.log(`User ${username} already exists.`);
 		} else {
 			userId = generateId();
-			db.insert(schema.users)
-				.values({
-					id: userId,
-					username: username,
-					passwordHash: await hashPassword(i === 0 ? 'admin123' : 'password123'),
-					role: role as any,
-					name: `${role.charAt(0).toUpperCase() + role.slice(1)} User ${i}`,
-					isActive: true
-				})
-				.run();
+			await db.insert(schema.users).values({
+				id: userId,
+				username: username,
+				passwordHash: await hashPassword(i === 0 ? 'admin123' : 'password123'),
+				role: role as 'admin' | 'manager' | 'sales',
+				name: `${role.charAt(0).toUpperCase() + role.slice(1)} User ${i}`,
+				isActive: true
+			});
 			console.log(`Seeded user: ${username} / ${i === 0 ? 'admin123' : 'password123'}`);
 		}
 		userIds.push(userId);
@@ -121,15 +127,13 @@ async function seed() {
 	for (let i = 0; i < 100; i++) {
 		const id = generateId();
 		customerIds.push(id);
-		db.insert(schema.customers)
-			.values({
-				id,
-				name: `${getRandomItem(FIRST_NAMES)} ${getRandomItem(LAST_NAMES)}`,
-				phone: `01${getRandomInt(100000000, 999999999)}`,
-				email: `customer${i}@example.com`,
-				notes: i % 5 === 0 ? 'Regular customer' : null
-			})
-			.run();
+		await db.insert(schema.customers).values({
+			id,
+			name: `${getRandomItem(FIRST_NAMES)} ${getRandomItem(LAST_NAMES)}`,
+			phone: `01${getRandomInt(100000000, 999999999)}`,
+			email: `customer${i}@example.com`,
+			notes: i % 5 === 0 ? 'Regular customer' : null
+		});
 	}
 
 	// 3. Seed Products and Variants (200 products)
@@ -147,15 +151,13 @@ async function seed() {
 		const productName = `${category} ${getRandomInt(100, 999)}`;
 		const basePrice = getRandomPrice(500, 5000);
 
-		db.insert(schema.products)
-			.values({
-				id: productId,
-				name: productName,
-				category,
-				templatePrice: basePrice,
-				description: `Quality ${productName} in various sizes.`
-			})
-			.run();
+		await db.insert(schema.products).values({
+			id: productId,
+			name: productName,
+			category,
+			templatePrice: basePrice,
+			description: `Quality ${productName} in various sizes.`
+		});
 
 		// 3-6 variants per product
 		const numVariants = getRandomInt(3, 6);
@@ -166,17 +168,15 @@ async function seed() {
 			const price = basePrice + getRandomInt(-200, 500);
 			const stock = getRandomInt(10, 100);
 
-			db.insert(schema.productVariants)
-				.values({
-					id: variantId,
-					productId,
-					size,
-					color,
-					barcode: `BARCODE-${productId.slice(0, 4)}-${variantId.slice(0, 4)}`,
-					stockQuantity: stock,
-					price: price
-				})
-				.run();
+			await db.insert(schema.productVariants).values({
+				id: variantId,
+				productId,
+				size,
+				color,
+				barcode: `BARCODE-${productId.slice(0, 4)}-${variantId.slice(0, 4)}`,
+				stockQuantity: stock,
+				price: price
+			});
 
 			variantIds.push({
 				id: variantId,
@@ -187,16 +187,14 @@ async function seed() {
 			});
 
 			// Initial stock log
-			db.insert(schema.stockLogs)
-				.values({
-					id: generateId(),
-					variantId,
-					changeAmount: stock,
-					reason: 'restock',
-					userId: adminId,
-					createdAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) // 6 months ago
-				})
-				.run();
+			await db.insert(schema.stockLogs).values({
+				id: generateId(),
+				variantId,
+				changeAmount: stock,
+				reason: 'restock',
+				userId: adminId,
+				createdAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) // 6 months ago
+			});
 		}
 	}
 
@@ -233,49 +231,41 @@ async function seed() {
 			});
 
 			// Update stock and log
-			client
-				.prepare('UPDATE product_variant SET stock_quantity = stock_quantity - ? WHERE id = ?')
-				.run(quantity, variant.id);
+			await client`UPDATE product_variants SET stock_quantity = stock_quantity - ${quantity} WHERE id = ${variant.id}`;
 
-			db.insert(schema.stockLogs)
-				.values({
-					id: generateId(),
-					variantId: variant.id,
-					changeAmount: -quantity,
-					reason: 'sale',
-					userId: userId,
-					createdAt
-				})
-				.run();
+			await db.insert(schema.stockLogs).values({
+				id: generateId(),
+				variantId: variant.id,
+				changeAmount: -quantity,
+				reason: 'sale',
+				userId: userId,
+				createdAt
+			});
 		}
 
-		db.insert(schema.orders)
-			.values({
-				id: orderId,
-				customerId,
-				userId: userId,
-				totalAmount,
-				status: 'completed',
-				paymentMethod: getRandomItem(['cash', 'card'] as const),
-				createdAt
-			})
-			.run();
+		await db.insert(schema.orders).values({
+			id: orderId,
+			customerId,
+			userId: userId,
+			totalAmount,
+			status: 'completed',
+			paymentMethod: getRandomItem(['cash', 'card'] as const),
+			createdAt
+		});
 
 		for (const item of itemsToInsert) {
-			db.insert(schema.orderItems).values(item).run();
+			await db.insert(schema.orderItems).values(item);
 		}
 
 		// Cashbook entry for sale
-		db.insert(schema.cashbook)
-			.values({
-				id: generateId(),
-				amount: totalAmount,
-				type: 'in',
-				description: `Sale - Order ${orderId.slice(0, 8)}`,
-				userId: userId,
-				createdAt
-			})
-			.run();
+		await db.insert(schema.cashbook).values({
+			id: generateId(),
+			amount: totalAmount,
+			type: 'in',
+			description: `Sale - Order ${orderId.slice(0, 8)}`,
+			userId: userId,
+			createdAt
+		});
 
 		if (i % 200 === 0) console.log(`Seeded ${i} orders...`);
 	}
@@ -287,44 +277,38 @@ async function seed() {
 		const date = new Date(sixMonthsAgo + m * 30 * 24 * 60 * 60 * 1000);
 
 		// Rent
-		db.insert(schema.cashbook)
-			.values({
-				id: generateId(),
-				amount: 50000,
-				type: 'out',
-				description: 'Monthly Rent',
-				userId: adminId,
-				createdAt: date
-			})
-			.run();
+		await db.insert(schema.cashbook).values({
+			id: generateId(),
+			amount: 50000,
+			type: 'out',
+			description: 'Monthly Rent',
+			userId: adminId,
+			createdAt: date
+		});
 
 		// Electricity
-		db.insert(schema.cashbook)
-			.values({
-				id: generateId(),
-				amount: getRandomInt(2000, 5000),
-				type: 'out',
-				description: 'Electricity Bill',
-				userId: adminId,
-				createdAt: date
-			})
-			.run();
+		await db.insert(schema.cashbook).values({
+			id: generateId(),
+			amount: getRandomInt(2000, 5000),
+			type: 'out',
+			description: 'Electricity Bill',
+			userId: adminId,
+			createdAt: date
+		});
 
 		// Salaries
-		db.insert(schema.cashbook)
-			.values({
-				id: generateId(),
-				amount: 100000,
-				type: 'out',
-				description: 'Staff Salaries',
-				userId: adminId,
-				createdAt: date
-			})
-			.run();
+		await db.insert(schema.cashbook).values({
+			id: generateId(),
+			amount: 100000,
+			type: 'out',
+			description: 'Staff Salaries',
+			userId: adminId,
+			createdAt: date
+		});
 	}
 
 	console.log('Heavy seed completed successfully!');
-	client.close();
+	await client.end();
 }
 
 seed().catch((err) => {

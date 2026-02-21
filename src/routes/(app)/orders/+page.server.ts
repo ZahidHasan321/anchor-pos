@@ -19,23 +19,10 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const statusFilter = url.searchParams.get('status') ?? '';
 	const search = url.searchParams.get('search') ?? '';
 
-	// Build conditions
 	const conditions: any[] = [];
-
-	if (dateFrom) {
-		const from = new Date(dateFrom + 'T00:00:00');
-		conditions.push(gte(orders.createdAt, from));
-	}
-
-	if (dateTo) {
-		const to = new Date(dateTo + 'T23:59:59.999');
-		conditions.push(lte(orders.createdAt, to));
-	}
-
-	if (statusFilter && ['completed', 'refunded', 'void'].includes(statusFilter)) {
-		conditions.push(eq(orders.status, statusFilter as 'completed' | 'refunded' | 'void'));
-	}
-
+	if (dateFrom) conditions.push(gte(orders.createdAt, new Date(dateFrom + 'T00:00:00')));
+	if (dateTo) conditions.push(lte(orders.createdAt, new Date(dateTo + 'T23:59:59.999')));
+	if (statusFilter) conditions.push(eq(orders.status, statusFilter as any));
 	if (search) {
 		conditions.push(
 			or(
@@ -47,55 +34,47 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			)
 		);
 	}
-
 	const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-	// Get total count
-	const countResult = db
-		.select({ count: sql<number>`count(*)` })
-		.from(orders)
-		.leftJoin(customers, eq(orders.customerId, customers.id))
-		.where(whereClause)
-		.get();
-	const totalOrders = countResult?.count ?? 0;
-	const totalPages = Math.ceil(totalOrders / perPage);
-
-	// Get paginated orders
-	const allOrders = db
-		.select({
-			id: orders.id,
-			orderNumber: orders.orderNumber,
-			totalAmount: orders.totalAmount,
-			status: orders.status,
-			paymentMethod: orders.paymentMethod,
-			createdAt: orders.createdAt,
-			customerId: orders.customerId,
-			customerName: customers.name,
-			customerPhone: customers.phone,
-			userName: users.name
-		})
-		.from(orders)
-		.leftJoin(customers, eq(orders.customerId, customers.id))
-		.leftJoin(users, eq(orders.userId, users.id))
-		.where(whereClause)
-		.orderBy(desc(orders.createdAt))
-		.limit(perPage)
-		.offset(offset)
-		.all();
-
 	return {
-		orders: allOrders,
-		pagination: {
-			currentPage,
-			totalPages,
-			totalOrders,
-			perPage
-		},
-		filters: {
-			from: dateFrom,
-			to: dateTo,
-			status: statusFilter,
-			search
-		}
+		filters: { from: dateFrom, to: dateTo, status: statusFilter, search },
+		streamed: (async () => {
+			const [countResult, allOrders] = await Promise.all([
+				db
+					.select({ count: sql<number>`count(*)` })
+					.from(orders)
+					.leftJoin(customers, eq(orders.customerId, customers.id))
+					.where(whereClause),
+				db
+					.select({
+						id: orders.id,
+						orderNumber: orders.orderNumber,
+						totalAmount: orders.totalAmount,
+						status: orders.status,
+						paymentMethod: orders.paymentMethod,
+						createdAt: orders.createdAt,
+						customerName: customers.name,
+						userName: users.name
+					})
+					.from(orders)
+					.leftJoin(customers, eq(orders.customerId, customers.id))
+					.leftJoin(users, eq(orders.userId, users.id))
+					.where(whereClause)
+					.orderBy(desc(orders.createdAt))
+					.limit(perPage)
+					.offset(offset)
+			]);
+
+			const totalOrders = countResult[0]?.count ?? 0;
+			return {
+				orders: allOrders,
+				pagination: {
+					currentPage,
+					totalPages: Math.ceil(totalOrders / perPage),
+					totalOrders,
+					perPage
+				}
+			};
+		})()
 	};
 };

@@ -22,17 +22,24 @@
 	import { Avatar, AvatarFallback } from '$lib/components/ui/avatar';
 	import { Separator } from '$lib/components/ui/separator';
 	import * as Tooltip from '$lib/components/ui/tooltip';
+	import { setMode, resetMode } from 'mode-watcher';
 	import { browser } from '$app/environment';
 	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
-	import { invalidateAll } from '$app/navigation';
 	import { navigating } from '$app/stores';
 	import { confirmState } from '$lib/confirm.svelte';
 	import { roleLabels } from '$lib/utils';
+	import { fade } from 'svelte/transition';
+	import { untrack } from 'svelte';
 
 	let { data, children } = $props();
 	let isMobileMenuOpen = $state(false);
-	let collapsed = $state(true);
+
+	// Initialize from server-side data (using a closure to avoid capturing initial props warning)
+	let collapsed = $state(untrack(() => data.sidebarCollapsed));
+	$effect(() => {
+		collapsed = data.sidebarCollapsed;
+	});
 
 	let logoutForm: HTMLFormElement;
 	let mobileLogoutForm: HTMLFormElement;
@@ -40,19 +47,23 @@
 	const user = $derived(data.user);
 	const permissions = $derived(data.permissions ?? []);
 
-	// Sync theme class on client-side hydration and user data changes
-	function applyTheme(theme: string) {
-		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-		const isDark = theme === 'dark' || (theme === 'system' && prefersDark);
-		document.documentElement.classList.toggle('dark', isDark);
-		document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
-		// Remove the server-injected FOUC-prevention style — Tailwind CSS handles it now
-		document.getElementById('theme-init')?.remove();
+	// Persistence: Update cookie when state changes
+	function toggleSidebar() {
+		collapsed = !collapsed;
+		// Sync to cookie so it persists on reload
+		document.cookie = `sidebar_collapsed=${collapsed}; path=/; max-age=31536000; SameSite=Lax`;
 	}
 
+	// Sync user's DB theme preference
+	let hasSyncedTheme = false;
 	$effect(() => {
-		if (!browser) return;
-		applyTheme(user?.theme || 'system');
+		if (!browser || !user?.theme || hasSyncedTheme) return;
+		hasSyncedTheme = true;
+		const stored = localStorage.getItem('mode-watcher-mode');
+		if (stored !== user.theme) {
+			if (user.theme === 'system') resetMode();
+			else setMode(user.theme as 'light' | 'dark');
+		}
 	});
 
 	const allNavItems = [
@@ -81,18 +92,14 @@
 		return currentPath.startsWith(href);
 	}
 
-	async function setTheme(theme: 'light' | 'dark' | 'system') {
-		await fetch('/api/theme', {
+	function setTheme(theme: 'light' | 'dark' | 'system') {
+		if (theme === 'system') resetMode();
+		else setMode(theme);
+		fetch('/api/theme', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ theme })
 		});
-
-		// Refresh all data to sync user profile theme
-		await invalidateAll();
-
-		if (!browser) return;
-		applyTheme(theme);
 	}
 
 	async function handleLogout(e: Event, form: HTMLFormElement) {
@@ -103,89 +110,69 @@
 			confirmText: 'Logout',
 			variant: 'destructive'
 		});
-		if (confirmed) {
-			form.requestSubmit();
-		}
+		if (confirmed) form.requestSubmit();
 	}
 </script>
 
-<div class="flex min-h-screen bg-background text-foreground">
+<!-- CSS Variable sync for industry standard performance -->
+<div
+	class="flex h-screen w-full bg-background text-foreground"
+	style="--sidebar-width: {collapsed ? '64px' : '256px'}"
+>
 	<!-- Desktop Sidebar -->
 	<aside
-		class="fixed top-0 left-0 z-30 hidden h-screen border-r bg-card transition-all duration-300 md:flex md:flex-col print:hidden {collapsed
-			? 'w-16'
-			: 'w-64'}"
+		class="relative z-30 hidden h-full shrink-0 border-r bg-card transition-[width] duration-300 ease-in-out will-change-[width] md:flex md:flex-col print:hidden"
+		style="width: var(--sidebar-width)"
 	>
-		<!-- Sidebar Header: User info + collapse toggle -->
+		<!-- Brand Header -->
 		<div
-			class="flex h-16 items-center border-b px-4 {collapsed
+			class="flex h-16 items-center border-b px-4 transition-all duration-300 {collapsed
 				? 'justify-center'
-				: 'justify-between'}"
+				: 'justify-start'} overflow-hidden"
 		>
-			{#if !collapsed}
-				<div class="flex min-w-0 items-center gap-3">
-					<Avatar class="h-8 w-8 shrink-0">
-						{#if user?.imageUrl}
-							<img
-								src={user.imageUrl}
-								alt={user.name}
-								class="h-full w-full rounded-full object-cover"
-							/>
-						{:else}
-							<AvatarFallback class="bg-primary text-xs font-bold text-primary-foreground">
-								{user?.name?.charAt(0) ?? 'U'}
-							</AvatarFallback>
-						{/if}
-					</Avatar>
-					<div class="min-w-0">
-						<p class="truncate text-sm font-semibold">{user?.name}</p>
-						<p class="text-xs text-muted-foreground">
-							{roleLabels[user?.role ?? ''] ?? user?.role}
-						</p>
-					</div>
+			<div class="flex shrink-0 items-center gap-3">
+				<div
+					class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary font-black text-primary-foreground italic shadow-lg shadow-primary/20"
+				>
+					A
 				</div>
-			{/if}
-			<button
-				onclick={() => (collapsed = !collapsed)}
-				class="cursor-pointer rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-			>
-				{#if collapsed}
-					<ChevronRight class="h-4 w-4" />
-				{:else}
-					<ChevronLeft class="h-4 w-4" />
+				{#if !collapsed}
+					<span
+						in:fade={{ delay: 150, duration: 150 }}
+						class="text-xl font-black tracking-tighter whitespace-nowrap text-primary uppercase italic"
+						>Anchor</span
+					>
 				{/if}
-			</button>
+			</div>
 		</div>
 
 		<!-- Nav Links -->
-		<nav class="flex-1 overflow-y-auto py-4 {collapsed ? 'px-2' : 'px-3'}">
+		<nav class="scrollbar-none flex-1 overflow-y-auto py-4 {collapsed ? 'px-2' : 'px-3'}">
 			<div class="space-y-1">
 				{#each navItems as item}
 					{@const active = isActive(item.href)}
 					{#if collapsed}
-						<Tooltip.Root>
-							<Tooltip.Trigger>
+						<Tooltip.Root delayDuration={0}>
+							<Tooltip.Trigger class="w-full">
 								{#snippet child({ props })}
 									<a
 										{...props}
 										href={item.href}
-										class="flex cursor-pointer items-center justify-center rounded-md p-2.5 transition-colors
-                      {active
-											? 'bg-primary text-primary-foreground'
+										class="flex h-10 w-full items-center justify-center rounded-md transition-all {active
+											? 'bg-primary text-primary-foreground shadow-md'
 											: 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}"
 									>
 										<item.icon class="h-5 w-5" />
 									</a>
 								{/snippet}
 							</Tooltip.Trigger>
-							<Tooltip.Content side="right">{item.label}</Tooltip.Content>
+							<Tooltip.Content side="right" class="font-medium">{item.label}</Tooltip.Content>
 						</Tooltip.Root>
 					{:else}
 						<a
 							href={item.href}
-							class="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors
-                {active
-								? 'bg-primary text-primary-foreground'
+							class="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-all {active
+								? 'bg-primary text-primary-foreground shadow-md'
 								: 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}"
 						>
 							<item.icon class="h-4 w-4 shrink-0" />
@@ -196,138 +183,123 @@
 			</div>
 		</nav>
 
-		<!-- Bottom: Theme toggle + Logout -->
-		<div class="space-y-1 border-t p-3 {collapsed ? 'px-2' : ''}">
-			<!-- Theme Toggle -->
-			{#if collapsed}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<button
-								{...props}
-								class="flex w-full cursor-pointer items-center justify-center rounded-md p-2.5 text-muted-foreground transition-colors hover:bg-accent"
-							>
-								<Sun
-									class="h-5 w-5 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90"
-								/>
-								<Moon
-									class="absolute h-5 w-5 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0"
-								/>
-							</button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content side="right" align="end">
-						<DropdownMenu.Item onclick={() => setTheme('light')} class="cursor-pointer">
-							<Sun class="mr-2 h-4 w-4" /> Light
-						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => setTheme('dark')} class="cursor-pointer">
-							<Moon class="mr-2 h-4 w-4" /> Dark
-						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => setTheme('system')} class="cursor-pointer">
-							<Monitor class="mr-2 h-4 w-4" /> System
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			{:else}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<button
-								{...props}
-								class="flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent"
-							>
-								<Sun
-									class="h-4 w-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90"
-								/>
-								<Moon
-									class="absolute ml-0 h-4 w-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0"
-								/>
-								<span class="ml-4">Theme</span>
-							</button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content side="right" align="end">
-						<DropdownMenu.Item onclick={() => setTheme('light')} class="cursor-pointer">
-							<Sun class="mr-2 h-4 w-4" /> Light
-						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => setTheme('dark')} class="cursor-pointer">
-							<Moon class="mr-2 h-4 w-4" /> Dark
-						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => setTheme('system')} class="cursor-pointer">
-							<Monitor class="mr-2 h-4 w-4" /> System
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			{/if}
-
-			<!-- Logout -->
-			<form
-				action="/logout"
-				method="POST"
-				use:enhance
-				bind:this={logoutForm}
-				onsubmit={(e) => handleLogout(e, logoutForm)}
-			>
-				{#if collapsed}
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<button
-									{...props}
-									type="submit"
-									class="flex w-full cursor-pointer items-center justify-center rounded-md p-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
-								>
-									<LogOut class="h-5 w-5" />
-								</button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content side="right">Logout</Tooltip.Content>
-					</Tooltip.Root>
-				{:else}
-					<Button
-						variant="ghost"
-						class="w-full cursor-pointer justify-start gap-3 text-muted-foreground hover:text-destructive"
-						type="submit"
+		<!-- Bottom Section -->
+		<div class="mt-auto space-y-2 border-t p-3">
+			<!-- User Dropdown -->
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger class="w-full">
+					{#snippet child({ props })}
+						<button
+							{...props}
+							class="group flex w-full cursor-pointer items-center gap-3 overflow-hidden rounded-lg p-1.5 transition-colors hover:bg-accent"
+						>
+							<Avatar class="h-8 w-8 shrink-0 border border-border shadow-sm">
+								{#if user?.imageUrl}<img
+										src={user.imageUrl}
+										alt={user.name}
+										class="h-full w-full rounded-full object-cover"
+									/>
+								{:else}<AvatarFallback class="bg-muted text-[10px] font-bold"
+										>{user?.name?.charAt(0) ?? 'U'}</AvatarFallback
+									>{/if}
+							</Avatar>
+							{#if !collapsed}
+								<div in:fade={{ delay: 150 }} class="flex min-w-0 flex-1 flex-col items-start">
+									<span class="truncate text-sm leading-tight font-semibold">{user?.name}</span>
+									<span class="truncate text-[10px] tracking-wider text-muted-foreground uppercase"
+										>{roleLabels[user?.role ?? ''] ?? user?.role}</span
+									>
+								</div>
+							{/if}
+						</button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content
+					side={collapsed ? 'right' : 'top'}
+					align={collapsed ? 'end' : 'center'}
+					class="w-56"
+				>
+					<DropdownMenu.Label class="font-normal">
+						<div class="flex flex-col space-y-1">
+							<p class="text-sm leading-none font-medium">{user?.name}</p>
+							<p class="text-xs leading-none text-muted-foreground">{user?.username}</p>
+						</div>
+					</DropdownMenu.Label>
+					<DropdownMenu.Separator />
+					<DropdownMenu.Group>
+						<DropdownMenu.Label
+							class="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase"
+							>Theme</DropdownMenu.Label
+						>
+						<DropdownMenu.Item onclick={() => setTheme('light')} class="cursor-pointer"
+							><Sun class="mr-2 h-4 w-4" /> Light</DropdownMenu.Item
+						>
+						<DropdownMenu.Item onclick={() => setTheme('dark')} class="cursor-pointer"
+							><Moon class="mr-2 h-4 w-4" /> Dark</DropdownMenu.Item
+						>
+						<DropdownMenu.Item onclick={() => setTheme('system')} class="cursor-pointer"
+							><Monitor class="mr-2 h-4 w-4" /> System</DropdownMenu.Item
+						>
+					</DropdownMenu.Group>
+					<DropdownMenu.Separator />
+					<form
+						action="/logout"
+						method="POST"
+						use:enhance
+						bind:this={logoutForm}
+						onsubmit={(e) => handleLogout(e, logoutForm)}
 					>
-						<LogOut class="h-4 w-4" />
-						Logout
-					</Button>
-				{/if}
-			</form>
+						<DropdownMenu.Item
+							class="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
+							onSelect={(e) => {
+								e.preventDefault();
+								handleLogout(e, logoutForm);
+							}}
+						>
+							<LogOut class="mr-2 h-4 w-4" /> Logout
+						</DropdownMenu.Item>
+					</form>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+
+			<!-- Collapse Toggle -->
+			<button
+				onclick={toggleSidebar}
+				class="flex w-full cursor-pointer items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				title={collapsed ? 'Expand' : 'Collapse'}
+			>
+				{#if collapsed}<ChevronRight class="h-5 w-5" />{:else}<ChevronLeft class="h-5 w-5" />{/if}
+			</button>
 		</div>
 	</aside>
 
-	<!-- Mobile Top Bar (minimal — just menu button) -->
+	<!-- Mobile Header -->
 	<div
 		class="fixed top-0 right-0 left-0 z-20 flex h-12 items-center border-b bg-card/95 px-4 backdrop-blur-sm md:hidden print:hidden"
 	>
 		<Sheet.Root bind:open={isMobileMenuOpen}>
 			<Sheet.Trigger>
 				{#snippet child({ props })}
-					<Button {...props} variant="ghost" size="icon" class="cursor-pointer">
-						<Menu class="h-5 w-5" />
-						<span class="sr-only">Toggle menu</span>
-					</Button>
+					<Button {...props} variant="ghost" size="icon" class="cursor-pointer"
+						><Menu class="h-5 w-5" /></Button
+					>
 				{/snippet}
 			</Sheet.Trigger>
 			<Sheet.Content side="left" class="w-64 p-0">
 				<div class="flex h-16 items-center gap-3 border-b px-6">
 					<Avatar class="h-8 w-8">
-						{#if user?.imageUrl}
-							<img
+						{#if user?.imageUrl}<img
 								src={user.imageUrl}
 								alt={user.name}
 								class="h-full w-full rounded-full object-cover"
 							/>
-						{:else}
-							<AvatarFallback class="bg-primary text-xs font-bold text-primary-foreground">
-								{user?.name?.charAt(0) ?? 'U'}
-							</AvatarFallback>
-						{/if}
+						{:else}<AvatarFallback class="bg-muted text-[10px] font-bold"
+								>{user?.name?.charAt(0) ?? 'U'}</AvatarFallback
+							>{/if}
 					</Avatar>
-					<div>
-						<p class="text-sm font-semibold">{user?.name}</p>
-						<p class="text-xs text-muted-foreground">
+					<div class="min-w-0">
+						<p class="truncate text-sm font-semibold">{user?.name}</p>
+						<p class="text-[10px] tracking-wider text-muted-foreground uppercase">
 							{roleLabels[user?.role ?? ''] ?? user?.role}
 						</p>
 					</div>
@@ -337,8 +309,7 @@
 						{@const active = isActive(item.href)}
 						<a
 							href={item.href}
-							class="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors
-                {active
+							class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors {active
 								? 'bg-primary text-primary-foreground'
 								: 'hover:bg-accent hover:text-accent-foreground'}"
 							onclick={() => (isMobileMenuOpen = false)}
@@ -348,33 +319,17 @@
 						</a>
 					{/each}
 					<Separator class="my-4" />
-					<!-- Theme toggle for mobile -->
 					<div class="flex items-center gap-2 px-3 py-2">
 						<span class="text-sm text-muted-foreground">Theme:</span>
-						<Button
-							variant="ghost"
-							size="icon"
-							class="h-8 w-8 cursor-pointer"
-							onclick={() => setTheme('light')}
+						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('light')}
+							><Sun class="h-4 w-4" /></Button
 						>
-							<Sun class="h-4 w-4" />
-						</Button>
-						<Button
-							variant="ghost"
-							size="icon"
-							class="h-8 w-8 cursor-pointer"
-							onclick={() => setTheme('dark')}
+						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('dark')}
+							><Moon class="h-4 w-4" /></Button
 						>
-							<Moon class="h-4 w-4" />
-						</Button>
-						<Button
-							variant="ghost"
-							size="icon"
-							class="h-8 w-8 cursor-pointer"
-							onclick={() => setTheme('system')}
+						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('system')}
+							><Monitor class="h-4 w-4" /></Button
 						>
-							<Monitor class="h-4 w-4" />
-						</Button>
 					</div>
 					<Separator class="my-4" />
 					<form
@@ -384,37 +339,30 @@
 						bind:this={mobileLogoutForm}
 						onsubmit={(e) => handleLogout(e, mobileLogoutForm)}
 					>
-						<Button variant="ghost" class="w-full cursor-pointer justify-start gap-3" type="submit">
-							<LogOut class="h-4 w-4" />
-							Logout
-						</Button>
+						<Button variant="ghost" class="w-full justify-start gap-3" type="submit"
+							><LogOut class="h-4 w-4" /> Logout</Button
+						>
 					</form>
 				</nav>
 			</Sheet.Content>
 		</Sheet.Root>
-		<span class="ml-3 text-sm font-semibold">Clothing POS</span>
+		<span class="ml-3 text-sm font-black tracking-tighter text-primary uppercase italic"
+			>Anchor</span
+		>
 	</div>
 
 	<!-- Main Content Area -->
-	<div
-		class="flex min-w-0 flex-1 flex-col pt-12 transition-all duration-300 md:pt-0 {collapsed
-			? 'md:ml-16'
-			: 'md:ml-64'}"
-	>
-		{#if $navigating}
-			<div
-				class="fixed top-12 right-0 left-0 z-50 h-1 md:top-0 {collapsed
-					? 'md:left-16'
-					: 'md:left-64'}"
-			>
-				<div class="h-full w-full overflow-hidden bg-primary/20">
-					<div class="progress-bar-value h-full bg-primary"></div>
+	<div class="flex min-w-0 flex-1 flex-col pt-12 md:pt-0" data-sveltekit-preload-data="hover">
+		<main class="grid flex-1 overflow-hidden bg-background">
+			{#key $page.url.pathname}
+				<div
+					class="col-start-1 row-start-1 flex flex-col overflow-y-auto bg-background w-full h-full"
+					in:fade={{ duration: 150 }}
+					out:fade={{ duration: 150 }}
+				>
+					{@render children()}
 				</div>
-			</div>
-		{/if}
-
-		<main class="flex-1 overflow-y-auto">
-			{@render children()}
+			{/key}
 		</main>
 	</div>
 </div>
@@ -425,7 +373,6 @@
 		animation: progress-animation 2s infinite linear;
 		transform-origin: 0% 50%;
 	}
-
 	@keyframes progress-animation {
 		0% {
 			transform: translateX(-100%);
@@ -436,5 +383,12 @@
 		100% {
 			transform: translateX(100%);
 		}
+	}
+	:global(.scrollbar-none::-webkit-scrollbar) {
+		display: none;
+	}
+	:global(.scrollbar-none) {
+		-ms-overflow-style: none;
+		scrollbar-width: none;
 	}
 </style>

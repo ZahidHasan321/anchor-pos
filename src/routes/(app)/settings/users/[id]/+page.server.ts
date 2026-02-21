@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, '/dashboard');
 	}
 
-	const user = db
+	const userRows = await db
 		.select({
 			id: users.id,
 			username: users.username,
@@ -26,7 +26,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		})
 		.from(users)
 		.where(eq(users.id, params.id))
-		.get();
+		.limit(1);
+
+	const user = userRows[0];
 
 	if (!user) {
 		redirect(302, '/settings/users');
@@ -65,17 +67,18 @@ export const actions: Actions = {
 		}
 
 		// Check if username is taken by another user
-		const existing = db
+		const existingRows = await db
 			.select()
 			.from(users)
 			.where(and(eq(users.username, username), ne(users.id, params.id)))
-			.get();
+			.limit(1);
 
-		if (existing) {
+		if (existingRows.length > 0) {
 			return fail(400, { message: 'Username already taken' });
 		}
 
-		db.update(users)
+		await db
+			.update(users)
 			.set({
 				name,
 				username,
@@ -84,14 +87,13 @@ export const actions: Actions = {
 				...(imageUrl ? { imageUrl } : {}),
 				role
 			})
-			.where(eq(users.id, params.id))
-			.run();
+			.where(eq(users.id, params.id));
 
-		logAuditEvent({
-			userId: locals.user.id,
-			userName: locals.user.name,
+		await logAuditEvent({
+			userId: locals.user!.id,
+			userName: locals.user!.name,
 			action: 'UPDATE_USER',
-			entity: 'user',
+			entity: 'users',
 			entityId: params.id,
 			details: `Updated profile for user: ${username}`
 		});

@@ -19,7 +19,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, '/login');
 	}
 
-	const order = db
+	const orderRows = await db
 		.select({
 			id: orders.id,
 			orderNumber: orders.orderNumber,
@@ -39,15 +39,31 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.leftJoin(customers, eq(orders.customerId, customers.id))
 		.leftJoin(users, eq(orders.userId, users.id))
 		.where(eq(orders.id, params.id))
-		.get();
+		.limit(1);
+
+	const order = orderRows[0];
 
 	if (!order) {
 		redirect(302, '/orders');
 	}
 
-	const items = db.select().from(orderItems).where(eq(orderItems.orderId, params.id)).all();
+	const items = await db
+		.select({
+			id: orderItems.id,
+			orderId: orderItems.orderId,
+			variantId: orderItems.variantId,
+			quantity: orderItems.quantity,
+			priceAtSale: orderItems.priceAtSale,
+			discount: orderItems.discount,
+			productName: orderItems.productName,
+			variantLabel: orderItems.variantLabel,
+			productId: productVariants.productId
+		})
+		.from(orderItems)
+		.leftJoin(productVariants, eq(orderItems.variantId, productVariants.id))
+		.where(eq(orderItems.orderId, params.id));
 
-	const settingsRows = db.select().from(storeSettings).all();
+	const settingsRows = await db.select().from(storeSettings);
 	const settings = settingsRows.reduce(
 		(acc, row) => {
 			acc[row.key] = row.value;
@@ -78,41 +94,39 @@ export const actions: Actions = {
 		}
 
 		try {
-			db.update(orders)
+			await db
+				.update(orders)
 				.set({ status: status as 'completed' | 'refunded' | 'void' })
-				.where(eq(orders.id, params.id))
-				.run();
+				.where(eq(orders.id, params.id));
 
-			logAuditEvent({
+			await logAuditEvent({
 				userId: locals.user.id,
 				userName: locals.user.name,
 				action: 'UPDATE_ORDER_STATUS',
-				entity: 'order',
+				entity: 'orders',
 				entityId: params.id,
 				details: `Changed order status to ${status}`
 			});
 
 			// If refunded, restore stock
 			if (status === 'refunded') {
-				const items = db.select().from(orderItems).where(eq(orderItems.orderId, params.id)).all();
+				const items = await db.select().from(orderItems).where(eq(orderItems.orderId, params.id));
 
 				for (const item of items) {
 					if (item.variantId) {
-						db.update(productVariants)
+						await db
+							.update(productVariants)
 							.set({ stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}` })
-							.where(eq(productVariants.id, item.variantId))
-							.run();
+							.where(eq(productVariants.id, item.variantId));
 
-						db.insert(stockLogs)
-							.values({
-								id: generateId(),
-								variantId: item.variantId,
-								changeAmount: item.quantity,
-								reason: `Return - Order ${params.id.substring(0, 8)} refunded`,
-								userId: locals.user.id,
-								createdAt: new Date()
-							})
-							.run();
+						await db.insert(stockLogs).values({
+							id: generateId(),
+							variantId: item.variantId,
+							changeAmount: item.quantity,
+							reason: `Return - Order ${params.id.substring(0, 8)} refunded`,
+							userId: locals.user.id,
+							createdAt: new Date()
+						});
 					}
 				}
 			}

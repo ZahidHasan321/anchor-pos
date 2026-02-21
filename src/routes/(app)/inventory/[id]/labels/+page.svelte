@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { formatBDT } from '$lib/format';
+	import { formatCurrency } from '$lib/format';
 	import { Printer, ArrowLeft } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 
@@ -122,7 +122,7 @@
 					Size: {variant.size}{variant.color ? ` | Color: ${variant.color}` : ''}
 				</div>
 				<div class="price" style="font-size: 9px; font-weight: bold; margin-top: 1mm;">
-					{formatBDT(variant.price)}
+					{formatCurrency(variant.price)}
 				</div>
 			</div>
 		{/each}

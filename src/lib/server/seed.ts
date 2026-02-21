@@ -4,11 +4,11 @@ import { hashPassword } from './auth';
 import { generateId } from '../utils';
 
 export async function seedAdmin() {
-	const existing = db.select().from(users).get();
-	if (existing) return; // Already seeded
+	try {
+		const existing = await db.select().from(users).limit(1);
+		if (existing.length > 0) return; // Already seeded
 
-	db.insert(users)
-		.values({
+		await db.insert(users).values({
 			id: generateId(),
 			username: 'admin',
 			passwordHash: await hashPassword('admin123'),
@@ -16,16 +16,18 @@ export async function seedAdmin() {
 			name: 'Administrator',
 			isActive: true,
 			theme: 'system'
-		})
-		.run();
+		});
 
-	console.log('Admin user seeded: admin / admin123');
+		console.log('Admin user seeded: admin / admin123');
+	} catch (e) {
+		console.log('Skipping admin seed (table not ready or error)');
+	}
 }
 
-export function seedPermissions() {
+export async function seedPermissions() {
 	try {
-		const existing = db.select().from(rolePermissions).get();
-		if (existing) return; // Already seeded
+		const existing = await db.select().from(rolePermissions).limit(1);
+		if (existing.length > 0) return; // Already seeded
 
 		const defaults: { role: string; resource: string }[] = [
 			// Manager defaults
@@ -37,7 +39,7 @@ export function seedPermissions() {
 		];
 
 		for (const row of defaults) {
-			db.insert(rolePermissions).values(row).run();
+			await db.insert(rolePermissions).values(row);
 		}
 
 		console.log('Default role permissions seeded');

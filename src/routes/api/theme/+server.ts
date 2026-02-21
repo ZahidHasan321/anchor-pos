@@ -4,7 +4,7 @@ import { db } from '$lib/server/db';
 import { users } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 
-export const POST: RequestHandler = async ({ request, locals, cookies }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
@@ -15,16 +15,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		return json({ error: 'Invalid theme' }, { status: 400 });
 	}
 
-	// Save to DB
-	db.update(users).set({ theme }).where(eq(users.id, locals.user.id)).run();
-
-	// Save to cookie
-	cookies.set('theme', theme, {
-		path: '/',
-		maxAge: 60 * 60 * 24 * 365, // 1 year
-		httpOnly: false, // Allow client-side JS to read it if needed
-		sameSite: 'lax'
-	});
+	// Save to DB (mode-watcher handles localStorage on the client)
+	await db.update(users).set({ theme }).where(eq(users.id, locals.user.id));
 
 	return json({ success: true });
 };

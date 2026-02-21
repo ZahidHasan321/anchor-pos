@@ -2,14 +2,19 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { customers, orders } from '$lib/server/db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, and } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ params, url, locals }) => {
 	if (!locals.user) {
 		redirect(302, '/login');
 	}
 
-	const customer = db.select().from(customers).where(eq(customers.id, params.id)).get();
+	const customerRows = await db
+		.select()
+		.from(customers)
+		.where(eq(customers.id, params.id))
+		.limit(1);
+	const customer = customerRows[0];
 
 	if (!customer) {
 		redirect(302, '/customers');
@@ -21,38 +26,38 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 	const offset = (currentPage - 1) * perPage;
 
 	// Total completed orders count (for stats)
-	const countResult = db
+	const countResult = await db
 		.select({ count: sql<number>`count(*)` })
 		.from(orders)
-		.where(sql`customer_id = ${params.id} AND status = 'completed'`)
-		.get();
-	const totalOrders = countResult?.count ?? 0;
+		.where(and(eq(orders.customerId, params.id), eq(orders.status, 'completed')));
+
+	const totalOrders = countResult[0]?.count ?? 0;
 
 	// Total order count for pagination (all statuses)
-	const allCountResult = db
+	const allCountResult = await db
 		.select({ count: sql<number>`count(*)` })
 		.from(orders)
-		.where(eq(orders.customerId, params.id))
-		.get();
-	const totalPages = Math.ceil((allCountResult?.count ?? 0) / perPage);
+		.where(eq(orders.customerId, params.id));
+
+	const allCount = allCountResult[0]?.count ?? 0;
+	const totalPages = Math.ceil(allCount / perPage);
 
 	// Total spent (completed orders only)
-	const spentResult = db
+	const spentResult = await db
 		.select({ total: sql<number>`COALESCE(SUM(total_amount), 0)` })
 		.from(orders)
-		.where(sql`customer_id = ${params.id} AND status = 'completed'`)
-		.get();
-	const totalSpent = spentResult?.total ?? 0;
+		.where(and(eq(orders.customerId, params.id), eq(orders.status, 'completed')));
+
+	const totalSpent = spentResult[0]?.total ?? 0;
 
 	// Paginated orders (all statuses for history visibility)
-	const customerOrders = db
+	const customerOrders = await db
 		.select()
 		.from(orders)
 		.where(eq(orders.customerId, params.id))
 		.orderBy(desc(orders.createdAt))
 		.limit(perPage)
-		.offset(offset)
-		.all();
+		.offset(offset);
 
 	return {
 		customer,
@@ -62,7 +67,7 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 		pagination: {
 			currentPage,
 			totalPages,
-			totalOrders: allCountResult?.count ?? 0,
+			totalOrders: allCount,
 			perPage
 		}
 	};
@@ -84,7 +89,7 @@ export const actions: Actions = {
 		}
 
 		try {
-			db.update(customers).set({ name, phone, email }).where(eq(customers.id, params.id)).run();
+			await db.update(customers).set({ name, phone, email }).where(eq(customers.id, params.id));
 		} catch (e) {
 			console.error('Failed to update customer:', e);
 			return fail(500, { error: 'Database error' });

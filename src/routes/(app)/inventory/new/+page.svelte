@@ -9,6 +9,7 @@
 	import * as Select from '$lib/components/ui/select';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { ArrowLeft, Loader2, X, Plus } from '@lucide/svelte';
+	import { getCurrencySymbol } from '$lib/format';
 	import { toast } from 'svelte-sonner';
 
 	let { data, form } = $props();
@@ -22,7 +23,7 @@
 	let loading = $state(false);
 	let customSizeInput = $state('');
 
-	let sizeQuantities = $state<Record<string, number>>({});
+	let sizeQuantities = $state<Record<string, string>>({});
 
 	// Clear selections when template changes
 	$effect(() => {
@@ -38,7 +39,7 @@
 			const { [size]: _, ...rest } = sizeQuantities;
 			sizeQuantities = rest;
 		} else {
-			sizeQuantities = { ...sizeQuantities, [size]: 0 };
+			sizeQuantities = { ...sizeQuantities, [size]: '' };
 		}
 	}
 
@@ -54,7 +55,7 @@
 			toast.error(`Size "${size}" is already added`);
 			return;
 		}
-		sizeQuantities = { ...sizeQuantities, [size]: 0 };
+		sizeQuantities = { ...sizeQuantities, [size]: '' };
 		customSizeInput = '';
 	}
 </script>
@@ -136,7 +137,7 @@
 
 						<div class="grid gap-4 sm:grid-cols-2">
 							<div class="space-y-2">
-								<Label for="templatePrice">Base Price (৳)</Label>
+								<Label for="templatePrice">Base Price ({getCurrencySymbol()})</Label>
 								<Input
 									id="templatePrice"
 									name="templatePrice"
@@ -157,8 +158,8 @@
 									name="defaultDiscount"
 									type="number"
 									step="0.01"
-									placeholder="0.00"
-									value={(form?.data?.defaultDiscount as string) ?? '0'}
+									placeholder="0"
+									value={(form?.data?.defaultDiscount as string) ?? ''}
 									class="h-11"
 								/>
 							</div>
@@ -251,8 +252,10 @@
 												min="0"
 												value={sizeQuantities[size]}
 												oninput={(e: Event) => {
-													const val = parseInt((e.target as HTMLInputElement).value) || 0;
-													sizeQuantities = { ...sizeQuantities, [size]: val };
+													sizeQuantities = {
+														...sizeQuantities,
+														[size]: (e.target as HTMLInputElement).value
+													};
 												}}
 												class="h-8 border-0 bg-muted/50 text-center text-sm focus-visible:ring-1"
 												placeholder="0"
@@ -268,8 +271,7 @@
 									id="stockReason"
 									name="stockReason"
 									placeholder="e.g. Initial Opening Stock, New Shipment..."
-									value={form?.data?.stockReason ?? 'Initial Stock'}
-									required
+									value={form?.data?.stockReason ?? ''}
 									class="h-11 bg-background"
 								/>
 								<p class="text-[11px] text-muted-foreground">

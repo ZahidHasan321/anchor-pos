@@ -23,7 +23,7 @@
 		CircleCheck,
 		X
 	} from '@lucide/svelte';
-	import { formatBDT } from '$lib/format';
+	import { formatCurrency, getCurrencySymbol } from '$lib/format';
 	import { toast } from 'svelte-sonner';
 	import { navigating } from '$app/stores';
 	import { confirmState } from '$lib/confirm.svelte';
@@ -38,7 +38,7 @@
 	let adjustReason = $state('');
 	let newVariantPrice = $state('');
 	let newVariantDiscount = $state('');
-	let newVariantInitialStock = $state(0);
+	let newVariantInitialStock = $state('');
 	let loading = $state(false);
 	let deleteLoading = $state(false);
 
@@ -122,7 +122,7 @@
 			customVariantSizeInput = '';
 			newVariantPrice = '';
 			newVariantDiscount = '';
-			newVariantInitialStock = 0;
+			newVariantInitialStock = '';
 		}
 		if (form?.variantError) {
 			toast.error(form.variantError);
@@ -265,7 +265,7 @@
 					</div>
 					<div>
 						<p class="text-xs text-muted-foreground">Total Stock</p>
-						<p class="text-xl font-bold">{totalStock}</p>
+						<p class="text-xl font-bold break-words break-all">{totalStock}</p>
 					</div>
 				</Card.Content>
 			</Card.Root>
@@ -278,7 +278,7 @@
 					</div>
 					<div>
 						<p class="text-xs text-muted-foreground">Healthy</p>
-						<p class="text-xl font-bold">{healthyCount}</p>
+						<p class="text-xl font-bold break-words break-all">{healthyCount}</p>
 					</div>
 				</Card.Content>
 			</Card.Root>
@@ -289,7 +289,7 @@
 					</div>
 					<div>
 						<p class="text-xs text-muted-foreground">Low Stock</p>
-						<p class="text-xl font-bold">{lowCount}</p>
+						<p class="text-xl font-bold break-words break-all">{lowCount}</p>
 					</div>
 				</Card.Content>
 			</Card.Root>
@@ -300,7 +300,7 @@
 					</div>
 					<div>
 						<p class="text-xs text-muted-foreground">Out of Stock</p>
-						<p class="text-xl font-bold">{outCount}</p>
+						<p class="text-xl font-bold break-words break-all">{outCount}</p>
 					</div>
 				</Card.Content>
 			</Card.Root>
@@ -348,7 +348,7 @@
 										>
 									</Table.Cell>
 									<Table.Cell>
-										<div>{formatBDT(variant.price)}</div>
+										<div>{formatCurrency(variant.price)}</div>
 										{#if variant.discount && variant.discount > 0}
 											<div class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
 												-{variant.discount}% discount
@@ -424,7 +424,9 @@
 					<Card.Content class="space-y-4">
 						<div>
 							<p class="text-xs text-muted-foreground">Base Price</p>
-							<p class="text-xl font-bold">{formatBDT(data.product.templatePrice)}</p>
+							<p class="text-xl font-bold break-words break-all">
+								{formatCurrency(data.product.templatePrice)}
+							</p>
 						</div>
 						<div>
 							<p class="text-xs text-muted-foreground">Default Discount</p>
@@ -451,10 +453,15 @@
 									class="flex min-w-[3.5rem] flex-col items-center rounded-lg border p-2 {stockChipClass(
 										variant.stockQuantity
 									)}"
-									title="{variant.size}: {variant.stockQuantity} in stock"
+									title="{variant.size}: {variant.stockQuantity} in stock — {formatCurrency(
+										variant.price
+									)}"
 								>
 									<span class="text-xs font-medium">{variant.size}</span>
 									<span class="text-lg font-bold">{variant.stockQuantity}</span>
+									<span class="text-[10px] text-muted-foreground"
+										>{formatCurrency(variant.price)}</span
+									>
 								</div>
 							{/each}
 						</div>
@@ -680,7 +687,7 @@
 			</div>
 
 			<div class="space-y-2">
-				<Label for="new-price">Price (৳)</Label>
+				<Label for="new-price">Price ({getCurrencySymbol()})</Label>
 				<Input
 					id="new-price"
 					name="price"
@@ -690,7 +697,7 @@
 					bind:value={newVariantPrice}
 				/>
 				<p class="text-xs text-muted-foreground">
-					Base price: {formatBDT(data.product.templatePrice)}
+					Base price: {formatCurrency(data.product.templatePrice)}
 				</p>
 			</div>
 
@@ -714,6 +721,7 @@
 					name="initialStock"
 					type="number"
 					min="0"
+					placeholder="0"
 					bind:value={newVariantInitialStock}
 				/>
 			</div>
@@ -746,7 +754,7 @@
 		<form method="POST" action="?/editVariant" use:enhance class="space-y-4">
 			<input type="hidden" name="variantId" value={editingVariant?.id} />
 			<div class="space-y-2">
-				<Label>Price (৳)</Label>
+				<Label>Price ({getCurrencySymbol()})</Label>
 				<Input
 					name="price"
 					type="number"
@@ -755,7 +763,7 @@
 					bind:value={editVariantPrice}
 				/>
 				<p class="text-xs text-muted-foreground">
-					Base price: {formatBDT(data.product.templatePrice)}
+					Base price: {formatCurrency(data.product.templatePrice)}
 				</p>
 			</div>
 			<div class="space-y-2">

@@ -24,6 +24,7 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 	}
+	var postgresClient: any;
 }
 
 export {};

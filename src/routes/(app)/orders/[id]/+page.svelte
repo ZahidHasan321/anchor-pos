@@ -5,7 +5,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import { Badge } from '$lib/components/ui/badge';
 	import { ArrowLeft, Printer, ShoppingBag, User, CreditCard, Banknote } from '@lucide/svelte';
-	import { formatBDT, formatDateTime } from '$lib/format';
+	import { formatCurrency, formatDateTime } from '$lib/format';
 	import { printReceipt } from '$lib/print-receipt';
 	import { toast } from 'svelte-sonner';
 	import { confirmState } from '$lib/confirm.svelte';
@@ -56,9 +56,6 @@
 			</Button>
 			<div>
 				<h1 class="text-3xl font-bold tracking-tight">Order #{data.order.orderNumber}</h1>
-				<p class="text-xs tracking-widest text-muted-foreground uppercase opacity-50">
-					Reference: {data.order.id}
-				</p>
 			</div>
 		</div>
 		<div class="flex gap-2">
@@ -123,13 +120,24 @@
 						{#each data.items as item}
 							<Table.Row>
 								<Table.Cell>
-									<div class="font-medium">{item.productName}</div>
+									{#if item.productId}
+										<a
+											href="/inventory/{item.productId}"
+											class="font-medium text-primary hover:underline"
+										>
+											{item.productName}
+										</a>
+									{:else}
+										<div class="font-medium">{item.productName}</div>
+									{/if}
 									<div class="text-xs text-muted-foreground">{item.variantLabel}</div>
 								</Table.Cell>
 								<Table.Cell class="text-center">{item.quantity}</Table.Cell>
-								<Table.Cell class="text-right">{formatBDT(item.priceAtSale)}</Table.Cell>
+								<Table.Cell class="text-right">{formatCurrency(item.priceAtSale)}</Table.Cell>
 								<Table.Cell class="text-right font-bold">
-									{formatBDT(item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100))}
+									{formatCurrency(
+										item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100)
+									)}
 								</Table.Cell>
 							</Table.Row>
 						{/each}
@@ -139,15 +147,15 @@
 			<Card.Footer class="flex flex-col items-end gap-2 border-t bg-muted/20 p-6">
 				<div class="flex w-full max-w-xs justify-between text-sm">
 					<span>Subtotal</span>
-					<span>{formatBDT(data.order.totalAmount + (data.order.discountAmount || 0))}</span>
+					<span>{formatCurrency(data.order.totalAmount + (data.order.discountAmount || 0))}</span>
 				</div>
 				<div class="flex w-full max-w-xs justify-between text-sm text-destructive">
 					<span>Discount</span>
-					<span>-{formatBDT(data.order.discountAmount || 0)}</span>
+					<span>-{formatCurrency(data.order.discountAmount || 0)}</span>
 				</div>
 				<div class="flex w-full max-w-xs justify-between border-t pt-2 text-xl font-black">
 					<span>Total</span>
-					<span>{formatBDT(data.order.totalAmount)}</span>
+					<span>{formatCurrency(data.order.totalAmount)}</span>
 				</div>
 			</Card.Footer>
 		</Card.Root>

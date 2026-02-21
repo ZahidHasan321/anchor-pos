@@ -13,7 +13,12 @@ export type WithoutChildrenOrChild<T> = WithoutChildren<WithoutChild<T>>;
 export type WithElementRef<T, U extends HTMLElement = HTMLElement> = T & { ref?: U | null };
 
 export function generateId(): string {
-	return crypto.randomUUID();
+	try {
+		return crypto.randomUUID();
+	} catch {
+		// Fallback for older environments or restricted contexts
+		return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+	}
 }
 
 export const roleLabels: Record<string, string> = {

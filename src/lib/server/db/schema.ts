@@ -1,31 +1,38 @@
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text, real, index, primaryKey } from 'drizzle-orm/sqlite-core';
+import {
+	pgTable,
+	text,
+	integer,
+	doublePrecision,
+	boolean,
+	timestamp,
+	index,
+	primaryKey
+} from 'drizzle-orm/pg-core';
 
 // --- Users & Auth ---
 
-export const users = sqliteTable('user', {
+export const users = pgTable('users', {
 	id: text('id').primaryKey(),
 	username: text('username').notNull().unique(),
 	passwordHash: text('password_hash').notNull(),
-	role: text('role', { enum: ['admin', 'manager', 'sales'] })
-		.notNull()
-		.default('sales'),
+	role: text('role').notNull().default('sales'), // enum: ['admin', 'manager', 'sales']
 	name: text('name').notNull(),
 	phone: text('phone'),
 	email: text('email'),
 	imageUrl: text('image_url'),
-	isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+	isActive: boolean('is_active').notNull().default(true),
 	theme: text('theme').default('system') // 'light', 'dark', 'system'
 });
 
-export const sessions = sqliteTable(
-	'session',
+export const sessions = pgTable(
+	'sessions',
 	{
 		id: text('id').primaryKey(),
 		userId: text('user_id')
 			.notNull()
 			.references(() => users.id),
-		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull()
+		expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull()
 	},
 	(table) => ({
 		userIdIdx: index('session_user_id_idx').on(table.userId)
@@ -34,15 +41,15 @@ export const sessions = sqliteTable(
 
 // --- Products & Inventory ---
 
-export const products = sqliteTable(
-	'product',
+export const products = pgTable(
+	'products',
 	{
 		id: text('id').primaryKey(),
 		name: text('name').notNull(),
 		description: text('description'),
 		category: text('category').notNull(),
-		templatePrice: real('base_price').notNull(),
-		defaultDiscount: real('default_discount').default(0),
+		templatePrice: doublePrecision('base_price').notNull(),
+		defaultDiscount: doublePrecision('default_discount').default(0),
 		imageUrl: text('image_url')
 	},
 	(table) => ({
@@ -51,8 +58,8 @@ export const products = sqliteTable(
 	})
 );
 
-export const productVariants = sqliteTable(
-	'product_variant',
+export const productVariants = pgTable(
+	'product_variants',
 	{
 		id: text('id').primaryKey(),
 		productId: text('product_id')
@@ -62,9 +69,8 @@ export const productVariants = sqliteTable(
 		color: text('color'),
 		barcode: text('barcode').notNull().unique(),
 		stockQuantity: integer('stock_quantity').notNull().default(0),
-		price: real('price').notNull().default(0),
-		discount: real('discount').default(0)
-		// priceOverride: real('price_override') // Deprecated: use price column
+		price: doublePrecision('price').notNull().default(0),
+		discount: doublePrecision('discount').default(0)
 	},
 	(table) => ({
 		productIdIdx: index('product_variant_product_id_idx').on(table.productId),
@@ -78,8 +84,8 @@ export const productVariants = sqliteTable(
 
 // --- Customers ---
 
-export const customers = sqliteTable(
-	'customer',
+export const customers = pgTable(
+	'customers',
 	{
 		id: text('id').primaryKey(),
 		name: text('name').notNull(),
@@ -94,24 +100,20 @@ export const customers = sqliteTable(
 
 // --- Sales & Orders ---
 
-export const orders = sqliteTable(
-	'order',
+export const orders = pgTable(
+	'orders',
 	{
 		id: text('id').primaryKey(),
 		orderNumber: integer('order_number').notNull().unique().default(0), // Human readable ID (e.g. 1001)
 		customerId: text('customer_id').references(() => customers.id),
 		userId: text('user_id').references(() => users.id), // Cashier
-		totalAmount: real('total_amount').notNull(),
-		status: text('status', { enum: ['completed', 'refunded', 'void'] })
-			.notNull()
-			.default('completed'),
-		paymentMethod: text('payment_method', { enum: ['cash', 'card', 'split'] }).notNull(),
-		discountAmount: real('discount_amount').default(0),
-		cashReceived: real('cash_received'),
-		changeGiven: real('change_given'),
-		createdAt: integer('created_at', { mode: 'timestamp_ms' })
-			.notNull()
-			.default(sql`(unixepoch() * 1000)`)
+		totalAmount: doublePrecision('total_amount').notNull(),
+		status: text('status').notNull().default('completed'), // enum: ['completed', 'refunded', 'void']
+		paymentMethod: text('payment_method').notNull(), // enum: ['cash', 'card', 'split']
+		discountAmount: doublePrecision('discount_amount').default(0),
+		cashReceived: doublePrecision('cash_received'),
+		changeGiven: doublePrecision('change_given'),
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
 	},
 	(table) => ({
 		customerIdIdx: index('order_customer_id_idx').on(table.customerId),
@@ -122,8 +124,8 @@ export const orders = sqliteTable(
 	})
 );
 
-export const orderItems = sqliteTable(
-	'order_item',
+export const orderItems = pgTable(
+	'order_items',
 	{
 		id: text('id').primaryKey(),
 		orderId: text('order_id')
@@ -131,8 +133,8 @@ export const orderItems = sqliteTable(
 			.references(() => orders.id, { onDelete: 'cascade' }),
 		variantId: text('variant_id').references(() => productVariants.id),
 		quantity: integer('quantity').notNull(),
-		priceAtSale: real('price_at_sale').notNull(), // Price at the moment of sale
-		discount: real('discount').default(0),
+		priceAtSale: doublePrecision('price_at_sale').notNull(), // Price at the moment of sale
+		discount: doublePrecision('discount').default(0),
 		productName: text('product_name').notNull(),
 		variantLabel: text('variant_label').notNull() // e.g., "M / Black"
 	},
@@ -144,17 +146,15 @@ export const orderItems = sqliteTable(
 
 // --- Logs & Accounting ---
 
-export const stockLogs = sqliteTable(
-	'stock_log',
+export const stockLogs = pgTable(
+	'stock_logs',
 	{
 		id: text('id').primaryKey(),
 		variantId: text('variant_id').references(() => productVariants.id),
 		changeAmount: integer('change_amount').notNull(), // +10 or -5
 		reason: text('reason').notNull(), // 'sale', 'restock', 'return', 'damage'
 		userId: text('user_id').references(() => users.id),
-		createdAt: integer('created_at', { mode: 'timestamp_ms' })
-			.notNull()
-			.default(sql`(unixepoch() * 1000)`)
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
 	},
 	(table) => ({
 		variantIdIdx: index('stock_log_variant_id_idx').on(table.variantId),
@@ -163,17 +163,15 @@ export const stockLogs = sqliteTable(
 	})
 );
 
-export const cashbook = sqliteTable(
+export const cashbook = pgTable(
 	'cashbook',
 	{
 		id: text('id').primaryKey(),
-		amount: real('amount').notNull(),
-		type: text('type', { enum: ['in', 'out'] }).notNull(),
+		amount: doublePrecision('amount').notNull(),
+		type: text('type').notNull(), // enum: ['in', 'out']
 		description: text('description').notNull(),
 		userId: text('user_id').references(() => users.id),
-		createdAt: integer('created_at', { mode: 'timestamp_ms' })
-			.notNull()
-			.default(sql`(unixepoch() * 1000)`)
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
 	},
 	(table) => ({
 		userIdIdx: index('cashbook_user_id_idx').on(table.userId),
@@ -184,8 +182,8 @@ export const cashbook = sqliteTable(
 	})
 );
 
-export const rolePermissions = sqliteTable(
-	'role_permission',
+export const rolePermissions = pgTable(
+	'role_permissions',
 	{
 		role: text('role').notNull(),
 		resource: text('resource').notNull()
@@ -195,13 +193,13 @@ export const rolePermissions = sqliteTable(
 	})
 );
 
-export const storeSettings = sqliteTable('store_settings', {
+export const storeSettings = pgTable('store_settings', {
 	key: text('key').primaryKey(),
 	value: text('value').notNull()
 });
 
-export const auditLogs = sqliteTable(
-	'audit_log',
+export const auditLogs = pgTable(
+	'audit_logs',
 	{
 		id: text('id').primaryKey(),
 		userId: text('user_id'),
@@ -212,12 +210,27 @@ export const auditLogs = sqliteTable(
 		details: text('details'),
 		previousHash: text('previous_hash').notNull(),
 		hash: text('hash').notNull(),
-		createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull()
 	},
 	(table) => ({
 		userIdIdx: index('audit_log_user_id_idx').on(table.userId),
 		entityIdx: index('audit_log_entity_idx').on(table.entity),
 		entityIdIdx: index('audit_log_entity_id_idx').on(table.entityId),
 		createdAtIdx: index('audit_log_created_at_idx').on(table.createdAt)
+	})
+);
+
+export const loginAttempts = pgTable(
+	'login_attempts',
+	{
+		id: text('id').primaryKey(),
+		identifier: text('identifier').notNull(), // IP address or username
+		attempts: integer('attempts').notNull().default(1),
+		lastAttempt: timestamp('last_attempt', { withTimezone: true, mode: 'date' })
+			.notNull()
+			.defaultNow()
+	},
+	(table) => ({
+		identifierIdx: index('login_attempts_identifier_idx').on(table.identifier)
 	})
 );

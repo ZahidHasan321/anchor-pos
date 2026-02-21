@@ -1,13 +1,13 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { products, productVariants } from '$lib/server/db/schema';
+import { products, productVariants, storeSettings } from '$lib/server/db/schema';
 import { eq, sql, desc, and } from 'drizzle-orm';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
-	if (!locals.user || !hasPermission(locals.user.role, 'inventory')) {
-		redirect(302, locals.user ? getDefaultRedirect(locals.user.role) : '/login');
+	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
+		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
 
 	const pageParam = parseInt(url.searchParams.get('page') ?? '1');
@@ -18,142 +18,116 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const search = url.searchParams.get('q') ?? '';
 	const stockStatus = url.searchParams.get('stock') ?? '';
 
-	// --- Summary stats (unfiltered, always show global health) ---
-	const stats = db
-		.select({
-			totalProducts: sql<number>`COUNT(DISTINCT ${products.id})`,
-			totalVariants: sql<number>`COUNT(${productVariants.id})`,
-			lowStockVariants: sql<number>`SUM(CASE WHEN ${productVariants.stockQuantity} > 0 AND ${productVariants.stockQuantity} <= 5 THEN 1 ELSE 0 END)`,
-			outOfStockVariants: sql<number>`SUM(CASE WHEN ${productVariants.stockQuantity} = 0 THEN 1 ELSE 0 END)`,
-			totalInventoryValue: sql<number>`COALESCE(SUM(${productVariants.price} * ${productVariants.stockQuantity}), 0)`
-		})
-		.from(productVariants)
-		.innerJoin(products, eq(productVariants.productId, products.id))
-		.get() ?? {
-		totalProducts: 0,
-		totalVariants: 0,
-		lowStockVariants: 0,
-		outOfStockVariants: 0,
-		totalInventoryValue: 0
-	};
-
-	// --- Build conditions for the product list ---
-	const conditions: any[] = [];
-	if (categoryFilter) {
-		conditions.push(eq(products.category, categoryFilter));
-	}
-	if (search) {
-		conditions.push(
-			sql`(${products.name} LIKE ${'%' + search + '%'} OR ${products.category} LIKE ${'%' + search + '%'} OR EXISTS (SELECT 1 FROM product_variant WHERE product_id = ${products.id} AND barcode LIKE ${'%' + search + '%'}))`
-		);
-	}
-	if (stockStatus === 'out') {
-		// Products that have at least one variant with 0 stock
-		conditions.push(
-			sql`EXISTS (SELECT 1 FROM product_variant WHERE product_id = ${products.id} AND stock_quantity = 0)`
-		);
-	} else if (stockStatus === 'low') {
-		// Products that have at least one variant with stock between 1-5
-		conditions.push(
-			sql`EXISTS (SELECT 1 FROM product_variant WHERE product_id = ${products.id} AND stock_quantity > 0 AND stock_quantity <= 5)`
-		);
-	} else if (stockStatus === 'healthy') {
-		// Products where ALL variants have stock > 5
-		conditions.push(
-			sql`NOT EXISTS (SELECT 1 FROM product_variant WHERE product_id = ${products.id} AND stock_quantity <= 5)`
-		);
-	}
-
-	const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-	const countResult = db
-		.select({ count: sql<number>`count(*)` })
-		.from(products)
-		.where(whereClause)
-		.get();
-	const total = countResult?.count ?? 0;
-
-	const productList = db
-		.select({
-			id: products.id,
-			name: products.name,
-			category: products.category,
-			templatePrice: products.templatePrice,
-			defaultDiscount: products.defaultDiscount,
-			totalStock: sql<number>`COALESCE((SELECT SUM(stock_quantity) FROM product_variant WHERE product_id = ${products.id}), 0)`
-		})
-		.from(products)
-		.where(whereClause)
-		.orderBy(desc(products.id))
-		.limit(perPage)
-		.offset(offset)
-		.all();
-
-	// Fetch variants for all products on this page (for the size grid)
-	const productIds = productList.map((p) => p.id);
-	let variants: {
-		id: string;
-		productId: string;
-		size: string;
-		color: string | null;
-		stockQuantity: number;
-		barcode: string;
-		price: number;
-	}[] = [];
-	if (productIds.length > 0) {
-		variants = db
-			.select({
-				id: productVariants.id,
-				productId: productVariants.productId,
-				size: productVariants.size,
-				color: productVariants.color,
-				stockQuantity: productVariants.stockQuantity,
-				barcode: productVariants.barcode,
-				price: productVariants.price
-			})
-			.from(productVariants)
-			.where(
-				sql`${productVariants.productId} IN (${sql.join(
-					productIds.map((id) => sql`${id}`),
-					sql`, `
-				)})`
-			)
-			.all();
-	}
-
-	// Group variants by product
-	const variantsByProduct = new Map<string, typeof variants>();
-	for (const v of variants) {
-		const list = variantsByProduct.get(v.productId) ?? [];
-		list.push(v);
-		variantsByProduct.set(v.productId, list);
-	}
-
-	const productsWithVariants = productList.map((p) => ({
-		...p,
-		variants: variantsByProduct.get(p.id) ?? []
-	}));
-
-	const categories = db
-		.selectDistinct({ category: products.category })
-		.from(products)
-		.all()
-		.map((c) => c.category);
-
+	// Immediate data
 	return {
-		products: productsWithVariants,
-		categories,
-		stats,
-		pagination: {
-			currentPage,
-			totalPages: Math.ceil(total / perPage),
-			total,
-			perPage
-		},
-		filters: {
-			category: categoryFilter,
-			search,
-			stockStatus
-		}
+		filters: { category: categoryFilter, search, stockStatus },
+
+		// Streaming everything else
+		streamed: (async () => {
+			const settingsRows = await db.select().from(storeSettings);
+			const settings = settingsRows.reduce(
+				(acc, row) => {
+					acc[row.key] = row.value;
+					return acc;
+				},
+				{} as Record<string, string>
+			);
+			const threshold = parseInt(settings.low_stock_threshold || '5');
+
+			const [statsResult, categoryRows] = await Promise.all([
+				db
+					.select({
+						totalProducts: sql<number>`COUNT(DISTINCT ${products.id})`,
+						totalVariants: sql<number>`COUNT(${productVariants.id})`,
+						lowStockVariants: sql<number>`SUM(CASE WHEN ${productVariants.stockQuantity} > 0 AND ${productVariants.stockQuantity} <= ${threshold} THEN 1 ELSE 0 END)`,
+						outOfStockVariants: sql<number>`SUM(CASE WHEN ${productVariants.stockQuantity} = 0 THEN 1 ELSE 0 END)`,
+						totalInventoryValue: sql<number>`COALESCE(SUM(${productVariants.price} * ${productVariants.stockQuantity}), 0)`
+					})
+					.from(productVariants)
+					.innerJoin(products, eq(productVariants.productId, products.id)),
+				db.selectDistinct({ category: products.category }).from(products)
+			]);
+
+			// List Queries
+			const conditions: any[] = [];
+			if (categoryFilter) conditions.push(eq(products.category, categoryFilter));
+			if (search) {
+				const norm = '%' + search.replace(/[-\s_.]/g, '').toLowerCase() + '%';
+				conditions.push(
+					sql`(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(${products.name}), '-', ''), ' ', ''), '_', ''), '.', '') LIKE ${norm} OR REPLACE(REPLACE(REPLACE(REPLACE(LOWER(${products.category}), '-', ''), ' ', ''), '_', ''), '.', '') LIKE ${norm} OR EXISTS (SELECT 1 FROM ${productVariants} WHERE ${productVariants.productId} = ${products.id} AND ${productVariants.barcode} LIKE ${'%' + search + '%'}))`
+				);
+			}
+			if (stockStatus === 'out')
+				conditions.push(
+					sql`EXISTS (SELECT 1 FROM ${productVariants} WHERE ${productVariants.productId} = ${products.id} AND ${productVariants.stockQuantity} = 0)`
+				);
+			else if (stockStatus === 'low')
+				conditions.push(
+					sql`EXISTS (SELECT 1 FROM ${productVariants} WHERE ${productVariants.productId} = ${products.id} AND ${productVariants.stockQuantity} > 0 AND ${productVariants.stockQuantity} <= ${threshold})`
+				);
+			else if (stockStatus === 'healthy')
+				conditions.push(
+					sql`NOT EXISTS (SELECT 1 FROM ${productVariants} WHERE ${productVariants.productId} = ${products.id} AND ${productVariants.stockQuantity} <= ${threshold})`
+				);
+
+			const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+			const [countResult, productList] = await Promise.all([
+				db
+					.select({ count: sql<number>`count(*)` })
+					.from(products)
+					.where(whereClause),
+				db
+					.select({
+						id: products.id,
+						name: products.name,
+						category: products.category,
+						templatePrice: products.templatePrice,
+						defaultDiscount: products.defaultDiscount,
+						totalStock: sql<number>`COALESCE((SELECT SUM(${productVariants.stockQuantity}) FROM ${productVariants} WHERE ${productVariants.productId} = ${products.id}), 0)`
+					})
+					.from(products)
+					.where(whereClause)
+					.orderBy(desc(products.id))
+					.limit(perPage)
+					.offset(offset)
+			]);
+
+			const productIds = productList.map((p) => p.id);
+			let variants: any[] = [];
+			if (productIds.length > 0) {
+				variants = await db
+					.select()
+					.from(productVariants)
+					.where(
+						sql`${productVariants.productId} IN (${sql.join(
+							productIds.map((id) => sql`${id}`),
+							sql`, `
+						)})`
+					);
+			}
+
+			const variantsByProduct = new Map();
+			for (const v of variants) {
+				const list = variantsByProduct.get(v.productId) ?? [];
+				list.push(v);
+				variantsByProduct.set(v.productId, list);
+			}
+
+			return {
+				stats: statsResult[0] ?? {
+					totalProducts: 0,
+					totalVariants: 0,
+					lowStockVariants: 0,
+					outOfStockVariants: 0,
+					totalInventoryValue: 0
+				},
+				categories: categoryRows.map((c) => c.category).sort(),
+				products: productList.map((p) => ({ ...p, variants: variantsByProduct.get(p.id) ?? [] })),
+				total: countResult[0]?.count ?? 0,
+				totalPages: Math.ceil((countResult[0]?.count ?? 0) / perPage),
+				currentPage
+			};
+		})()
 	};
 };

@@ -1,0 +1,39 @@
+name: Build/Release Electron
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on version tags like v1.0.0
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Build for both Linux and Windows using GitHub's native runners
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install PNPM
+        run: npm install -g pnpm
+
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Build SvelteKit and Package Electron
+        # On Windows, we use pnpm exec to ensure electron-builder is found
+        # We use --publish always because the tag trigger already implies a release
+        run: pnpm run build:electron && pnpm exec electron-builder --publish always
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Ensure BUILD_TARGET is set for SvelteKit config
+          BUILD_TARGET: electron

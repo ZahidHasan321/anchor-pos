@@ -2,7 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { users } from '$lib/server/db/schema';
-import { eq, ne } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { hashPassword } from '$lib/server/auth';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		redirect(302, '/dashboard');
 	}
 
-	const allUsers = db
+	const allUsers = await db
 		.select({
 			id: users.id,
 			username: users.username,
@@ -25,8 +25,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			email: users.email,
 			imageUrl: users.imageUrl
 		})
-		.from(users)
-		.all();
+		.from(users);
 
 	return { users: allUsers };
 };
@@ -62,31 +61,29 @@ export const actions: Actions = {
 		}
 
 		// Check if username exists
-		const existing = db.select().from(users).where(eq(users.username, username)).get();
-		if (existing) {
+		const existingRows = await db.select().from(users).where(eq(users.username, username)).limit(1);
+		if (existingRows.length > 0) {
 			return fail(400, { message: 'Username already taken' });
 		}
 
 		const userId = generateId();
-		db.insert(users)
-			.values({
-				id: userId,
-				username,
-				name,
-				passwordHash: await hashPassword(password),
-				role,
-				phone,
-				email,
-				imageUrl,
-				isActive: true
-			})
-			.run();
+		await db.insert(users).values({
+			id: userId,
+			username,
+			name,
+			passwordHash: await hashPassword(password),
+			role,
+			phone,
+			email,
+			imageUrl,
+			isActive: true
+		});
 
-		logAuditEvent({
-			userId: locals.user.id,
-			userName: locals.user.name,
+		await logAuditEvent({
+			userId: locals.user!.id,
+			userName: locals.user!.name,
 			action: 'CREATE_USER',
-			entity: 'user',
+			entity: 'users',
 			entityId: userId,
 			details: `Created user: ${username} (${role})`
 		});
@@ -102,13 +99,13 @@ export const actions: Actions = {
 		const isActive = data.get('isActive') === 'true';
 		const newStatus = !isActive;
 
-		db.update(users).set({ isActive: newStatus }).where(eq(users.id, id)).run();
+		await db.update(users).set({ isActive: newStatus }).where(eq(users.id, id));
 
-		logAuditEvent({
-			userId: locals.user.id,
-			userName: locals.user.name,
+		await logAuditEvent({
+			userId: locals.user!.id,
+			userName: locals.user!.name,
 			action: newStatus ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
-			entity: 'user',
+			entity: 'users',
 			entityId: id,
 			details: `${newStatus ? 'Activated' : 'Deactivated'} user ID: ${id}`
 		});
@@ -125,16 +122,16 @@ export const actions: Actions = {
 
 		if (!password) return fail(400, { message: 'Password is required' });
 
-		db.update(users)
+		await db
+			.update(users)
 			.set({ passwordHash: await hashPassword(password) })
-			.where(eq(users.id, id))
-			.run();
+			.where(eq(users.id, id));
 
-		logAuditEvent({
-			userId: locals.user.id,
-			userName: locals.user.name,
+		await logAuditEvent({
+			userId: locals.user!.id,
+			userName: locals.user!.name,
 			action: 'RESET_PASSWORD',
-			entity: 'user',
+			entity: 'users',
 			entityId: id,
 			details: `Reset password for user ID: ${id}`
 		});

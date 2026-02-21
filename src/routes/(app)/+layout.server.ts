@@ -2,16 +2,16 @@ import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { getUserPermissions, getDefaultRedirect, pathToResource } from '$lib/server/permissions';
 
-export const load: LayoutServerLoad = async ({ locals, url }) => {
+export const load: LayoutServerLoad = async ({ locals, url, cookies }) => {
 	if (!locals.user) {
 		redirect(302, '/login');
 	}
 
-	const permissions = getUserPermissions(locals.user.role);
+	const permissions = await getUserPermissions(locals.user.role);
 
 	// Settings is always admin-only
 	if (url.pathname.startsWith('/settings') && locals.user.role !== 'admin') {
-		redirect(302, getDefaultRedirect(locals.user.role));
+		redirect(302, await getDefaultRedirect(locals.user.role));
 	}
 
 	// Check resource-level permissions
@@ -19,9 +19,16 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	if (matchedPath) {
 		const resource = pathToResource[matchedPath];
 		if (!permissions.includes(resource)) {
-			redirect(302, getDefaultRedirect(locals.user.role));
+			redirect(302, await getDefaultRedirect(locals.user.role));
 		}
 	}
 
-	return { user: locals.user, permissions };
+	// Get sidebar state from cookie (default to collapsed 'true' if not set)
+	const sidebarCollapsed = cookies.get('sidebar_collapsed') !== 'false';
+
+	return {
+		user: locals.user,
+		permissions,
+		sidebarCollapsed
+	};
 };

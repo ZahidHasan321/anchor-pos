@@ -8,13 +8,14 @@ import {
 	customers,
 	stockLogs,
 	products,
-	productVariants
+	productVariants,
+	cashbook
 } from '$lib/server/db/schema';
 import { eq, sql, gte, lt, and, desc } from 'drizzle-orm';
 import { hasPermission } from '$lib/server/permissions';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
-	if (!locals.user || !hasPermission(locals.user.role, 'reports')) {
+	if (!locals.user || !(await hasPermission(locals.user.role, 'reports'))) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
@@ -34,7 +35,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	endDate.setHours(23, 59, 59, 999);
 
 	if (type === 'products') {
-		const data = db
+		const data = await db
 			.select({
 				productId: products.id,
 				productName: orderItems.productName,
@@ -58,13 +59,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			.groupBy(orderItems.productName, products.id)
 			.orderBy(desc(sql`totalQty`))
 			.limit(limit)
-			.offset(offset)
-			.all();
+			.offset(offset);
 		return json(data);
 	}
 
 	if (type === 'staff') {
-		const data = db
+		const data = await db
 			.select({
 				userId: users.id,
 				cashierName: users.name,
@@ -84,13 +84,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			.groupBy(users.id)
 			.orderBy(desc(sql`totalSales`))
 			.limit(limit)
-			.offset(offset)
-			.all();
+			.offset(offset);
 		return json(data);
 	}
 
 	if (type === 'customers') {
-		const data = db
+		const data = await db
 			.select({
 				customerId: customers.id,
 				customerName: customers.name,
@@ -110,13 +109,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			.groupBy(customers.id)
 			.orderBy(desc(sql`totalSpent`))
 			.limit(limit)
-			.offset(offset)
-			.all();
+			.offset(offset);
 		return json(data);
 	}
 
 	if (type === 'inventory') {
-		const data = db
+		const data = await db
 			.select({
 				id: stockLogs.id,
 				productId: products.id,
@@ -140,8 +138,30 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			)
 			.orderBy(desc(stockLogs.createdAt))
 			.limit(limit)
-			.offset(offset)
-			.all();
+			.offset(offset);
+		return json(data);
+	}
+
+	if (type === 'expenses') {
+		const data = await db
+			.select({
+				id: cashbook.id,
+				description: cashbook.description,
+				total: sql<number>`sum(${cashbook.amount})`.as('total'),
+				count: sql<number>`count(*)`.as('count')
+			})
+			.from(cashbook)
+			.where(
+				and(
+					eq(cashbook.type, 'out'),
+					gte(cashbook.createdAt, startDate),
+					lt(cashbook.createdAt, endDate)
+				)
+			)
+			.groupBy(cashbook.description)
+			.orderBy(desc(sql`total`))
+			.limit(limit)
+			.offset(offset);
 		return json(data);
 	}
 

@@ -8,21 +8,21 @@ import { logAuditEvent } from '$lib/server/audit';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	if (!locals.user || !hasPermission(locals.user.role, 'inventory')) {
-		redirect(302, locals.user ? getDefaultRedirect(locals.user.role) : '/login');
+	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
+		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
 
-	const product = db.select().from(products).where(eq(products.id, params.id)).get();
+	const productRows = await db.select().from(products).where(eq(products.id, params.id)).limit(1);
+	const product = productRows[0];
 
 	if (!product) {
 		redirect(302, '/inventory');
 	}
 
-	const variants = db
+	const variants = await db
 		.select()
 		.from(productVariants)
-		.where(eq(productVariants.productId, params.id))
-		.all();
+		.where(eq(productVariants.productId, params.id));
 
 	return { product, variants, user: locals.user };
 };
@@ -45,11 +45,13 @@ export const actions: Actions = {
 			return fail(400, { stockError: 'Reason is required' });
 		}
 
-		const variant = db
+		const variantRows = await db
 			.select()
 			.from(productVariants)
 			.where(eq(productVariants.id, variantId))
-			.get();
+			.limit(1);
+
+		const variant = variantRows[0];
 
 		if (!variant) {
 			return fail(404, { stockError: 'Variant not found' });
@@ -59,31 +61,29 @@ export const actions: Actions = {
 		if (amount === 0) return { stockSuccess: true };
 
 		try {
-			db.transaction((tx) => {
+			await db.transaction(async (tx) => {
 				// Update stock to absolute value
-				tx.update(productVariants)
+				await tx
+					.update(productVariants)
 					.set({ stockQuantity: newQuantity })
-					.where(eq(productVariants.id, variantId))
-					.run();
+					.where(eq(productVariants.id, variantId));
 
 				// Log the change (the delta)
-				tx.insert(stockLogs)
-					.values({
-						id: generateId(),
-						variantId,
-						changeAmount: amount,
-						reason,
-						userId: locals.user!.id,
-						createdAt: new Date()
-					})
-					.run();
+				await tx.insert(stockLogs).values({
+					id: generateId(),
+					variantId,
+					changeAmount: amount,
+					reason,
+					userId: locals.user!.id,
+					createdAt: new Date()
+				});
 			});
 
-			logAuditEvent({
-				userId: locals.user.id,
-				userName: locals.user.name,
+			await logAuditEvent({
+				userId: locals.user!.id,
+				userName: locals.user!.name,
 				action: 'ADJUST_STOCK',
-				entity: 'product_variant',
+				entity: 'product_variants',
 				entityId: variantId,
 				details: `Updated stock from ${variant.stockQuantity} to ${newQuantity} (Delta: ${amount}, Reason: ${reason})`
 			});
@@ -110,7 +110,8 @@ export const actions: Actions = {
 			return fail(400, { variantError: 'Select at least one size' });
 		}
 
-		const product = db.select().from(products).where(eq(products.id, params.id)).get();
+		const productRows = await db.select().from(products).where(eq(products.id, params.id)).limit(1);
+		const product = productRows[0];
 		if (!product) {
 			return fail(404, { variantError: 'Product not found' });
 		}
@@ -122,51 +123,48 @@ export const actions: Actions = {
 		const catPrefix = product.category.substring(0, 3).toUpperCase();
 
 		try {
-			db.transaction((tx) => {
+			await db.transaction(async (tx) => {
 				for (const size of sizes) {
 					const variantId = generateId();
 					const barcode = `${catPrefix}-${shortId}-${size}`;
 
 					// Check for duplicate barcode
-					const existing = tx
+					const existingRows = await tx
 						.select()
 						.from(productVariants)
 						.where(eq(productVariants.barcode, barcode))
-						.get();
-					if (existing) continue; // Skip duplicates silently
+						.limit(1);
 
-					tx.insert(productVariants)
-						.values({
-							id: variantId,
-							productId: params.id,
-							size,
-							barcode,
-							stockQuantity: initialStock,
-							price: price,
-							discount: discount
-						})
-						.run();
+					if (existingRows.length > 0) continue; // Skip duplicates silently
+
+					await tx.insert(productVariants).values({
+						id: variantId,
+						productId: params.id,
+						size,
+						barcode,
+						stockQuantity: initialStock,
+						price: price,
+						discount: discount
+					});
 
 					if (initialStock > 0) {
-						tx.insert(stockLogs)
-							.values({
-								id: generateId(),
-								variantId,
-								changeAmount: initialStock,
-								reason: 'Initial stock',
-								userId: locals.user!.id,
-								createdAt: new Date()
-							})
-							.run();
+						await tx.insert(stockLogs).values({
+							id: generateId(),
+							variantId,
+							changeAmount: initialStock,
+							reason: 'Initial stock',
+							userId: locals.user!.id,
+							createdAt: new Date()
+						});
 					}
 				}
 			});
 
-			logAuditEvent({
-				userId: locals.user.id,
-				userName: locals.user.name,
+			await logAuditEvent({
+				userId: locals.user!.id,
+				userName: locals.user!.name,
 				action: 'ADD_VARIANT',
-				entity: 'product_variant',
+				entity: 'product_variants',
 				entityId: params.id,
 				details: `Added ${sizes.length} variant(s): ${sizes.join(', ')} to product ${product.name}`
 			});
@@ -191,10 +189,10 @@ export const actions: Actions = {
 		const discount = discountStr ? parseFloat(discountStr) : 0;
 
 		try {
-			db.update(productVariants)
+			await db
+				.update(productVariants)
 				.set({ price, discount })
-				.where(eq(productVariants.id, variantId))
-				.run();
+				.where(eq(productVariants.id, variantId));
 		} catch (e) {
 			console.error('Failed to edit variant:', e);
 			return fail(500, { error: 'Database error' });
@@ -215,24 +213,26 @@ export const actions: Actions = {
 			return fail(400, { error: 'Variant ID required' });
 		}
 
-		// Check it's not the last variant
-		const variant = db
+		// Check existence
+		const variantRows = await db
 			.select()
 			.from(productVariants)
 			.where(eq(productVariants.id, variantId))
-			.get();
+			.limit(1);
+
+		const variant = variantRows[0];
 		if (!variant) {
 			return fail(404, { error: 'Variant not found' });
 		}
 
 		try {
-			db.delete(productVariants).where(eq(productVariants.id, variantId)).run();
+			await db.delete(productVariants).where(eq(productVariants.id, variantId));
 
-			logAuditEvent({
-				userId: locals.user.id,
-				userName: locals.user.name,
+			await logAuditEvent({
+				userId: locals.user!.id,
+				userName: locals.user!.name,
 				action: 'DELETE_VARIANT',
-				entity: 'product_variant',
+				entity: 'product_variants',
 				entityId: variantId,
 				details: `Deleted variant ${variant.size}`
 			});
@@ -250,13 +250,13 @@ export const actions: Actions = {
 		}
 
 		try {
-			db.delete(products).where(eq(products.id, params.id)).run();
+			await db.delete(products).where(eq(products.id, params.id));
 
-			logAuditEvent({
-				userId: locals.user.id,
-				userName: locals.user.name,
+			await logAuditEvent({
+				userId: locals.user!.id,
+				userName: locals.user!.name,
 				action: 'DELETE_PRODUCT',
-				entity: 'product',
+				entity: 'products',
 				entityId: params.id,
 				details: `Deleted product ID: ${params.id}`
 			});
