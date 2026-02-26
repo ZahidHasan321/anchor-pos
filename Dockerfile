@@ -16,6 +16,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 # Build the SvelteKit app
+ENV BUILD_TARGET=node
 RUN pnpm build
 
 # Runtime Stage
