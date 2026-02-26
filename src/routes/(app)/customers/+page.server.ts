@@ -60,7 +60,18 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			]);
 
 			const total = countResult[0]?.count ?? 0;
-			const mappedCustomers = customerList.map((c) => ({
+
+			interface CustomerRow {
+				id: string;
+				name: string;
+				phone: string | null;
+				email: string | null;
+				order_count: number;
+				total_spent: number;
+				last_order_date: Date | null;
+			}
+
+			const mappedCustomers = (customerList as unknown as CustomerRow[]).map((c) => ({
 				...c,
 				orderCount: c.order_count,
 				totalSpent: c.total_spent,

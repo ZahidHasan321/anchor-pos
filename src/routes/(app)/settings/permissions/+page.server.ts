@@ -23,9 +23,16 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	const allPerms = await db.select().from(rolePermissions);
 
+	interface PermissionRow {
+		role: string;
+		resource: string;
+	}
+
 	const permissionsByRole: Record<string, string[]> = {};
 	for (const role of CONFIGURABLE_ROLES) {
-		permissionsByRole[role] = allPerms.filter((p) => p.role === role).map((p) => p.resource);
+		permissionsByRole[role] = (allPerms as PermissionRow[])
+			.filter((p) => p.role === role)
+			.map((p) => p.resource);
 	}
 
 	return {
@@ -56,7 +63,7 @@ export const actions: Actions = {
 		}
 
 		try {
-			await db.transaction(async (tx) => {
+			await db.transaction(async (tx: any) => {
 				// 1. Clear existing
 				await tx.delete(rolePermissions).where(eq(rolePermissions.role, role));
 

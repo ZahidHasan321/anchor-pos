@@ -57,8 +57,8 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 					.groupBy(cashbook.type)
 			]);
 
-			const totalIn = totals.find((t) => t.type === 'in')?.total || 0;
-			const totalOut = totals.find((t) => t.type === 'out')?.total || 0;
+			const totalIn = totals.find((t: { type: string; total: number }) => t.type === 'in')?.total || 0;
+			const totalOut = totals.find((t: { type: string; total: number }) => t.type === 'out')?.total || 0;
 
 			return {
 				entries,
@@ -71,7 +71,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 				.selectDistinct({ description: cashbook.description })
 				.from(cashbook)
 				.where(eq(cashbook.type, 'out'));
-			return rows.map((r) => r.description);
+			return rows.map((r: { description: string }) => r.description);
 		})(),
 
 		transactionsData: (async () => {
@@ -142,8 +142,8 @@ export const actions: Actions = {
 				.where(eq(cashbook.type, 'out'));
 			const normalizedDescription =
 				existingRows
-					.map((r) => r.description)
-					.find((d) => d.toLowerCase() === description.toLowerCase()) || description;
+					.map((r: { description: string }) => r.description)
+					.find((d: string) => d.toLowerCase() === description.toLowerCase()) || description;
 
 			const expenseId = generateId();
 			await db.insert(cashbook).values({

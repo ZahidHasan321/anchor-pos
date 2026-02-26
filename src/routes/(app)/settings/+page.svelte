@@ -33,10 +33,10 @@
 		CircleDollarSign
 	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
-	import { page } from '$app/state';
 	import { confirmState } from '$lib/confirm.svelte';
 	import { printReceipt } from '$lib/print-receipt';
 	import { formatCurrency, formatDateTime } from '$lib/format';
+	import { untrack } from 'svelte';
 
 	let { data, form } = $props();
 	let loading = $state(false);
@@ -66,31 +66,34 @@
 	});
 
 	$effect(() => {
-		previewData = {
-			store_name: data.settings.store_name || '',
-			store_address: data.settings.store_address || '',
-			store_phone: data.settings.store_phone || '',
-			store_email: data.settings.store_email || '',
-			store_website: data.settings.store_website || '',
-			store_tax_id: data.settings.store_tax_id || '',
-			receipt_footer: data.settings.receipt_footer || '',
-			return_policy: data.settings.return_policy || '',
-			exchange_policy: data.settings.exchange_policy || '',
-			terms_conditions: data.settings.terms_conditions || '',
-			tax_enabled: data.settings.tax_enabled || 'false',
-			tax_rate: data.settings.tax_rate || '0',
-			sd_enabled: data.settings.sd_enabled || 'false',
-			sd_rate: data.settings.sd_rate || '0',
-			store_facebook: data.settings.store_facebook || '',
-			store_instagram: data.settings.store_instagram || '',
-			store_bin: data.settings.store_bin || '',
-			low_stock_threshold: data.settings.low_stock_threshold || '5'
-		};
+		const settings = data.settings;
+		untrack(() => {
+			previewData = {
+				store_name: settings.store_name || '',
+				store_address: settings.store_address || '',
+				store_phone: settings.store_phone || '',
+				store_email: settings.store_email || '',
+				store_website: settings.store_website || '',
+				store_tax_id: settings.store_tax_id || '',
+				receipt_footer: settings.receipt_footer || '',
+				return_policy: settings.return_policy || '',
+				exchange_policy: settings.exchange_policy || '',
+				terms_conditions: settings.terms_conditions || '',
+				tax_enabled: settings.tax_enabled || 'false',
+				tax_rate: settings.tax_rate || '0',
+				sd_enabled: settings.sd_enabled || 'false',
+				sd_rate: settings.sd_rate || '0',
+				store_facebook: settings.store_facebook || '',
+				store_instagram: settings.store_instagram || '',
+				store_bin: settings.store_bin || '',
+				low_stock_threshold: settings.low_stock_threshold || '5'
+			};
 
-		// Auto-enable editing if store name is empty
-		if (!previewData.store_name) {
-			isEditing = true;
-		}
+			// Auto-enable editing if store name is empty
+			if (!previewData.store_name) {
+				isEditing = true;
+			}
+		});
 	});
 
 	$effect(() => {
@@ -99,13 +102,6 @@
 			isEditing = false;
 		}
 	});
-
-	const navItems = [
-		{ label: 'Store Settings', href: '/settings', icon: Store },
-		{ label: 'User Management', href: '/settings/users', icon: Users },
-		{ label: 'Role Permissions', href: '/settings/permissions', icon: ShieldAlert },
-		{ label: 'Audit Log', href: '/settings/audit', icon: ClipboardList }
-	];
 
 	function printTestReceipt() {
 		printReceipt({
@@ -124,68 +120,43 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Settings — Clothing POS</title>
-</svelte:head>
-
-<div class="space-y-5 p-3 pb-24 sm:p-4 sm:pb-24 md:p-6 md:pb-6">
-	<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-		<div>
-			<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
-			<p class="text-sm text-muted-foreground sm:text-base">
-				Configure your store and manage system settings.
-			</p>
-		</div>
-		<div class="flex gap-2">
-			<Button
-				variant="outline"
-				type="button"
-				size="sm"
-				class="h-9 cursor-pointer text-xs sm:text-sm"
-				onclick={() => (showReceiptPreview = true)}
-			>
-				<Eye class="mr-2 h-4 w-4" />
-				Preview Receipt
-			</Button>
-			<Button
-				variant="outline"
-				type="button"
-				size="sm"
-				class="h-9 cursor-pointer text-xs sm:text-sm"
-				onclick={printTestReceipt}
-			>
-				<Printer class="mr-2 h-4 w-4" />
-				Print Test
-			</Button>
-		</div>
+<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-end">
+	<div class="flex gap-2">
+		<Button
+			variant="outline"
+			type="button"
+			size="sm"
+			class="h-9 cursor-pointer text-xs sm:text-sm"
+			onclick={() => (showReceiptPreview = true)}
+		>
+			<Eye class="mr-2 h-4 w-4" />
+			Preview Receipt
+		</Button>
+		<Button
+			variant="outline"
+			type="button"
+			size="sm"
+			class="h-9 cursor-pointer text-xs sm:text-sm"
+			onclick={printTestReceipt}
+		>
+			<Printer class="mr-2 h-4 w-4" />
+			Print Test
+		</Button>
 	</div>
+</div>
 
-	<!-- Settings Navigation Tabs -->
-	<div class="flex flex-wrap gap-2 border-b pb-4">
-		{#each navItems as item}
-			<Button
-				variant={page.url.pathname === item.href ? 'default' : 'ghost'}
-				href={item.href}
-				class="h-9 flex-1 cursor-pointer px-3 text-xs sm:flex-none sm:text-sm"
-			>
-				<item.icon class="mr-2 h-4 w-4" />
-				{item.label}
-			</Button>
-		{/each}
-	</div>
-
-	<form
-		method="POST"
-		action="?/update"
-		use:enhance={() => {
-			loading = true;
-			return async ({ update }) => {
-				loading = false;
-				await update();
-			};
-		}}
-		class="space-y-5"
-	>
+<form
+	method="POST"
+	action="?/update"
+	use:enhance={() => {
+		loading = true;
+		return async ({ update }) => {
+			loading = false;
+			await update();
+		};
+	}}
+	class="space-y-5"
+>
 		<!-- ==================== STORE IDENTITY ==================== -->
 		<Card.Root>
 			<Card.Header class="px-4 pb-4 sm:px-6">
@@ -625,7 +596,6 @@
 			</div>
 		</div>
 	</form>
-</div>
 
 <!-- Receipt Preview Dialog -->
 <Dialog.Root bind:open={showReceiptPreview}>

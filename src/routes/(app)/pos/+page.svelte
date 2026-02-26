@@ -32,38 +32,79 @@
 	import { confirmState } from '$lib/confirm.svelte';
 	import { fade } from 'svelte/transition';
 	import { untrack } from 'svelte';
+	import { APP_NAME } from '$lib/constants';
+
+	import { productsStore, categoriesStore } from '$lib/powersync-queries';
+	import { powersync } from '$lib/powersync';
 
 	let { data, form } = $props();
+	const isNative = $derived(browser && (window as any).electron);
 
-	let searchQuery = $state(untrack(() => data.search));
-	let selectedCategory = $state(untrack(() => data.category));
-
-	$effect(() => {
-		searchQuery = data.search;
-		selectedCategory = data.category;
-	});
+	let searchQuery = $state('');
+	let selectedCategory = $state('All');
 
 	let checkoutOpen = $state(false);
 	let customerDialogOpen = $state(false);
 	let loading = $state(false);
 
-	// Products state (derived/synced from streamed data)
-	let displayedProducts = $state<any[]>([]);
-	let hasMore = $state(false);
-	let loadingMore = $state(false);
+	let completedOrder = $state<any>(null);
 	let searchLoading = $state(false);
-	let searchAbortController: AbortController | null = null;
-
-	// Scroll state
 	let scrollContainer = $state<HTMLDivElement | null>(null);
 	let scrollTop = $state(0);
 
+	// --- Data Source Management ---
+	let allProducts = $state<any[]>([]);
+	let categories = $state<string[]>(['All']);
+
+	// Native Mode: Subscribe to PowerSync
 	$effect(() => {
-		data.streamed.then((s) => {
-			displayedProducts = s.products;
-			hasMore = s.hasMore;
-		});
+		if (isNative) {
+			const unsubProducts = productsStore.subscribe(v => allProducts = v);
+			const unsubCats = categoriesStore.subscribe(v => categories = ['All', ...v.map((c: any) => c.category).sort()]);
+			return () => { unsubProducts(); unsubCats(); };
+		} else {
+			// Web Mode: Use server-side streamed data
+			data.streamed.then((s: any) => {
+				allProducts = s.products;
+				categories = s.categories;
+			});
+		}
 	});
+
+	// Filtered products logic (Shared between modes)
+	let displayedProducts = $derived(
+		allProducts.filter(p => {
+			const name = p.productName || p.name; // Handle slight naming diffs between DB and Sync
+			const matchesSearch = !searchQuery || 
+				name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				p.barcode.includes(searchQuery);
+			const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
+			return matchesSearch && matchesCategory;
+		})
+	);
+
+	// --- Handlers ---
+	function handleSearch(query: string) {
+		searchQuery = query;
+	}
+
+	function handleCategoryChange(cat: string) {
+		selectedCategory = cat;
+	}
+
+	function handleAddToCart(variant: any) {
+		cart.addItem({
+			variantId: variant.id,
+			productId: variant.productId,
+			productName: variant.productName || variant.name,
+			size: variant.size,
+			color: variant.color,
+			barcode: variant.barcode,
+			price: variant.price,
+			discount: variant.discount || 0,
+			maxStock: variant.stockQuantity
+		});
+	}
 
 	let lastHandledAction = $state<string | null>(null);
 	let customerSearch = $state('');
@@ -78,93 +119,101 @@
 			searchedCustomers = [];
 			return;
 		}
-		clearTimeout(custSearchTimeout);
-		custSearchTimeout = setTimeout(async () => {
-			customerSearchLoading = true;
-			try {
-				const res = await fetch(`/api/customers?search=${encodeURIComponent(query)}`);
-				const json = await res.json();
-				searchedCustomers = json.items || [];
-			} finally {
-				customerSearchLoading = false;
+
+		if (isNative) {
+			// Local search in SQLite for Native App
+			powersync.db.execute('SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ?', [`%${query}%`, `%${query}%`])
+				.then(res => searchedCustomers = res.rows?._array || []);
+		} else {
+			// Server API search for Web App
+			clearTimeout(custSearchTimeout);
+			custSearchTimeout = setTimeout(async () => {
+				customerSearchLoading = true;
+				try {
+					const res = await fetch(`/api/customers?search=${encodeURIComponent(query)}`);
+					const json = await res.json();
+					searchedCustomers = json.items || [];
+				} finally {
+					customerSearchLoading = false;
+				}
+			}, 300);
+		}
+	}
+
+	// Native-only logic (PowerSync)
+	async function handleLocalCheckout() {
+		loading = true;
+		try {
+			const orderId = crypto.randomUUID();
+			
+			await powersync.db.execute(`
+				INSERT INTO orders (id, customer_id, user_id, total_amount, payment_method, discount_amount, cash_received, change_given, status, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, [orderId, cart.customer?.id || null, data.user?.id, cart.subtotal, cart.paymentMethod, 0, cart.cashReceived, cart.changeAmount, 'completed', new Date().toISOString()]);
+
+			for (const item of cart.items) {
+				const orderItemId = crypto.randomUUID();
+				await powersync.db.execute(`
+					INSERT INTO order_items (id, order_id, variant_id, quantity, price_at_sale, discount, product_name, variant_label, status)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, [orderItemId, orderId, item.variantId, item.quantity, item.price, item.discount || 0, item.productName, `${item.size}${item.color ? ' / ' + item.color : ''}`, 'completed']);
+				
+				await powersync.db.execute('UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.variantId]);
+
+				// Log stock change locally
+				await powersync.db.execute(`
+					INSERT INTO stock_logs (id, variant_id, change_amount, reason, user_id, created_at)
+					VALUES (?, ?, ?, ?, ?, ?)
+				`, [crypto.randomUUID(), item.variantId, -item.quantity, 'sale', data.user?.id, new Date().toISOString()]);
 			}
-		}, 300);
-	}
 
-	// Debounced server-side search
-	let searchTimeout: any;
-	function handleSearch(query: string) {
-		searchQuery = query;
-		clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => {
-			triggerServerSearch(query, selectedCategory);
-		}, 300);
-	}
+			// Add to cashbook locally
+			await powersync.db.execute(`
+				INSERT INTO cashbook (id, amount, type, description, user_id, created_at)
+				VALUES (?, ?, ?, ?, ?, ?)
+			`, [crypto.randomUUID(), cart.subtotal, 'in', `Sale ${orderId.slice(0, 8).toUpperCase()}`, data.user?.id, new Date().toISOString()]);
 
-	function handleCategoryChange(cat: string) {
-		selectedCategory = cat;
-		triggerServerSearch(searchQuery, cat);
-	}
-
-	async function triggerServerSearch(search: string, category: string) {
-		if (searchAbortController) searchAbortController.abort();
-		searchAbortController = new AbortController();
-
-		searchLoading = true;
-		const params = new URLSearchParams();
-		if (search) params.set('search', search);
-		if (category && category !== 'All') params.set('category', category);
-		try {
-			const res = await fetch(`/api/pos/products?${params.toString()}`, {
-				signal: searchAbortController.signal
-			});
-			const json = await res.json();
-			displayedProducts = json.items;
-			hasMore = json.hasMore;
-			if (scrollContainer) scrollContainer.scrollTop = 0;
+			completedOrder = {
+				orderId,
+				orderNumber: orderId.slice(0, 8).toUpperCase(),
+				changeGiven: cart.changeAmount,
+				items: [...cart.items],
+				total: cart.subtotal,
+				cashReceived: cart.cashReceived
+			};
+			cart.clear();
+			checkoutOpen = false;
+			toast.success('Sale completed offline!');
 		} catch (e: any) {
-			if (e.name === 'AbortError') return;
-			console.error('Search error:', e);
+			toast.error('Local checkout failed: ' + e.message);
 		} finally {
-			searchLoading = false;
+			loading = false;
 		}
 	}
 
-	async function loadMore() {
-		if (loadingMore || !hasMore) return;
-		loadingMore = true;
-		const params = new URLSearchParams();
-		if (searchQuery) params.set('search', searchQuery);
-		if (selectedCategory && selectedCategory !== 'All') params.set('category', selectedCategory);
-		params.set('offset', String(displayedProducts.length));
+	async function handleLocalAddCustomer() {
+		loading = true;
 		try {
-			const res = await fetch(`/api/pos/products?${params.toString()}`);
-			const json = await res.json();
-			displayedProducts = [...displayedProducts, ...json.items];
-			hasMore = json.hasMore;
+			const id = crypto.randomUUID();
+			const nameInput = document.getElementById('new-customer-name') as HTMLInputElement;
+			const phoneInput = document.getElementById('new-customer-phone') as HTMLInputElement;
+			const name = nameInput?.value;
+			const phone = phoneInput?.value;
+
+			if (!name) return toast.error('Name is required');
+
+			await powersync.db.execute('INSERT INTO customers (id, name, phone) VALUES (?, ?, ?)', [id, name, phone]);
+			cart.setCustomer({ id, name, phone });
+			customerDialogOpen = false;
+			toast.success('Customer added locally');
 		} finally {
-			loadingMore = false;
+			loading = false;
 		}
 	}
 
-	function handleAddToCart(variant: any) {
-		cart.addItem({
-			variantId: variant.id,
-			productId: variant.productId,
-			productName: variant.productName,
-			size: variant.size,
-			color: variant.color,
-			barcode: variant.barcode,
-			price: variant.price,
-			discount: variant.discount || 0,
-			maxStock: variant.stockQuantity
-		});
-	}
-
-	let completedOrder = $state<any>(null);
-
+	// Web-only logic (Form effects)
 	$effect(() => {
-		if (form?.success) {
+		if (!isNative && form?.success) {
 			if (form.orderId && lastHandledAction !== form.orderId) {
 				lastHandledAction = form.orderId;
 				completedOrder = {
@@ -185,14 +234,14 @@
 				toast.success('Customer added!');
 			}
 		}
-		if (form?.error) toast.error(form.error);
+		if (!isNative && form?.error) toast.error(form.error);
 	});
 
 	let activeMobileTab = $state<'products' | 'cart'>('products');
 
 	function handlePrintReceipt(preview = true) {
 		if (!completedOrder) return;
-		data.streamed.then((s) => {
+		data.streamed.then((s: any) => {
 			printReceipt({
 				storeSettings: s.storeSettings,
 				orderId: '#' + completedOrder.orderNumber,
@@ -214,7 +263,7 @@
 	}
 </script>
 
-<svelte:head><title>POS — Anchor</title></svelte:head>
+<svelte:head><title>POS — {APP_NAME}</title></svelte:head>
 
 <div class="flex h-[calc(100vh-3rem)] flex-col md:h-screen">
 	<!-- Mobile Tabs -->
@@ -254,19 +303,15 @@
 					/>
 				</div>
 				<div class="scrollbar-none mt-2 flex gap-1.5 overflow-x-auto pb-1">
-					{#await data.streamed}
-						{#each Array(5) as _}<Skeleton class="h-8 w-20 rounded-full" />{/each}
-					{:then streamed}
-						{#each streamed.categories as cat}
-							<button
-								onclick={() => handleCategoryChange(cat)}
-								class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all {selectedCategory ===
-								cat
-									? 'bg-primary text-primary-foreground shadow-sm'
-									: 'bg-muted/50 text-muted-foreground hover:bg-muted'}">{cat}</button
-							>
-						{/each}
-					{/await}
+					{#each categories as cat}
+						<button
+							onclick={() => handleCategoryChange(cat)}
+							class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all {selectedCategory ===
+							cat
+								? 'bg-primary text-primary-foreground shadow-sm'
+								: 'bg-muted/50 text-muted-foreground hover:bg-muted'}">{cat}</button
+						>
+					{/each}
 				</div>
 			</div>
 
@@ -284,55 +329,42 @@
 					}}
 					class="h-full overflow-y-auto bg-muted/20 p-3"
 				>
-					{#await data.streamed}
-						<div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2 sm:gap-3">
-							{#each Array(12) as _}<Skeleton
-									class="h-32 w-full rounded-xl"
-								/>{/each}
+					{#if displayedProducts.length === 0}
+						<div class="flex h-full flex-col items-center justify-center text-muted-foreground">
+							<Package class="mb-3 h-12 w-12 opacity-20" />
+							<p class="text-sm">No products found</p>
 						</div>
-					{:then _}
-						{#if displayedProducts.length === 0}
-							<div class="flex h-full flex-col items-center justify-center text-muted-foreground">
-								<Package class="mb-3 h-12 w-12 opacity-20" />
-								<p class="text-sm">No products found</p>
-							</div>
-						{:else}
-							<div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2 sm:gap-3">
-								{#each displayedProducts as variant (variant.id)}
-									{@const cartQty = cart.items.find(i => i.variantId === variant.id)?.quantity ?? 0}
-									{@const availableStock = variant.stockQuantity - cartQty}
-									<button
-										onclick={() => handleAddToCart(variant)}
-										disabled={availableStock <= 0}
-										class="group relative flex w-full cursor-pointer flex-col rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-									>
-										<div class="absolute top-2 right-2">
-											<Badge variant={availableStock <= 5 ? 'destructive' : 'secondary'}
-												>{availableStock}</Badge
-											>
-										</div>
-										<h3 class="mb-1 line-clamp-2 text-sm font-semibold">{variant.productName}</h3>
-										<span class="text-[10px] font-bold text-muted-foreground uppercase"
-											>{variant.size}</span
+					{:else}
+						<div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2 sm:gap-3">
+							{#each displayedProducts as variant (variant.id)}
+								{@const cartQty = cart.items.find(i => i.variantId === variant.id)?.quantity ?? 0}
+								{@const availableStock = variant.stockQuantity - cartQty}
+								<button
+									onclick={() => handleAddToCart(variant)}
+									disabled={availableStock <= 0}
+									class="group relative flex w-full cursor-pointer flex-col rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+								>
+									<div class="absolute top-2 right-2">
+										<Badge variant={availableStock <= 5 ? 'destructive' : 'secondary'}
+											>{availableStock}</Badge
 										>
-										<div class="mt-auto flex items-center justify-between pt-2">
-											<span class="text-lg font-black text-primary"
-												>{formatCurrency(variant.price * (1 - (variant.discount || 0) / 100))}</span
-											>
-											{#if variant.discount}<Badge variant="outline" class="text-[10px]"
-													>-{variant.discount}%</Badge
-												>{/if}
-										</div>
-									</button>
-								{/each}
-							</div>
-							{#if hasMore}<div class="flex justify-center py-4">
-									<Button variant="outline" disabled={loadingMore} onclick={loadMore}
-										>{#if loadingMore}<Loader2 class="mr-2 h-4 w-4 animate-spin" />{/if}Load More</Button
+									</div>
+									<h3 class="mb-1 line-clamp-2 text-sm font-semibold">{variant.productName}</h3>
+									<span class="text-[10px] font-bold text-muted-foreground uppercase"
+										>{variant.size}</span
 									>
-								</div>{/if}
-						{/if}
-					{/await}
+									<div class="mt-auto flex items-center justify-between pt-2">
+										<span class="text-lg font-black text-primary"
+											>{formatCurrency(variant.price * (1 - (variant.discount || 0) / 100))}</span
+										>
+										{#if variant.discount}<Badge variant="outline" class="text-[10px]"
+												>-{variant.discount}%</Badge
+											>{/if}
+									</div>
+								</button>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -412,75 +444,71 @@
 			<!-- Footer -->
 			<div class="space-y-3 border-t p-3">
 				<!-- Customer -->
-				{#await data.streamed}
-					<Skeleton class="h-10 w-full" />
-				{:then streamed}
-					<div class="relative">
-						{#if cart.customer}
-							<div class="flex items-center justify-between rounded border bg-muted/30 px-3 py-1.5">
-								<div class="min-w-0">
-									<span class="block truncate text-xs font-bold">{cart.customer.name}</span><span
-										class="text-[10px] text-muted-foreground">{cart.customer.phone}</span
-									>
-								</div>
-								<button onclick={() => cart.setCustomer(null)}><X class="h-4 w-4" /></button>
-							</div>
-						{:else}
-							<div class="relative">
-								<Input
-									placeholder="Customer search (name or phone)..."
-									class="h-9 text-xs"
-									value={customerSearch}
-									oninput={(e) => handleCustomerSearch(e.currentTarget.value)}
-									onfocus={() => (showCustomerResults = true)}
-									onblur={() => setTimeout(() => (showCustomerResults = false), 200)}
-								/>
-								{#if customerSearchLoading}
-									<div class="absolute right-3 top-1/2 -translate-y-1/2">
-										<Loader2 class="h-3 w-3 animate-spin text-muted-foreground" />
-									</div>
-								{/if}
-							</div>
-							{#if showCustomerResults && (customerSearch.length >= 2 || searchedCustomers.length > 0)}
-								<div
-									class="absolute right-0 bottom-full left-0 z-50 mb-1 max-h-64 overflow-y-auto rounded-lg border bg-popover shadow-xl"
+				<div class="relative">
+					{#if cart.customer}
+						<div class="flex items-center justify-between rounded border bg-muted/30 px-3 py-1.5">
+							<div class="min-w-0">
+								<span class="block truncate text-xs font-bold">{cart.customer.name}</span><span
+									class="text-[10px] text-muted-foreground">{cart.customer.phone}</span
 								>
-									{#each searchedCustomers as c}
-										<button
-											class="w-full px-3 py-2 text-left text-xs hover:bg-accent"
-											onmousedown={(e) => {
-												e.preventDefault();
-												cart.setCustomer(c);
-												customerSearch = '';
-												searchedCustomers = [];
-												showCustomerResults = false;
-											}}
-										>
-											<div class="font-bold">{c.name}</div>
-											<div class="text-[10px] text-muted-foreground">{c.phone}</div>
-										</button>
-									{:else}
-										{#if !customerSearchLoading && customerSearch.length >= 2}
-											<div class="px-3 py-4 text-center text-xs text-muted-foreground">
-												No customers found
-											</div>
-										{/if}
-									{/each}
-									<div class="border-t p-1">
-										<button
-											class="flex w-full items-center gap-2 px-3 py-2 text-left text-[10px] font-bold text-primary hover:bg-accent"
-											onmousedown={(e) => {
-												e.preventDefault();
-												customerDialogOpen = true;
-												showCustomerResults = false;
-											}}><UserPlus class="h-3 w-3" /> Create new customer</button
-										>
-									</div>
+							</div>
+							<button onclick={() => cart.setCustomer(null)}><X class="h-4 w-4" /></button>
+						</div>
+					{:else}
+						<div class="relative">
+							<Input
+								placeholder="Customer search (name or phone)..."
+								class="h-9 text-xs"
+								value={customerSearch}
+								oninput={(e) => handleCustomerSearch(e.currentTarget.value)}
+								onfocus={() => (showCustomerResults = true)}
+								onblur={() => setTimeout(() => (showCustomerResults = false), 200)}
+							/>
+							{#if customerSearchLoading}
+								<div class="absolute right-3 top-1/2 -translate-y-1/2">
+									<Loader2 class="h-3 w-3 animate-spin text-muted-foreground" />
 								</div>
 							{/if}
+						</div>
+						{#if showCustomerResults && (customerSearch.length >= 2 || searchedCustomers.length > 0)}
+							<div
+								class="absolute right-0 bottom-full left-0 z-50 mb-1 max-h-64 overflow-y-auto rounded-lg border bg-popover shadow-xl"
+							>
+								{#each searchedCustomers as c}
+									<button
+										class="w-full px-3 py-2 text-left text-xs hover:bg-accent"
+										onmousedown={(e) => {
+											e.preventDefault();
+											cart.setCustomer(c);
+											customerSearch = '';
+											searchedCustomers = [];
+											showCustomerResults = false;
+										}}
+									>
+										<div class="font-bold">{c.name}</div>
+										<div class="text-[10px] text-muted-foreground">{c.phone}</div>
+									</button>
+								{:else}
+									{#if !customerSearchLoading && customerSearch.length >= 2}
+										<div class="px-3 py-4 text-center text-xs text-muted-foreground">
+											No customers found
+										</div>
+									{/if}
+								{/each}
+								<div class="border-t p-1">
+									<button
+										class="flex w-full items-center gap-2 px-3 py-2 text-left text-[10px] font-bold text-primary hover:bg-accent"
+										onmousedown={(e) => {
+											e.preventDefault();
+											customerDialogOpen = true;
+											showCustomerResults = false;
+										}}><UserPlus class="h-3 w-3" /> Create new customer</button
+									>
+								</div>
+							</div>
 						{/if}
-					</div>
-				{/await}
+					{/if}
+				</div>
 
 				<div class="flex items-center justify-between text-sm">
 					<span class="text-muted-foreground">Order Discount</span>
@@ -572,33 +600,42 @@
 			</div>
 		{/if}
 		<Dialog.Footer
-			><form
-				method="POST"
-				action="?/checkout"
-				use:enhance={() => {
-					loading = true;
-					return async ({ update }) => {
-						loading = false;
-						await update();
-					};
-				}}
-				class="w-full"
-			>
-				<input type="hidden" name="cartItems" value={JSON.stringify(cart.items)} /><input
-					type="hidden"
-					name="customerId"
-					value={cart.customer?.id ?? ''}
-				/><input type="hidden" name="paymentMethod" value={cart.paymentMethod} /><input
-					type="hidden"
-					name="cashReceived"
-					value={cart.cashReceived}
-				/><input type="hidden" name="globalDiscount" value={cart.globalDiscount ?? 0} /><Button
-					type="submit"
+			>{#if isNative}
+				<Button
+					onclick={handleLocalCheckout}
 					class="h-14 w-full text-lg"
 					disabled={loading || (cart.paymentMethod === 'cash' && cart.cashReceived < cart.subtotal)}
-					>{loading ? 'Processing...' : 'Complete Sale'}</Button
+					>{#if loading}<Loader2 class="mr-2 h-4 w-4 animate-spin" />{/if}Complete Sale (Offline)</Button
 				>
-			</form></Dialog.Footer
+			{:else}
+				<form
+					method="POST"
+					action="?/checkout"
+					use:enhance={() => {
+						loading = true;
+						return async ({ update }) => {
+							loading = false;
+							await update();
+						};
+					}}
+					class="w-full"
+				>
+					<input type="hidden" name="cartItems" value={JSON.stringify(cart.items)} /><input
+						type="hidden"
+						name="customerId"
+						value={cart.customer?.id ?? ''}
+					/><input type="hidden" name="paymentMethod" value={cart.paymentMethod} /><input
+						type="hidden"
+						name="cashReceived"
+						value={cart.cashReceived}
+					/><input type="hidden" name="globalDiscount" value={cart.globalDiscount ?? 0} /><Button
+						type="submit"
+						class="h-14 w-full text-lg"
+						disabled={loading || (cart.paymentMethod === 'cash' && cart.cashReceived < cart.subtotal)}
+						>{loading ? 'Processing...' : 'Complete Sale'}</Button
+					>
+				</form>
+			{/if}</Dialog.Footer
 		>
 	</Dialog.Content>
 </Dialog.Root>
@@ -606,22 +643,32 @@
 <Dialog.Root bind:open={customerDialogOpen}>
 	<Dialog.Content
 		><Dialog.Header><Dialog.Title>Add New Customer</Dialog.Title></Dialog.Header>
-		<form
-			method="POST"
-			action="?/addCustomer"
-			use:enhance={() => {
-				loading = true;
-				return async ({ update }) => {
-					loading = false;
-					await update();
-				};
-			}}
-			class="space-y-4"
-		>
-			<div><Label>Name</Label><Input name="name" required /></div>
-			<div><Label>Phone</Label><Input name="phone" value={customerSearch} /></div>
-			<Button type="submit" class="w-full" disabled={loading}>Add Customer</Button>
-		</form></Dialog.Content
+		{#if isNative}
+			<div class="space-y-4">
+				<div><Label>Name</Label><Input id="new-customer-name" required /></div>
+				<div><Label>Phone</Label><Input id="new-customer-phone" value={customerSearch} /></div>
+				<Button onclick={handleLocalAddCustomer} class="w-full" disabled={loading}
+					>{#if loading}<Loader2 class="mr-2 h-4 w-4 animate-spin" />{/if}Add Customer (Offline)</Button
+				>
+			</div>
+		{:else}
+			<form
+				method="POST"
+				action="?/addCustomer"
+				use:enhance={() => {
+					loading = true;
+					return async ({ update }) => {
+						loading = false;
+						await update();
+					};
+				}}
+				class="space-y-4"
+			>
+				<div><Label>Name</Label><Input name="name" required /></div>
+				<div><Label>Phone</Label><Input name="phone" value={customerSearch} /></div>
+				<Button type="submit" class="w-full" disabled={loading}>Add Customer</Button>
+			</form>
+		{/if}</Dialog.Content
 	>
 </Dialog.Root>
 

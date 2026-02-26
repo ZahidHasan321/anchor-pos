@@ -11,11 +11,7 @@
 		Eye,
 		EyeOff,
 		UserPlus,
-		ShieldAlert,
 		KeyRound,
-		Store,
-		Users,
-		ClipboardList,
 		ExternalLink,
 		Camera
 	} from '@lucide/svelte';
@@ -26,13 +22,6 @@
 	import { roleLabels } from '$lib/utils';
 
 	let { data, form } = $props();
-
-	const navItems = [
-		{ label: 'Store Settings', href: '/settings', icon: Store },
-		{ label: 'User Management', href: '/settings/users', icon: Users },
-		{ label: 'Role Permissions', href: '/settings/permissions', icon: ShieldAlert },
-		{ label: 'Audit Log', href: '/settings/audit', icon: ClipboardList }
-	];
 
 	let showPassword = $state(false);
 	let isCreateDialogOpen = $state(false);
@@ -51,28 +40,7 @@
 	});
 </script>
 
-<div class="space-y-6 p-3 sm:p-6">
-	<div>
-		<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
-		<p class="text-sm text-muted-foreground sm:text-base">
-			Configure your store and manage system settings.
-		</p>
-	</div>
-
-	<!-- Settings Navigation Tabs -->
-	<div class="flex flex-wrap gap-2 border-b pb-4">
-		{#each navItems as item}
-			<Button
-				variant={page.url.pathname === item.href ? 'default' : 'ghost'}
-				href={item.href}
-				class="h-9 flex-1 cursor-pointer px-3 text-xs sm:flex-none sm:text-sm"
-			>
-				<item.icon class="mr-2 h-4 w-4" />
-				{item.label}
-			</Button>
-		{/each}
-	</div>
-
+<div class="space-y-6">
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<h2 class="text-xl font-bold tracking-tight">User Management</h2>
 		<Button onclick={() => (isCreateDialogOpen = true)} class="cursor-pointer">

@@ -26,7 +26,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		streamed: (async () => {
 			const settingsRows = await db.select().from(storeSettings);
 			const settings = settingsRows.reduce(
-				(acc, row) => {
+				(acc: Record<string, string>, row: { key: string; value: string }) => {
 					acc[row.key] = row.value;
 					return acc;
 				},
@@ -93,7 +93,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 					.offset(offset)
 			]);
 
-			const productIds = productList.map((p) => p.id);
+			const productIds = productList.map((p: any) => p.id);
 			let variants: any[] = [];
 			if (productIds.length > 0) {
 				variants = await db
@@ -101,7 +101,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 					.from(productVariants)
 					.where(
 						sql`${productVariants.productId} IN (${sql.join(
-							productIds.map((id) => sql`${id}`),
+							productIds.map((id: string) => sql`${id}`),
 							sql`, `
 						)})`
 					);
@@ -122,8 +122,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 					outOfStockVariants: 0,
 					totalInventoryValue: 0
 				},
-				categories: categoryRows.map((c) => c.category).sort(),
-				products: productList.map((p) => ({ ...p, variants: variantsByProduct.get(p.id) ?? [] })),
+				categories: categoryRows.map((c: any) => c.category).sort(),
+				products: productList.map((p: any) => ({ ...p, variants: variantsByProduct.get(p.id) ?? [] })),
 				total: countResult[0]?.count ?? 0,
 				totalPages: Math.ceil((countResult[0]?.count ?? 0) / perPage),
 				currentPage

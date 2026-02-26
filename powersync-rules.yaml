@@ -1,0 +1,19 @@
+bucket_definitions:
+  # Global bucket for everyone (products, categories, etc.)
+  global:
+    data_queries:
+      - SELECT * FROM products
+      - SELECT * FROM product_variants
+      - SELECT * FROM store_settings
+      - SELECT * FROM role_permissions
+      - SELECT * FROM users
+  
+  # Shop-specific data (Orders, Customers, Cashbook)
+  # For now, we sync all since it's a single shop POS
+  shop_data:
+    data_queries:
+      - SELECT * FROM customers
+      - SELECT * FROM orders
+      - SELECT * FROM order_items
+      - SELECT * FROM stock_logs
+      - SELECT * FROM cashbook

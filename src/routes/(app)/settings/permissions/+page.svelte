@@ -2,19 +2,12 @@
 	import { enhance } from '$app/forms';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
-	import { Store, Users, ClipboardList, ShieldAlert, Save, Loader2 } from '@lucide/svelte';
+	import { Save, Loader2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { page } from '$app/state';
 	import { roleLabels } from '$lib/utils';
 
 	let { data, form } = $props();
-
-	const navItems = [
-		{ label: 'Store Settings', href: '/settings', icon: Store },
-		{ label: 'User Management', href: '/settings/users', icon: Users },
-		{ label: 'Role Permissions', href: '/settings/permissions', icon: ShieldAlert },
-		{ label: 'Audit Log', href: '/settings/audit', icon: ClipboardList }
-	];
 
 	const resourceLabels: Record<string, string> = {
 		dashboard: 'Dashboard',
@@ -59,27 +52,7 @@
 	}
 </script>
 
-<div class="space-y-6 p-3 sm:p-6">
-	<div>
-		<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
-		<p class="text-sm text-muted-foreground sm:text-base">
-			Configure your store and manage system settings.
-		</p>
-	</div>
-
-	<div class="flex flex-wrap gap-2 border-b pb-4">
-		{#each navItems as item}
-			<Button
-				variant={page.url.pathname === item.href ? 'default' : 'ghost'}
-				href={item.href}
-				class="h-9 flex-1 cursor-pointer px-3 text-xs sm:flex-none sm:text-sm"
-			>
-				<item.icon class="mr-2 h-4 w-4" />
-				{item.label}
-			</Button>
-		{/each}
-	</div>
-
+<div class="space-y-6">
 	<div>
 		<h2 class="text-xl font-bold tracking-tight">Role Permissions</h2>
 		<p class="text-sm text-muted-foreground">

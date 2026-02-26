@@ -437,7 +437,7 @@
 					{@const paymentMap = new Map(reports.paymentBreakdown.map((p: any) => [p.method, p]))}
 					{@const totalSales = summaries.salesSummary.total}
 					{#each ['cash', 'card', 'split'] as method}
-						{@const mData = paymentMap.get(method)}
+						{@const mData = paymentMap.get(method) as any}
 						{#if mData}
 							<div class="space-y-1.5">
 								<div class="flex items-center justify-between text-xs sm:text-sm">

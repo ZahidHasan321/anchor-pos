@@ -46,7 +46,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			]);
 
 			const settings = settingsRows.reduce(
-				(acc, row) => {
+				(acc: Record<string, string>, row: { key: string; value: string }) => {
 					acc[row.key] = row.value;
 					return acc;
 				},
@@ -56,13 +56,32 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			return {
 				products: variantsData.items,
 				hasMore: variantsData.hasMore,
-				categories: ['All', ...categoryRows.map((r) => r.category).sort()],
+				categories: ['All', ...categoryRows.map((r: { category: string }) => r.category).sort()],
 				customers: recentCustomers,
 				storeSettings: settings
 			};
 		})()
 	};
 };
+
+interface CartItem {
+	variantId: string;
+	quantity: number;
+	price: number;
+	productName: string;
+	size: string;
+	color: string | null;
+	discount: number;
+}
+
+interface DBVariant {
+	id: string;
+	price: number;
+	productName: string;
+	size: string;
+	color: string | null;
+	stockQuantity: number;
+}
 
 export const actions: Actions = {
 	checkout: async ({ request, locals }) => {
@@ -78,7 +97,7 @@ export const actions: Actions = {
 			Math.max(0, parseFloat(data.get('globalDiscount') as string) || 0)
 		);
 
-		let cartItems: any[] = [];
+		let cartItems: CartItem[] = [];
 		try {
 			cartItems = JSON.parse(cartItemsRaw);
 		} catch (e) {
@@ -92,10 +111,10 @@ export const actions: Actions = {
 		// Precision helper for financial rounding
 		const round2 = (val: number) => Math.round((val + Number.EPSILON) * 100) / 100;
 
-		const variantIds = cartItems.map((item) => item.variantId);
+		const variantIds = cartItems.map((item: CartItem) => item.variantId);
 
 		try {
-			const result = await db.transaction(async (tx) => {
+			const result = await db.transaction(async (tx: any) => {
 				// 1. Fetch & Lock variants for stock integrity
 				const dbVariants = await tx
 					.select({
@@ -111,7 +130,7 @@ export const actions: Actions = {
 					.where(inArray(productVariants.id, variantIds))
 					.for('update', { of: productVariants }); // PostgreSQL row-level locking for variants only
 
-				const dbVariantsMap = new Map(dbVariants.map((v) => [v.id, v]));
+				const dbVariantsMap = new Map(dbVariants.map((v: DBVariant) => [v.id, v]));
 
 				const orderId = generateId();
 				let subtotal = 0;
@@ -119,7 +138,7 @@ export const actions: Actions = {
 
 				// Validate Cart Items
 				for (const item of cartItems) {
-					const dbVariant = dbVariantsMap.get(item.variantId);
+					const dbVariant = dbVariantsMap.get(item.variantId) as DBVariant;
 					if (!dbVariant) throw new Error(`Product variant not found: ${item.variantId}`);
 					if (dbVariant.stockQuantity < item.quantity) {
 						throw new Error(`Insufficient stock for ${dbVariant.productName}.`);
@@ -144,16 +163,9 @@ export const actions: Actions = {
 
 				const changeGiven = round2(Math.max(0, cashReceived - totalAmount));
 
-				// 2. Generate sequential order number safely
-				const lastOrder = await tx
-					.select({ maxNum: sql<number>`max(${orders.orderNumber})` })
-					.from(orders);
-				const nextOrderNumber = (lastOrder[0]?.maxNum ?? 1000) + 1;
-
 				// 3. Create order
 				await tx.insert(orders).values({
 					id: orderId,
-					orderNumber: nextOrderNumber,
 					customerId,
 					userId: locals.user!.id,
 					totalAmount,
@@ -196,11 +208,11 @@ export const actions: Actions = {
 					id: generateId(),
 					amount: totalAmount,
 					type: 'in',
-					description: `Sale #${nextOrderNumber}`,
+					description: `Sale ${orderId.slice(0, 8).toUpperCase()}`,
 					userId: locals.user!.id
 				});
 
-				return { orderId, orderNumber: nextOrderNumber, changeGiven };
+				return { orderId, orderNumber: orderId.slice(0, 8).toUpperCase(), changeGiven };
 			});
 
 			await logAuditEvent({
@@ -209,7 +221,7 @@ export const actions: Actions = {
 				action: 'CREATE_ORDER',
 				entity: 'orders',
 				entityId: result.orderId,
-				details: `POS Sale #${result.orderNumber} for ${result.orderId}`
+				details: `POS Sale ${result.orderNumber} for ${result.orderId}`
 			});
 
 			return { success: true, ...result };

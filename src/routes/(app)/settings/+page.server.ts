@@ -11,7 +11,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	const rows = await db.select().from(storeSettings);
 	const settings = rows.reduce(
-		(acc, row) => {
+		(acc: Record<string, string>, row: { key: string; value: string }) => {
 			acc[row.key] = row.value;
 			return acc;
 		},
@@ -48,7 +48,7 @@ export const actions: Actions = {
 		];
 
 		try {
-			await db.transaction(async (tx) => {
+			await db.transaction(async (tx: any) => {
 				for (const key of keys) {
 					const value = (data.get(key) as string)?.trim() || '';
 					await tx

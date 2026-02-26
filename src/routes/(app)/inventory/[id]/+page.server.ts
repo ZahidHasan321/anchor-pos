@@ -61,7 +61,7 @@ export const actions: Actions = {
 		if (amount === 0) return { stockSuccess: true };
 
 		try {
-			await db.transaction(async (tx) => {
+			await db.transaction(async (tx: any) => {
 				// Update stock to absolute value
 				await tx
 					.update(productVariants)
@@ -123,7 +123,7 @@ export const actions: Actions = {
 		const catPrefix = product.category.substring(0, 3).toUpperCase();
 
 		try {
-			await db.transaction(async (tx) => {
+			await db.transaction(async (tx: any) => {
 				for (const size of sizes) {
 					const variantId = generateId();
 					const barcode = `${catPrefix}-${shortId}-${size}`;

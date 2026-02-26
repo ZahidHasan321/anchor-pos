@@ -12,16 +12,23 @@ if (dev) {
     console.log(`[DB] Initializing in dev mode...`);
 }
 
-// Use a more unique key for the global client
-const client = (globalThis as any).__POS_DB_CLIENT__ || postgres(connectionString, { 
-    prepare: false,
-    // Add a small idle timeout even in dev to help with HMR connection accumulation
-    idle_timeout: 10
-});
+// Only initialize if we have a connection string
+let dbInstance: any = null;
+let client: any = null;
 
-if (dev) {
-    (globalThis as any).__POS_DB_CLIENT__ = client;
+if (connectionString) {
+    client = (globalThis as any).__POS_DB_CLIENT__ || postgres(connectionString, { 
+        prepare: false,
+        idle_timeout: 10
+    });
+
+    if (dev) {
+        (globalThis as any).__POS_DB_CLIENT__ = client;
+    }
+    dbInstance = drizzle(client, { schema });
+} else {
+    console.warn('[DB] No DATABASE_URL found. Running in offline-only mode.');
 }
 
-export const db = drizzle(client, { schema });
+export const db = dbInstance;
 

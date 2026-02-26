@@ -100,7 +100,27 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	// 2. Security Headers (Industry Standard)
+	// Handle CORS for Electron (Hybrid Sync)
+	const origin = event.request.headers.get('origin');
+	const isLocalOrigin = origin && (origin.startsWith('http://localhost') || origin.startsWith('app://'));
+
+	if (event.request.method === 'OPTIONS' && isLocalOrigin) {
+		return new Response(null, {
+			headers: {
+				'Access-Control-Allow-Origin': origin,
+				'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+				'Access-Control-Allow-Headers': 'Content-Type, x-app-secret',
+				'Access-Control-Allow-Credentials': 'true'
+			}
+		});
+	}
+
 	const response = await resolve(event);
+
+	if (isLocalOrigin) {
+		response.headers.set('Access-Control-Allow-Origin', origin);
+		response.headers.set('Access-Control-Allow-Credentials', 'true');
+	}
 
 	// Content Security Policy (Strict for Internal App)
 	// We allow 'unsafe-inline' for styles because many Svelte components and Tailwind need it

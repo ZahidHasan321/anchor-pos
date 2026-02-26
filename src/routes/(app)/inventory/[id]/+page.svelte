@@ -69,7 +69,7 @@
 		variantSelectedSizes = [];
 	});
 
-	const existingSizes = $derived(data.variants.map((v) => v.size));
+	const existingSizes = $derived(data.variants.map((v: any) => v.size));
 	const availableSizes = $derived(
 		SIZE_TEMPLATES[variantTemplate as keyof typeof SIZE_TEMPLATES].filter(
 			(s) => !existingSizes.includes(s)
@@ -139,12 +139,12 @@
 		}
 	});
 
-	const totalStock = $derived(data.variants.reduce((sum, v) => sum + v.stockQuantity, 0));
-	const healthyCount = $derived(data.variants.filter((v) => v.stockQuantity > 5).length);
+	const totalStock = $derived(data.variants.reduce((sum: number, v: any) => sum + v.stockQuantity, 0));
+	const healthyCount = $derived(data.variants.filter((v: any) => v.stockQuantity > 5).length);
 	const lowCount = $derived(
-		data.variants.filter((v) => v.stockQuantity > 0 && v.stockQuantity <= 5).length
+		data.variants.filter((v: any) => v.stockQuantity > 0 && v.stockQuantity <= 5).length
 	);
-	const outCount = $derived(data.variants.filter((v) => v.stockQuantity === 0).length);
+	const outCount = $derived(data.variants.filter((v: any) => v.stockQuantity === 0).length);
 
 	function stockChipClass(qty: number): string {
 		if (qty === 0)
@@ -475,7 +475,7 @@
 <!-- Update Stock Dialog -->
 <Dialog.Root bind:open={stockDialogOpen}>
 	<Dialog.Content>
-		{@const selectedVariant = data.variants.find((v) => v.id === selectedVariantId)}
+		{@const selectedVariant = data.variants.find((v: any) => v.id === selectedVariantId)}
 		<Dialog.Header>
 			<Dialog.Title>Update Stock: {selectedVariant?.size}</Dialog.Title>
 			<Dialog.Description>Set the new stock level for this variant.</Dialog.Description>

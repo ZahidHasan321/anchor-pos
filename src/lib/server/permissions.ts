@@ -12,7 +12,7 @@ export async function getUserPermissions(role: string): Promise<string[]> {
 			.from(rolePermissions)
 			.where(eq(rolePermissions.role, role));
 
-		return results.map((r) => r.resource);
+		return results.map((r: { resource: string }) => r.resource);
 	} catch {
 		// Table may not exist yet — fall back to empty permissions
 		return [];

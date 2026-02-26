@@ -224,7 +224,9 @@
 								class="cursor-pointer hover:bg-muted/50"
 								onclick={() => goto(`/orders/${order.id}`)}
 							>
-								<Table.Cell class="font-bold">#{order.orderNumber}</Table.Cell>
+								<Table.Cell class="font-bold">
+									#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
+								</Table.Cell>
 								<Table.Cell
 									><div class="flex flex-col">
 										<span class="text-sm">{formatDate(order.createdAt)}</span><span

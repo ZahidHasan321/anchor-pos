@@ -19,10 +19,16 @@
 	} from '@lucide/svelte';
 	import { fade, slide } from 'svelte/transition';
 	import { setMode, resetMode } from 'mode-watcher';
+	import { browser } from '$app/environment';
+	import { goto } from '$app/navigation';
+	import { APP_NAME } from '$lib/constants';
 
 	let { form } = $props();
 	let loading = $state(false);
 	let showPassword = $state(false);
+
+	const isNative = $derived(browser && (window as any).electron);
+	const actionUrl = $derived(isNative ? 'https://anchorshop.cloud/login' : '');
 
 	function setTheme(theme: 'light' | 'dark' | 'system') {
 		if (theme === 'system') resetMode();
@@ -31,7 +37,7 @@
 </script>
 
 <svelte:head>
-	<title>Login — Anchor</title>
+	<title>Login — {APP_NAME}</title>
 </svelte:head>
 
 <div class="relative flex min-h-screen items-center justify-center bg-muted/30 p-4">
@@ -79,9 +85,9 @@
 			<div
 				class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-2xl font-black text-primary-foreground italic shadow-xl shadow-primary/20"
 			>
-				A
+				{APP_NAME.charAt(0)}
 			</div>
-			<h1 class="text-3xl font-black tracking-tighter text-primary uppercase italic">Anchor</h1>
+			<h1 class="text-3xl font-black tracking-tighter text-primary uppercase italic">{APP_NAME}</h1>
 			<p class="text-sm font-medium text-muted-foreground">Clothing POS System</p>
 		</div>
 
@@ -95,10 +101,18 @@
 			<Card.Content>
 				<form
 					method="POST"
+					action={actionUrl}
 					use:enhance={() => {
 						loading = true;
-						return async ({ update }) => {
+						return async ({ result, update }) => {
 							loading = false;
+							
+							// Special handling for JSON redirect (Native App)
+							if (result.type === 'success' && result.data?.redirect) {
+								goto(result.data.redirect as string);
+								return;
+							}
+							
 							await update();
 						};
 					}}
@@ -189,7 +203,7 @@
 		</Card.Root>
 
 		<p class="text-center text-xs text-muted-foreground">
-			&copy; {new Date().getFullYear()} Anchor Clothing. All rights reserved.
+			&copy; {new Date().getFullYear()} {APP_NAME}. All rights reserved.
 		</p>
 	</div>
 </div>

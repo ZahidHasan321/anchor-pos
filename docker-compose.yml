@@ -3,17 +3,41 @@ services:
     image: postgres:17-alpine
     container_name: pos_db
     restart: always
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf -c shared_buffers=256MB -c max_connections=100
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pos_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password}
       POSTGRES_DB: ${POSTGRES_DB:-clothing_pos}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres.conf:/etc/postgresql/postgresql.conf
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pos_user} -d ${POSTGRES_DB:-clothing_pos}"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  powersync:
+    image: journeyapps/powersync-service:latest
+    container_name: pos_powersync
+    restart: always
+    environment:
+      POWERSYNC_DATABASE_URL: postgres://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD:-secure_password}@db:5432/${POSTGRES_DB:-clothing_pos}
+      POWERSYNC_JWKS_URL: http://app:3000/.well-known/jwks.json
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./powersync.yaml:/etc/powersync/powersync.yaml
+      - ./powersync-rules.yaml:/etc/powersync/powersync-rules.yaml
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
 
   app:
     build: .
@@ -43,6 +67,7 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./ssl/cloudflare:/etc/nginx/ssl
+      - ./downloads:/var/www/downloads
     depends_on:
       - app
 

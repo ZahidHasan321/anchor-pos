@@ -63,7 +63,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		stockAlerts: (async () => {
 			const settingsRows = await db.select().from(storeSettings);
 			const settings = settingsRows.reduce(
-				(acc, row) => {
+				(acc: Record<string, string>, row: { key: string; value: string }) => {
 					acc[row.key] = row.value;
 					return acc;
 				},
@@ -119,7 +119,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				.orderBy(sql`total_qty DESC`)
 				.limit(10);
 
-			return topProductsRaw.map((p) => ({
+			return topProductsRaw.map((p: any) => ({
 				...p,
 				totalQty: p.total_qty,
 				totalRevenue: p.total_revenue

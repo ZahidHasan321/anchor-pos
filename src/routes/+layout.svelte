@@ -6,6 +6,8 @@
 	import ConfirmDialog from '$lib/components/ui/confirm-dialog.svelte';
 	import { ModeWatcher } from 'mode-watcher';
 	import { globalSettings } from '$lib/settings.svelte';
+	import { powersync } from '$lib/powersync';
+	import { browser } from '$app/environment';
 
 	let props = $props();
 
@@ -19,6 +21,13 @@
 	}
 
 	$effect(() => {
+		if (browser && (window as any).electron) {
+			powersync.init().then(() => {
+				if (props.data.user) {
+					powersync.connect();
+				}
+			});
+		}
 		if (props.data.storeSettings) {
 			globalSettings.update(
 				props.data.storeSettings.store_locale,

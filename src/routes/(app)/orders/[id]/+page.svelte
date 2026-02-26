@@ -25,11 +25,11 @@
 		const o = data.order;
 		printReceipt({
 			storeSettings: data.storeSettings,
-			orderId: '#' + o.orderNumber,
+			orderId: '#' + (o.orderNumber ?? o.id.slice(0, 8).toUpperCase()),
 			orderUuid: o.id, // We'll pass both to printReceipt
 			date: formatDateTime(o.createdAt),
 			cashier: o.userName ?? '',
-			items: data.items.map((item) => ({
+			items: data.items.map((item: any) => ({
 				name: item.productName,
 				variant: item.variantLabel,
 				qty: item.quantity,
@@ -45,7 +45,7 @@
 </script>
 
 <svelte:head>
-	<title>Order #{data.order.orderNumber} — Clothing POS</title>
+	<title>Order #{data.order.orderNumber ?? data.order.id.slice(0, 8).toUpperCase()} — Clothing POS</title>
 </svelte:head>
 
 <div class="space-y-6 p-6">
@@ -55,7 +55,7 @@
 				<ArrowLeft class="h-4 w-4" />
 			</Button>
 			<div>
-				<h1 class="text-3xl font-bold tracking-tight">Order #{data.order.orderNumber}</h1>
+				<h1 class="text-3xl font-bold tracking-tight">Order #{data.order.orderNumber ?? data.order.id.slice(0, 8).toUpperCase()}</h1>
 			</div>
 		</div>
 		<div class="flex gap-2">

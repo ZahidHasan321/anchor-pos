@@ -10,7 +10,7 @@ const config = {
 		// Use node adapter for Docker/VPS, auto for Vercel/Others
 		adapter: isNode ? adapterNode({ out: 'build', precompress: true }) : adapterAuto(),
 		csrf: {
-			trustedOrigins: ['*']
+			checkOrigin: false // Disable origin check to allow Electron app to communicate
 		},
 		alias: {
 			'@/*': './src/lib/*'

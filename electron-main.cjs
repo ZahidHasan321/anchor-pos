@@ -1,5 +1,12 @@
 
-const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog, powerSaveBlocker, session } = require('electron');
+const { autoUpdater } = require('electron-updater');
+
+// Custom User Agent to hide Electron and look like a standard browser
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+// Secret header to bypass Cloudflare WAF (Make sure to add this to your Cloudflare Custom Rules)
+const APP_SECRET_HEADER = process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026';
+
 const path = require('path');
 const fs = require('fs');
 const portfinder = require('portfinder');
@@ -38,7 +45,7 @@ log.info('App starting...');
 async function runMigrations() {
     const dbUrl = process.env.DATABASE_URL;
     if (!dbUrl) {
-        log.warn('DATABASE_URL not set, skipping migrations');
+        log.info('DATABASE_URL not set, skipping Postgres migrations (Native Client Mode)');
         return;
     }
 
@@ -145,8 +152,8 @@ async function createWindow() {
     Menu.setApplicationMenu(null);
 
     const iconPath = app.isPackaged
-        ? path.join(process.resourcesPath, 'app.asar', 'static', 'favicon.png')
-        : path.join(__dirname, 'static', 'favicon.png');
+        ? path.join(process.resourcesPath, 'resources', 'icon.png')
+        : path.join(__dirname, 'resources', 'icon.png');
 
     const state = loadWindowState();
 
@@ -155,15 +162,22 @@ async function createWindow() {
         y: state.y,
         width: state.width,
         height: state.height,
-        title: "Anchor POS",
+        title: "Auto POS",
         show: false, // Don't show until ready
         backgroundColor: '#ffffff',
         icon: iconPath,
+        userAgent: USER_AGENT,
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             nodeIntegration: false,
             contextIsolation: true
         }
+    });
+
+    // Inject Secret Handshake Header into all outgoing requests to bypass Cloudflare challenges
+    session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+        details.requestHeaders['x-app-secret'] = APP_SECRET_HEADER;
+        callback({ cancel: false, requestHeaders: details.requestHeaders });
     });
 
     // Save window state on change
@@ -337,6 +351,23 @@ if (!gotTheLock) {
     app.on('ready', async () => {
         preventSleep();
         await runMigrations();
+        
+        // --- Auto-Updater Logic ---
+        if (app.isPackaged) {
+            autoUpdater.checkForUpdatesAndNotify();
+            
+            autoUpdater.on('update-downloaded', () => {
+                dialog.showMessageBox({
+                    type: 'info',
+                    title: 'Update Ready',
+                    message: 'A new version has been downloaded. Restart the app to apply the update.',
+                    buttons: ['Restart', 'Later']
+                }).then((result) => {
+                    if (result.response === 0) autoUpdater.quitAndInstall();
+                });
+            });
+        }
+
         createSplashWindow();
         createWindow();
     });

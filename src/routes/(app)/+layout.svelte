@@ -31,6 +31,7 @@
 	import { roleLabels } from '$lib/utils';
 	import { fade } from 'svelte/transition';
 	import { untrack } from 'svelte';
+	import { APP_NAME } from '$lib/constants';
 
 	let { data, children } = $props();
 	let isMobileMenuOpen = $state(false);
@@ -140,7 +141,7 @@
 					<span
 						in:fade={{ delay: 150, duration: 150 }}
 						class="text-xl font-black tracking-tighter whitespace-nowrap text-primary uppercase italic"
-						>Anchor</span
+						>{APP_NAME}</span
 					>
 				{/if}
 			</div>
@@ -347,22 +348,16 @@
 			</Sheet.Content>
 		</Sheet.Root>
 		<span class="ml-3 text-sm font-black tracking-tighter text-primary uppercase italic"
-			>Anchor</span
+			>{APP_NAME}</span
 		>
 	</div>
 
 	<!-- Main Content Area -->
 	<div class="flex min-w-0 flex-1 flex-col pt-12 md:pt-0" data-sveltekit-preload-data="hover">
 		<main class="grid flex-1 overflow-hidden bg-background">
-			{#key $page.url.pathname}
-				<div
-					class="col-start-1 row-start-1 flex flex-col overflow-y-auto bg-background w-full h-full"
-					in:fade={{ duration: 150 }}
-					out:fade={{ duration: 150 }}
-				>
-					{@render children()}
-				</div>
-			{/key}
+			<div class="col-start-1 row-start-1 flex flex-col overflow-y-auto bg-background w-full h-full">
+				{@render children()}
+			</div>
 		</main>
 	</div>
 </div>

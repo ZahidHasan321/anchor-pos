@@ -66,7 +66,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 	const settingsRows = await db.select().from(storeSettings);
 	const settings = settingsRows.reduce(
-		(acc, row) => {
+		(acc: Record<string, string>, row: { key: string; value: string }) => {
 			acc[row.key] = row.value;
 			return acc;
 		},
@@ -103,7 +103,7 @@ export const actions: Actions = {
 
 			const itemTotal = item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100);
 
-			await db.transaction(async (tx) => {
+			await db.transaction(async (tx: any) => {
 				// 1. Update item status
 				await tx.update(orderItems).set({ status: 'refunded' }).where(eq(orderItems.id, itemId));
 

@@ -23,7 +23,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	// 1. Critical data needed for initial render (Immediate)
 	const settingsRows = await db.select().from(storeSettings);
 	const settings = settingsRows.reduce(
-		(acc, row) => {
+		(acc: Record<string, string>, row: { key: string; value: string }) => {
 			acc[row.key] = row.value;
 			return acc;
 		},
@@ -153,7 +153,9 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				count: sql<number>`count(*)`.as('count')
 			}).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(sql`date`).orderBy(sql`date`);
 
-			const salesByDate = new Map(chartDataRaw.map((d) => [d.date, { amount: d.total, count: d.count }]));
+			const salesByDate = new Map<string, { amount: number; count: number }>(
+				chartDataRaw.map((d: any) => [d.date, { amount: d.total, count: d.count }])
+			);
 			const chartData: { date: string; fullDate: string; amount: number; count: number }[] = [];
 			const currentDate = new Date(startDate);
 			currentDate.setMinutes(0, 0, 0);
@@ -200,10 +202,10 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			]);
 
 			return {
-				topProducts: topProductsRaw.map(p => ({ ...p, totalQty: p.total_qty, totalRevenue: p.total_revenue })),
-				categoryBreakdown: categoryBreakdownRaw.map(c => ({ ...c, totalQty: c.total_qty, totalRevenue: c.total_revenue })),
-				cashierPerformance: cashierPerformanceRaw.map(c => ({ ...c, orderCount: c.order_count, totalSales: c.total_sales, avgOrder: c.avg_order })),
-				topCustomers: topCustomersRaw.map(c => ({ ...c, orderCount: c.order_count, totalSpent: c.total_spent })),
+				topProducts: topProductsRaw.map((p: any) => ({ ...p, totalQty: p.total_qty, totalRevenue: p.total_revenue })),
+				categoryBreakdown: categoryBreakdownRaw.map((c: any) => ({ ...c, totalQty: c.total_qty, totalRevenue: c.total_revenue })),
+				cashierPerformance: cashierPerformanceRaw.map((c: any) => ({ ...c, orderCount: c.order_count, totalSales: c.total_sales, avgOrder: c.avg_order })),
+				topCustomers: topCustomersRaw.map((c: any) => ({ ...c, orderCount: c.order_count, totalSpent: c.total_spent })),
 				paymentBreakdown,
 				refundSummary,
 				expenseBreakdown,

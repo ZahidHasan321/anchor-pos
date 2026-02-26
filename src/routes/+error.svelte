@@ -3,6 +3,7 @@
     import { Button } from '$lib/components/ui/button';
     import { AlertCircle, RefreshCw, Home, ServerCrash } from '@lucide/svelte';
     import { browser } from '$app/environment';
+    import { APP_NAME } from '$lib/constants';
 
     const status = $derived($page.status);
     const message = $derived($page.error?.message || 'An unexpected error occurred');
@@ -49,6 +50,6 @@
     </div>
 
     <div class="mt-12 text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-30">
-        Anchor POS Native Engine
+        {APP_NAME} Native Engine
     </div>
 </div>

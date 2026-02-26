@@ -8,6 +8,15 @@ export default defineConfig({
 	ssr: {
 		noExternal: ['chart.js', 'postgres', 'drizzle-orm']
 	},
+	optimizeDeps: {
+		exclude: ['@powersync/web', '@journeyapps/wa-sqlite']
+	},
+	worker: {
+		format: 'es'
+	},
+	build: {
+		chunkSizeWarningLimit: 1000
+	},
 	server: {
 		allowedHosts: true
 	}

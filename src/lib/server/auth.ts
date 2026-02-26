@@ -129,8 +129,8 @@ export async function invalidateSession(sessionId: string): Promise<void> {
 export function setSessionTokenCookie(event: RequestEvent, token: string, expiresAt: Date): void {
 	event.cookies.set('session', token, {
 		httpOnly: true,
-		sameSite: 'lax',
-		secure: !dev,
+		sameSite: 'none', // Allow cross-origin for Electron
+		secure: true,     // Required for sameSite: 'none'
 		expires: expiresAt,
 		path: '/'
 	});

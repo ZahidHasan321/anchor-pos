@@ -17,9 +17,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, '/inventory');
 	}
 
-	const categoryRows = await db.selectDistinct({ category: products.category }).from(products);
-
-	const categories = categoryRows.map((r) => r.category);
+		const categoryRows = await db.selectDistinct({ category: products.category }).from(products);
+		const categories = categoryRows.map((r: { category: string }) => r.category);
 
 	return { product, categories: categories.sort() };
 };
@@ -36,12 +35,10 @@ export const actions: Actions = {
 		const templatePrice = parseFloat(data.get('templatePrice') as string);
 
 		// Normalize category by finding existing case-insensitive match
-		const catRows = await db.selectDistinct({ category: products.category }).from(products);
-
-		const existingCategories = catRows.map((r) => r.category);
-
-		const normalizedCategory =
-			existingCategories.find((c) => c.toLowerCase() === category?.toLowerCase()) || category;
+				const catRows = await db.selectDistinct({ category: products.category }).from(products);
+				const existingCategories = catRows.map((r: { category: string }) => r.category);
+				const normalizedCategory =
+					existingCategories.find((c: string) => c.toLowerCase() === category?.toLowerCase()) || category;
 
 		const defaultDiscount = parseFloat(data.get('defaultDiscount') as string) || 0;
 		const description = (data.get('description') as string)?.trim() || null;

@@ -62,6 +62,14 @@ export const actions: Actions = {
 			details: `User logged in: ${user.username}`
 		});
 
-		redirect(302, await getDefaultRedirect(user.role));
+		const redirectUrl = await getDefaultRedirect(user.role);
+
+		// If it's a cross-origin request (Electron), return JSON instead of 302
+		const origin = event.request.headers.get('origin');
+		if (origin && (origin.startsWith('http://localhost') || origin.startsWith('app://'))) {
+			return { success: true, redirect: redirectUrl };
+		}
+
+		redirect(302, redirectUrl);
 	}
 };

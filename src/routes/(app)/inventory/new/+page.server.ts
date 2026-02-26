@@ -10,9 +10,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
 		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
-	const rows = await db.selectDistinct({ category: products.category }).from(products);
-
-	const categories = rows.map((r) => r.category);
+		const rows = await db.selectDistinct({ category: products.category }).from(products);
+		const categories = rows.map((r: { category: string }) => r.category);
 
 	return { categories: categories.sort() };
 };
@@ -50,15 +49,15 @@ export const actions: Actions = {
 		// Normalize category by finding existing case-insensitive match
 		const catRows = await db.selectDistinct({ category: products.category }).from(products);
 
-		const existingCategories = catRows.map((r) => r.category);
+		const existingCategories = catRows.map((r: { category: string }) => r.category);
 
 		const normalizedCategory =
-			existingCategories.find((c) => c.toLowerCase() === category.toLowerCase()) || category;
+			existingCategories.find((c: string) => c.toLowerCase() === category.toLowerCase()) || category;
 
 		const catPrefix = normalizedCategory.substring(0, 3).toUpperCase();
 
 		try {
-			await db.transaction(async (tx) => {
+			await db.transaction(async (tx: any) => {
 				await tx.insert(products).values({
 					id: productId,
 					name,

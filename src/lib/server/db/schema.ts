@@ -104,7 +104,7 @@ export const orders = pgTable(
 	'orders',
 	{
 		id: text('id').primaryKey(),
-		orderNumber: integer('order_number').notNull().unique().default(0), // Human readable ID (e.g. 1001)
+		orderNumber: integer('order_number'), // Human readable ID (e.g. 1001), optional and not unique to avoid sync conflicts
 		customerId: text('customer_id').references(() => customers.id),
 		userId: text('user_id').references(() => users.id), // Cashier
 		totalAmount: doublePrecision('total_amount').notNull(),
