@@ -9,8 +9,8 @@ async function bootstrap() {
 	const password = process.env.ADMIN_PASSWORD;
 
 	if (!password) {
-		console.error('Error: ADMIN_PASSWORD environment variable is required');
-		process.exit(1);
+		console.log('Skipping bootstrap: ADMIN_PASSWORD not set in environment.');
+		process.exit(0);
 	}
 
 	console.log(`Checking for existing user: ${username}...`);

@@ -44,5 +44,10 @@ echo "Running database migrations..."
 sleep 10
 docker compose exec app pnpm db:push
 
+# 6. Bootstrap Admin if credentials exist in .env
+if grep -q "ADMIN_PASSWORD" .env; then
+    echo "Bootstrapping admin user..."
+    docker compose exec app pnpm db:bootstrap
+fi
+
 echo "--- Deployment Complete ---"
-echo "Note: Ensure your Cloudflare SSL cert and key are in 'ssl/cloudflare/'"

@@ -10,7 +10,7 @@ RUN npm install -g pnpm
 COPY pnpm-lock.yaml package.json ./
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Copy project files
 COPY . .
@@ -24,7 +24,7 @@ FROM node:25-slim
 
 WORKDIR /app
 
-# Install pnpm (needed for migrations if run inside container)
+# Install pnpm
 RUN npm install -g pnpm
 
 # Copy build output and dependencies
@@ -34,6 +34,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/scripts ./scripts
 
 # Set environment variables
 ENV NODE_ENV=production
