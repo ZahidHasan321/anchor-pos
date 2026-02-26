@@ -4,18 +4,72 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as Card from '$lib/components/ui/card';
-	import { Lock, User, Loader2, AlertCircle, ShieldCheck } from '@lucide/svelte';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import {
+		Lock,
+		User,
+		Loader2,
+		AlertCircle,
+		ShieldCheck,
+		Eye,
+		EyeOff,
+		Sun,
+		Moon,
+		Monitor
+	} from '@lucide/svelte';
 	import { fade, slide } from 'svelte/transition';
+	import { setMode, resetMode } from 'mode-watcher';
 
 	let { form } = $props();
 	let loading = $state(false);
+	let showPassword = $state(false);
+
+	function setTheme(theme: 'light' | 'dark' | 'system') {
+		if (theme === 'system') resetMode();
+		else setMode(theme);
+	}
 </script>
 
 <svelte:head>
 	<title>Login — Anchor</title>
 </svelte:head>
 
-<div class="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+<div class="relative flex min-h-screen items-center justify-center bg-muted/30 p-4">
+	<!-- Theme Toggle -->
+	<div class="absolute top-4 right-4">
+		<DropdownMenu.Root>
+			<DropdownMenu.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="ghost"
+						size="icon"
+						class="h-9 w-9 cursor-pointer rounded-full bg-background/50 shadow-sm backdrop-blur-md"
+					>
+						<Sun
+							class="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0"
+						/>
+						<Moon
+							class="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100"
+						/>
+						<span class="sr-only">Toggle theme</span>
+					</Button>
+				{/snippet}
+			</DropdownMenu.Trigger>
+			<DropdownMenu.Content align="end">
+				<DropdownMenu.Item onclick={() => setTheme('light')} class="cursor-pointer">
+					<Sun class="mr-2 h-4 w-4" /> Light
+				</DropdownMenu.Item>
+				<DropdownMenu.Item onclick={() => setTheme('dark')} class="cursor-pointer">
+					<Moon class="mr-2 h-4 w-4" /> Dark
+				</DropdownMenu.Item>
+				<DropdownMenu.Item onclick={() => setTheme('system')} class="cursor-pointer">
+					<Monitor class="mr-2 h-4 w-4" /> System
+				</DropdownMenu.Item>
+			</DropdownMenu.Content>
+		</DropdownMenu.Root>
+	</div>
+
 	<div class="w-full max-w-[400px] space-y-6">
 		<!-- Brand Logo -->
 		<div
@@ -88,13 +142,25 @@
 							<Input
 								id="password"
 								name="password"
-								type="password"
+								type={showPassword ? 'text' : 'password'}
 								placeholder="••••••••"
-								class="h-11 pl-10"
+								class="h-11 px-10"
 								required
 								autocomplete="current-password"
 								disabled={loading}
 							/>
+							<button
+								type="button"
+								class="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer text-muted-foreground transition-colors hover:text-foreground focus:outline-hidden"
+								onclick={() => (showPassword = !showPassword)}
+								tabindex="-1"
+							>
+								{#if showPassword}
+									<EyeOff class="h-4 w-4" />
+								{:else}
+									<Eye class="h-4 w-4" />
+								{/if}
+							</button>
 						</div>
 					</div>
 

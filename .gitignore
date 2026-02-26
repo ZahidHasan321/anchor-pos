@@ -21,6 +21,11 @@ Thumbs.db
 !.env.example
 !.env.test
 
+# Docker/Certbot
+/certbot/
+/postgres_data/
+/ssl/cloudflare/
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*

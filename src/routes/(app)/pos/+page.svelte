@@ -68,6 +68,28 @@
 	let lastHandledAction = $state<string | null>(null);
 	let customerSearch = $state('');
 	let showCustomerResults = $state(false);
+	let searchedCustomers = $state<any[]>([]);
+	let customerSearchLoading = $state(false);
+
+	let custSearchTimeout: any;
+	function handleCustomerSearch(query: string) {
+		customerSearch = query;
+		if (query.length < 2) {
+			searchedCustomers = [];
+			return;
+		}
+		clearTimeout(custSearchTimeout);
+		custSearchTimeout = setTimeout(async () => {
+			customerSearchLoading = true;
+			try {
+				const res = await fetch(`/api/customers?search=${encodeURIComponent(query)}`);
+				const json = await res.json();
+				searchedCustomers = json.items || [];
+			} finally {
+				customerSearchLoading = false;
+			}
+		}, 300);
+	}
 
 	// Debounced server-side search
 	let searchTimeout: any;
@@ -263,9 +285,9 @@
 					class="h-full overflow-y-auto bg-muted/20 p-3"
 				>
 					{#await data.streamed}
-						<div class="flex flex-wrap gap-2 sm:gap-3">
+						<div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2 sm:gap-3">
 							{#each Array(12) as _}<Skeleton
-									class="h-32 max-w-[360px] min-w-[240px] flex-1 rounded-xl"
+									class="h-32 w-full rounded-xl"
 								/>{/each}
 						</div>
 					{:then _}
@@ -275,14 +297,14 @@
 								<p class="text-sm">No products found</p>
 							</div>
 						{:else}
-							<div class="flex flex-wrap gap-2 sm:gap-3">
+							<div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2 sm:gap-3">
 								{#each displayedProducts as variant (variant.id)}
 									{@const cartQty = cart.items.find(i => i.variantId === variant.id)?.quantity ?? 0}
 									{@const availableStock = variant.stockQuantity - cartQty}
 									<button
 										onclick={() => handleAddToCart(variant)}
 										disabled={availableStock <= 0}
-										class="group relative flex max-w-[360px] min-w-[240px] flex-1 cursor-pointer flex-col rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+										class="group relative flex w-full cursor-pointer flex-col rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
 									>
 										<div class="absolute top-2 right-2">
 											<Badge variant={availableStock <= 5 ? 'destructive' : 'secondary'}
@@ -404,32 +426,45 @@
 								<button onclick={() => cart.setCustomer(null)}><X class="h-4 w-4" /></button>
 							</div>
 						{:else}
-							<Input
-								placeholder="Customer search..."
-								class="h-9 text-xs"
-								bind:value={customerSearch}
-								onfocus={() => (showCustomerResults = true)}
-								onblur={() => setTimeout(() => (showCustomerResults = false), 200)}
-							/>
-							{#if showCustomerResults && customerSearch.length >= 2}
+							<div class="relative">
+								<Input
+									placeholder="Customer search (name or phone)..."
+									class="h-9 text-xs"
+									value={customerSearch}
+									oninput={(e) => handleCustomerSearch(e.currentTarget.value)}
+									onfocus={() => (showCustomerResults = true)}
+									onblur={() => setTimeout(() => (showCustomerResults = false), 200)}
+								/>
+								{#if customerSearchLoading}
+									<div class="absolute right-3 top-1/2 -translate-y-1/2">
+										<Loader2 class="h-3 w-3 animate-spin text-muted-foreground" />
+									</div>
+								{/if}
+							</div>
+							{#if showCustomerResults && (customerSearch.length >= 2 || searchedCustomers.length > 0)}
 								<div
 									class="absolute right-0 bottom-full left-0 z-50 mb-1 max-h-64 overflow-y-auto rounded-lg border bg-popover shadow-xl"
 								>
-									{#each streamed.customers.filter((c: any) => c.phone?.includes(customerSearch) || c.name
-												.toLowerCase()
-												.includes(customerSearch.toLowerCase())) as c}
+									{#each searchedCustomers as c}
 										<button
 											class="w-full px-3 py-2 text-left text-xs hover:bg-accent"
 											onmousedown={(e) => {
 												e.preventDefault();
 												cart.setCustomer(c);
 												customerSearch = '';
+												searchedCustomers = [];
 												showCustomerResults = false;
 											}}
 										>
 											<div class="font-bold">{c.name}</div>
 											<div class="text-[10px] text-muted-foreground">{c.phone}</div>
 										</button>
+									{:else}
+										{#if !customerSearchLoading && customerSearch.length >= 2}
+											<div class="px-3 py-4 text-center text-xs text-muted-foreground">
+												No customers found
+											</div>
+										{/if}
 									{/each}
 									<div class="border-t p-1">
 										<button

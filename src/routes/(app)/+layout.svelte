@@ -121,7 +121,7 @@
 >
 	<!-- Desktop Sidebar -->
 	<aside
-		class="relative z-30 hidden h-full shrink-0 border-r bg-card transition-[width] duration-300 ease-in-out will-change-[width] md:flex md:flex-col print:hidden"
+		class="relative z-30 hidden h-full shrink-0 border-r bg-card transition-[width] duration-300 ease-in-out md:flex md:flex-col print:hidden"
 		style="width: var(--sidebar-width)"
 	>
 		<!-- Brand Header -->

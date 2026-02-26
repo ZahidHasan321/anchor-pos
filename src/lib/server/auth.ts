@@ -99,7 +99,12 @@ export async function validateSessionToken(token: string) {
 	// Extend session if within 15 days of expiry
 	if (result.expiresAt.getTime() - now < 15 * 24 * 60 * 60 * 1000) {
 		const newExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-		await db.update(sessions).set({ expiresAt: newExpiry }).where(eq(sessions.id, sessionId));
+		try {
+			await db.update(sessions).set({ expiresAt: newExpiry }).where(eq(sessions.id, sessionId));
+		} catch (e) {
+			// Non-critical: Log error but don't fail the request if just extension fails
+			console.error('Failed to extend session expiry:', e);
+		}
 	}
 
 	return {

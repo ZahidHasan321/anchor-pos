@@ -2,14 +2,16 @@ import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { validateSessionToken } from '$lib/server/auth';
 
 export const handleError: HandleServerError = ({ error, event }) => {
+	// Log the full error for internal debugging
+	console.error(`[${new Date().toISOString()}] Server error at ${event.url.pathname}:`, error);
+
 	const message = error instanceof Error ? error.message : String(error);
-	console.error('Server error at:', event.url.pathname, '| Error:', message);
 
 	// Detect database connection errors (common when offline with remote DB)
 	if (message.includes('ECONNREFUSED') || message.includes('ETIMEDOUT') || message.includes('database connection failed')) {
 		return {
-			message: 'Database connection failed. Please check your internet connection or database status.',
-			code: 'DB_CONNECTION_ERROR'
+			message: 'The service is temporarily unavailable. Please try again later.',
+			code: 'SERVICE_UNAVAILABLE'
 		};
 	}
 
@@ -27,8 +29,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.session = null;
 	} else {
 		const { session, user } = await validateSessionToken(token);
-		event.locals.user = user;
 		event.locals.session = session;
+		// Prune user data for locals
+		event.locals.user = user ? {
+			id: user.id,
+			name: user.name,
+			username: user.username,
+			role: user.role,
+			theme: user.theme,
+			imageUrl: user.imageUrl,
+			email: user.email,
+			phone: user.phone
+		} : null;
 	}
 
 	// 1. Global Route Guard (Defense in Depth)

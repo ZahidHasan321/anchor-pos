@@ -11,7 +11,7 @@ import {
 	cashbook,
 	storeSettings
 } from '$lib/server/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, inArray, and, gt } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import { queryVariants } from '$lib/server/pos-query';
@@ -32,10 +32,16 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 		// Streamed data
 		streamed: (async () => {
-			const [variantsData, categoryRows, allCustomers, settingsRows] = await Promise.all([
+			const [variantsData, categoryRows, recentCustomers, settingsRows] = await Promise.all([
 				queryVariants(search, category),
-				db.select({ category: products.category }).from(products).groupBy(products.category),
-				db.select().from(customers),
+				// Filter categories to only those with in-stock products
+				db
+					.selectDistinct({ category: products.category })
+					.from(products)
+					.innerJoin(productVariants, eq(products.id, productVariants.productId))
+					.where(gt(productVariants.stockQuantity, 0)),
+				// Only load 50 recent customers to prevent large payload
+				db.select().from(customers).limit(50),
 				db.select().from(storeSettings)
 			]);
 
@@ -51,7 +57,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 				products: variantsData.items,
 				hasMore: variantsData.hasMore,
 				categories: ['All', ...categoryRows.map((r) => r.category).sort()],
-				customers: allCustomers,
+				customers: recentCustomers,
 				storeSettings: settings
 			};
 		})()
@@ -83,81 +89,68 @@ export const actions: Actions = {
 			return fail(400, { error: 'Cart is empty' });
 		}
 
-		// Fetch actual prices from DB to prevent client-side price manipulation
+		// Precision helper for financial rounding
+		const round2 = (val: number) => Math.round((val + Number.EPSILON) * 100) / 100;
+
 		const variantIds = cartItems.map((item) => item.variantId);
-		const dbVariants = await db
-			.select({
-				id: productVariants.id,
-				price: productVariants.price,
-				productName: products.name,
-				size: productVariants.size,
-				color: productVariants.color,
-				stockQuantity: productVariants.stockQuantity
-			})
-			.from(productVariants)
-			.innerJoin(products, eq(productVariants.productId, products.id))
-			.where(
-				sql`${productVariants.id} IN (${sql.join(
-					variantIds.map((id) => sql`${id}`),
-					sql`, `
-				)})`
-			);
-
-		const dbVariantsMap = new Map(dbVariants.map((v) => [v.id, v]));
-
-		const orderId = generateId();
-		let totalAmount = 0;
-		let nextOrderNumber = 0;
-
-		// Validate and update prices from DB, and calculate total
-		for (const item of cartItems) {
-			const dbVariant = dbVariantsMap.get(item.variantId);
-			if (!dbVariant) {
-				return fail(400, { error: `Invalid product in cart: ${item.variantId}` });
-			}
-			if (dbVariant.stockQuantity < item.quantity) {
-				return fail(400, {
-					error: `Insufficient stock for ${dbVariant.productName}. Available: ${dbVariant.stockQuantity}`
-				});
-			}
-			item.price = dbVariant.price;
-			item.productName = dbVariant.productName;
-			item.size = dbVariant.size;
-			item.color = dbVariant.color;
-			item.discount = Math.min(100, Math.max(0, item.discount || 0));
-
-			const linePrice = item.price * item.quantity;
-			const lineDiscount = linePrice * (item.discount / 100);
-			totalAmount += linePrice - lineDiscount;
-		}
-
-		totalAmount = totalAmount * (1 - globalDiscount / 100);
-
-		const discountAmount =
-			cartItems.reduce((sum, item) => sum + item.price * item.quantity * (item.discount / 100), 0) +
-			cartItems.reduce(
-				(sum, item) => sum + item.price * item.quantity * (1 - item.discount / 100),
-				0
-			) *
-				(globalDiscount / 100);
-
-		const changeGiven = Math.max(0, cashReceived - totalAmount);
-
-		if (isNaN(totalAmount)) {
-			return fail(400, { error: 'Invalid calculation result (NaN)' });
-		}
 
 		try {
-			await db.transaction(async (tx) => {
-				// 0. Get next order number
+			const result = await db.transaction(async (tx) => {
+				// 1. Fetch & Lock variants for stock integrity
+				const dbVariants = await tx
+					.select({
+						id: productVariants.id,
+						price: productVariants.price,
+						productName: products.name,
+						size: productVariants.size,
+						color: productVariants.color,
+						stockQuantity: productVariants.stockQuantity
+					})
+					.from(productVariants)
+					.innerJoin(products, eq(productVariants.productId, products.id))
+					.where(inArray(productVariants.id, variantIds))
+					.for('update', { of: productVariants }); // PostgreSQL row-level locking for variants only
+
+				const dbVariantsMap = new Map(dbVariants.map((v) => [v.id, v]));
+
+				const orderId = generateId();
+				let subtotal = 0;
+				let totalDiscount = 0;
+
+				// Validate Cart Items
+				for (const item of cartItems) {
+					const dbVariant = dbVariantsMap.get(item.variantId);
+					if (!dbVariant) throw new Error(`Product variant not found: ${item.variantId}`);
+					if (dbVariant.stockQuantity < item.quantity) {
+						throw new Error(`Insufficient stock for ${dbVariant.productName}.`);
+					}
+
+					item.price = dbVariant.price;
+					item.productName = dbVariant.productName;
+					item.size = dbVariant.size;
+					item.color = dbVariant.color;
+					item.discount = Math.min(100, Math.max(0, item.discount || 0));
+
+					const linePrice = item.price * item.quantity;
+					const lineDiscount = round2(linePrice * (item.discount / 100));
+					subtotal += linePrice - lineDiscount;
+					totalDiscount += lineDiscount;
+				}
+
+				// Apply global discount
+				const finalGlobalDiscount = round2(subtotal * (globalDiscount / 100));
+				const totalAmount = round2(subtotal - finalGlobalDiscount);
+				totalDiscount = round2(totalDiscount + finalGlobalDiscount);
+
+				const changeGiven = round2(Math.max(0, cashReceived - totalAmount));
+
+				// 2. Generate sequential order number safely
 				const lastOrder = await tx
 					.select({ maxNum: sql<number>`max(${orders.orderNumber})` })
 					.from(orders);
+				const nextOrderNumber = (lastOrder[0]?.maxNum ?? 1000) + 1;
 
-				const maxNum = lastOrder[0]?.maxNum;
-				nextOrderNumber = (maxNum ?? 1000) + 1;
-
-				// 1. Create order
+				// 3. Create order
 				await tx.insert(orders).values({
 					id: orderId,
 					orderNumber: nextOrderNumber,
@@ -165,13 +158,13 @@ export const actions: Actions = {
 					userId: locals.user!.id,
 					totalAmount,
 					paymentMethod,
-					discountAmount,
+					discountAmount: totalDiscount,
 					cashReceived,
 					changeGiven,
 					status: 'completed'
 				});
 
-				// 2. Create order items and update stock
+				// 4. Record items & Adjust stock
 				for (const item of cartItems) {
 					await tx.insert(orderItems).values({
 						id: generateId(),
@@ -184,13 +177,11 @@ export const actions: Actions = {
 						variantLabel: `${item.size}${item.color ? ' / ' + item.color : ''}`
 					});
 
-					// Deduct stock
 					await tx
 						.update(productVariants)
 						.set({ stockQuantity: sql`stock_quantity - ${item.quantity}` })
 						.where(eq(productVariants.id, item.variantId));
 
-					// Log stock change
 					await tx.insert(stockLogs).values({
 						id: generateId(),
 						variantId: item.variantId,
@@ -200,7 +191,7 @@ export const actions: Actions = {
 					});
 				}
 
-				// 3. Update cashbook
+				// 5. Update cashbook
 				await tx.insert(cashbook).values({
 					id: generateId(),
 					amount: totalAmount,
@@ -208,6 +199,8 @@ export const actions: Actions = {
 					description: `Sale #${nextOrderNumber}`,
 					userId: locals.user!.id
 				});
+
+				return { orderId, orderNumber: nextOrderNumber, changeGiven };
 			});
 
 			await logAuditEvent({
@@ -215,14 +208,14 @@ export const actions: Actions = {
 				userName: locals.user!.name,
 				action: 'CREATE_ORDER',
 				entity: 'orders',
-				entityId: orderId,
-				details: `Completed sale: ${totalAmount.toFixed(2)} (${paymentMethod})`
+				entityId: result.orderId,
+				details: `POS Sale #${result.orderNumber} for ${result.orderId}`
 			});
 
-			return { success: true, orderId, orderNumber: nextOrderNumber, changeGiven };
-		} catch (e) {
+			return { success: true, ...result };
+		} catch (e: any) {
 			console.error('Checkout failed:', e);
-			return fail(500, { error: e instanceof Error ? e.message : 'Transaction failed' });
+			return fail(500, { error: e.message || 'Transaction failed' });
 		}
 	},
 
@@ -233,11 +226,23 @@ export const actions: Actions = {
 
 		if (!name) return fail(400, { error: 'Name is required' });
 
+		// Unique check for phone
+		if (phone) {
+			const existing = await db
+				.select()
+				.from(customers)
+				.where(eq(customers.phone, phone))
+				.limit(1);
+			if (existing.length > 0) {
+				return fail(400, { error: 'A customer with this phone number already exists.' });
+			}
+		}
+
 		const id = generateId();
 		try {
 			await db.insert(customers).values({ id, name, phone });
 		} catch (e) {
-			return fail(500, { error: 'Failed to add customer' });
+			return fail(500, { error: 'Failed to create customer record.' });
 		}
 
 		return { success: true, customer: { id, name, phone } };

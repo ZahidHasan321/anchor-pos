@@ -6,15 +6,15 @@ export async function queryVariants(search: string, category: string, limit = 50
 	const conditions = [gt(productVariants.stockQuantity, 0)];
 
 	if (search) {
-		// Normalize: strip hyphens, spaces, underscores, dots for fuzzy-ish matching
-		// so "tshirt" matches "t-shirt", "t shirt", etc.
-		const normalizedSearch = '%' + search.replace(/[-\s_.]/g, '').toLowerCase() + '%';
 		const exactPattern = `%${search}%`;
+		// Try barcode or size first (indexed)
 		conditions.push(
 			or(
-				sql`REPLACE(REPLACE(REPLACE(REPLACE(LOWER(${products.name}), '-', ''), ' ', ''), '_', ''), '.', '') LIKE ${normalizedSearch}`,
 				sql`${productVariants.barcode} ILIKE ${exactPattern}`,
-				sql`${productVariants.size} ILIKE ${exactPattern}`
+				sql`${productVariants.size} ILIKE ${exactPattern}`,
+				sql`${products.name} ILIKE ${exactPattern}`,
+				// Fuzzy-ish fallback
+				sql`REPLACE(REPLACE(REPLACE(REPLACE(LOWER(${products.name}), '-', ''), ' ', ''), '_', ''), '.', '') LIKE ${'%' + search.replace(/[-\s_.]/g, '').toLowerCase() + '%'}`
 			)!
 		);
 	}
