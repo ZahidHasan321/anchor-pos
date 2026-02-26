@@ -51,7 +51,8 @@ jobs:
 
       - name: Create SSH Key File
         run: |
-          echo "${{ secrets.VPS_SSH_KEY }}" > vps_key
+          printf '%s' "${{ secrets.VPS_SSH_KEY }}" > vps_key
+          chmod 600 vps_key
         shell: bash
 
       - name: Upload Windows Build to VPS
@@ -62,5 +63,12 @@ jobs:
         run: |
           # Use SCP directly from Git Bash (which is available on windows-latest)
           # Use -o StrictHostKeyChecking=no to avoid prompt
-          scp -P $PORT -i vps_key -o StrictHostKeyChecking=no dist-electron/*.exe dist-electron/latest.yml ${USER}@${HOST}:/root/anchor-pos/downloads/
+          scp -P $PORT -i vps_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+            dist-electron/*.exe dist-electron/latest.yml \
+            ${USER}@${HOST}:/root/anchor-pos/downloads/
+        shell: bash
+
+      - name: Cleanup SSH Key
+        if: always()
+        run: rm -f vps_key
         shell: bash
