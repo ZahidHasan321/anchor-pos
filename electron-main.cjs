@@ -152,7 +152,7 @@ async function createWindow() {
     Menu.setApplicationMenu(null);
 
     const iconPath = app.isPackaged
-        ? path.join(process.resourcesPath, 'resources', 'icon.png')
+        ? path.join(process.resourcesPath, 'app.asar', 'resources', 'icon.png')
         : path.join(__dirname, 'resources', 'icon.png');
 
     const state = loadWindowState();

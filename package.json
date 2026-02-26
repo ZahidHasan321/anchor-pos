@@ -47,6 +47,7 @@
 		"files": [
 			"build/**/*",
 			"static/**/*",
+			"resources/icon.png",
 			"drizzle/**/*",
 			"electron-main.cjs",
 			"preload.cjs",
