@@ -1,14 +1,12 @@
 #!/bin/bash
+set -euo pipefail
 
-# Configuration
 DOMAIN="anchorshop.cloud"
-REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "--- Starting Deployment for $DOMAIN ---"
-echo "Project directory: $REPO_DIR"
 
-# 1. Install Docker & Docker Compose if missing (AlmaLinux/CentOS)
-if ! [ -x "$(command -v docker)" ]; then
+if ! command -v docker &> /dev/null; then
     echo "Installing Docker..."
     sudo dnf install -y dnf-plugins-core
     sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
@@ -16,55 +14,31 @@ if ! [ -x "$(command -v docker)" ]; then
     sudo systemctl enable --now docker
 fi
 
-# 2. Navigate to repo and update
-cd "$REPO_DIR" || exit
-echo "Updating code from git..."
+cd "$REPO_DIR"
 git pull origin main
 
-# 3. Create .env if it doesn't exist
 if [ ! -f .env ]; then
-    echo "Creating .env file..."
-    POSTGRES_PASSWORD=$(openssl rand -base64 12)
-    cat <<EOF > .env
-POSTGRES_USER=pos_user
-POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-POSTGRES_DB=clothing_pos
-DATABASE_URL=postgres://pos_user:$POSTGRES_PASSWORD@db:5432/clothing_pos
-EOF
-fi
-
-# 4. Build and restart containers
-echo "Building and restarting containers..."
-docker compose build
-docker compose up -d
-
-# 5. Wait for DB to be ready and run migrations
-echo "Waiting for database connectivity from app container..."
-MAX_RETRIES=30
-COUNT=0
-# Use a simple node command to check if we can actually connect to the DB
-until docker compose exec app node -e "const { Client } = require('postgres'); const sql = require('postgres')('$DATABASE_URL'); sql\`SELECT 1\`.then(() => process.exit(0)).catch(() => process.exit(1))" > /dev/null 2>&1 || [ $COUNT -eq $MAX_RETRIES ]; do
-    echo "Database not reachable yet... waiting ($((COUNT+1))/$MAX_RETRIES)"
-    sleep 2
-    COUNT=$((COUNT+1))
-done
-
-if [ $COUNT -eq $MAX_RETRIES ]; then
-    echo "Error: Database timed out."
+    echo "Error: .env file not found. Create it manually before deploying."
     exit 1
 fi
 
-echo "Running database migrations..."
+docker compose build
+docker compose up -d
+
+echo "Waiting for database..."
+MAX_RETRIES=30
+COUNT=0
+until docker compose exec db pg_isready -U pos_user -d clothing_pos &> /dev/null; do
+    COUNT=$((COUNT + 1))
+    [ "$COUNT" -ge "$MAX_RETRIES" ] && { echo "Error: DB timed out."; exit 1; }
+    sleep 2
+done
+
 docker compose exec app pnpm db:push
 
-# 6. Bootstrap Admin if credentials exist in .env
 if grep -q "ADMIN_PASSWORD" .env; then
-    echo "Bootstrapping admin user..."
-    docker compose exec app pnpm -C . run db:bootstrap
+    docker compose exec app pnpm run db:bootstrap
 fi
 
-# 7. Refresh Nginx to pick up new container IPs
-echo "Refreshing Nginx..."
 docker compose restart nginx
-
 echo "--- Deployment Complete ---"
