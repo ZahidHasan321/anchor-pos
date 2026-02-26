@@ -50,4 +50,8 @@ if grep -q "ADMIN_PASSWORD" .env; then
     docker compose exec app pnpm -C . run db:bootstrap
 fi
 
+# 7. Refresh Nginx to pick up new container IPs
+echo "Refreshing Nginx..."
+docker compose restart nginx
+
 echo "--- Deployment Complete ---"

@@ -1,5 +1,39 @@
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { validateSessionToken } from '$lib/server/auth';
+import { db } from '$lib/server/db';
+import { users } from '$lib/server/db/schema';
+import { hashPassword } from '$lib/server/auth';
+import { generateId } from '$lib/utils';
+import { eq } from 'drizzle-orm';
+import { env } from '$env/dynamic/private';
+
+// 0. Bootstrap Admin User (Runs once on first load)
+let isBootstrapped = false;
+async function bootstrapAdmin() {
+	if (isBootstrapped) return;
+	const username = env.ADMIN_USERNAME || 'admin';
+	const password = env.ADMIN_PASSWORD;
+
+	if (!password) return;
+
+	try {
+		const existing = await db.select().from(users).where(eq(users.username, username)).limit(1);
+		if (existing.length === 0) {
+			console.log(`[Bootstrap] Creating admin user: ${username}`);
+			await db.insert(users).values({
+				id: generateId(),
+				username,
+				passwordHash: await hashPassword(password),
+				role: 'admin',
+				name: 'System Admin',
+				isActive: true
+			});
+		}
+		isBootstrapped = true;
+	} catch (e) {
+		console.error('[Bootstrap] Failed to check/create admin user:', e);
+	}
+}
 
 export const handleError: HandleServerError = ({ error, event }) => {
 	// Log the full error for internal debugging
@@ -22,6 +56,7 @@ export const handleError: HandleServerError = ({ error, event }) => {
 };
 
 export const handle: Handle = async ({ event, resolve }) => {
+	await bootstrapAdmin();
 	const token = event.cookies.get('session');
 
 	if (!token) {
