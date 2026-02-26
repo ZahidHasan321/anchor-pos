@@ -47,7 +47,7 @@ docker compose exec app pnpm db:push
 # 6. Bootstrap Admin if credentials exist in .env
 if grep -q "ADMIN_PASSWORD" .env; then
     echo "Bootstrapping admin user..."
-    docker compose exec app pnpm db:bootstrap
+    docker compose exec app pnpm -C . run db:bootstrap
 fi
 
 echo "--- Deployment Complete ---"

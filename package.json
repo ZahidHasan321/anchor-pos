@@ -139,6 +139,7 @@
 		"portfinder": "^1.0.38",
 		"postgres": "^3.4.8",
 		"drizzle-kit": "^0.31.8",
-		"typescript": "^5.9.3"
+		"typescript": "^5.9.3",
+		"tsx": "^4.19.3"
 	}
 }

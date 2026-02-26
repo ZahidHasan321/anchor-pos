@@ -38,6 +38,7 @@ async function bootstrap() {
 		console.log(`Admin user created successfully! ID: ${id}`);
 	}
 	
+	console.log('Bootstrap finished successfully.');
 	process.exit(0);
 }
 
