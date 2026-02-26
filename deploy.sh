@@ -2,9 +2,10 @@
 
 # Configuration
 DOMAIN="anchorshop.cloud"
-REPO_DIR="/root/clothing-pos" # Adjust if different
+REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 echo "--- Starting Deployment for $DOMAIN ---"
+echo "Project directory: $REPO_DIR"
 
 # 1. Install Docker & Docker Compose if missing (AlmaLinux/CentOS)
 if ! [ -x "$(command -v docker)" ]; then
