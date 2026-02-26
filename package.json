@@ -18,7 +18,7 @@
 		"start:electron": "pnpm run build:electron && electron .",
 		"package:linux": "pnpm run build:electron && electron-builder build --linux",
 		"package:win": "cross-env BUILD_TARGET=electron vite build && electron-builder build --win -p always",
-		"package:win:ci": "cross-env BUILD_TARGET=electron vite build && electron-builder build --win -p always -c.win.certificateSubjectName='' -c.win.signingHashAlgorithms=['sha256']",
+		"package:win:ci": "cross-env BUILD_TARGET=electron vite build && electron-builder build --win -p always",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",

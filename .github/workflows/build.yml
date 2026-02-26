@@ -1,9 +1,10 @@
-name: Build/Release Electron
+name: Build and Release
 
 on:
   push:
     tags:
       - 'v*' # Trigger on version tags like v1.0.0
+  workflow_dispatch:
 
 jobs:
   release:
@@ -11,7 +12,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # Build for both Linux and Windows using GitHub's native runners
         os: [ubuntu-latest, windows-latest]
 
     steps:
@@ -29,11 +29,20 @@ jobs:
       - name: Install Dependencies
         run: pnpm install
 
-      - name: Build SvelteKit and Package Electron
-        # On Windows, we use pnpm exec to ensure electron-builder is found
-        # We use --publish always because the tag trigger already implies a release
+      - name: Build and Package
         run: pnpm run build:electron && pnpm exec electron-builder --publish always
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Ensure BUILD_TARGET is set for SvelteKit config
           BUILD_TARGET: electron
+
+      - name: Upload Windows Build to VPS
+        if: matrix.os == 'windows-latest'
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          source: "dist-electron/*.exe,dist-electron/latest.yml"
+          target: "/root/auto-pos/downloads/"
+          strip_components: 1
