@@ -1,17 +1,41 @@
-import { db } from '../src/lib/server/db';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import { users } from '../src/lib/server/db/schema';
-import { hashPassword } from '../src/lib/server/auth';
-import { generateId } from '../src/lib/utils';
 import { eq } from 'drizzle-orm';
+import { scrypt, randomBytes } from 'node:crypto';
+import { promisify } from 'node:util';
+
+const scryptAsync = promisify(scrypt);
+
+// Copy of hashPassword logic to avoid SvelteKit aliases ($app, $env)
+async function hashPassword(password: string): Promise<string> {
+	const salt = randomBytes(16).toString('hex');
+	const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+	return `${salt}:${derivedKey.toString('hex')}`;
+}
+
+function generateId(): string {
+	return crypto.randomUUID();
+}
 
 async function bootstrap() {
+	const dbUrl = process.env.DATABASE_URL;
 	const username = process.env.ADMIN_USERNAME || 'admin';
 	const password = process.env.ADMIN_PASSWORD;
+
+	if (!dbUrl) {
+		console.error('Error: DATABASE_URL environment variable is required');
+		process.exit(1);
+	}
 
 	if (!password) {
 		console.log('Skipping bootstrap: ADMIN_PASSWORD not set in environment.');
 		process.exit(0);
 	}
+
+	console.log(`Connecting to database...`);
+	const client = postgres(dbUrl, { prepare: false });
+	const db = drizzle(client);
 
 	console.log(`Checking for existing user: ${username}...`);
 	
@@ -39,6 +63,7 @@ async function bootstrap() {
 	}
 	
 	console.log('Bootstrap finished successfully.');
+	await client.end();
 	process.exit(0);
 }
 
