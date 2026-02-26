@@ -61,6 +61,7 @@ export async function createSession(token: string, userId: string) {
 }
 
 export async function validateSessionToken(token: string) {
+	if (!db) return { session: null, user: null };
 	const sessionId = createHash('sha256').update(token).digest('hex');
 
 	const results = await db

@@ -14,7 +14,7 @@ async function bootstrapAdmin() {
 	const username = env.ADMIN_USERNAME || 'admin';
 	const password = env.ADMIN_PASSWORD;
 
-	if (!password) return;
+	if (!password || !db) return;
 
 	try {
 		const existing = await db.select().from(users).where(eq(users.username, username)).limit(1);
@@ -131,7 +131,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			"style-src 'self' 'unsafe-inline'; " +
 			"img-src 'self' data: blob:; " +
 			"font-src 'self' data:; " +
-			"connect-src 'self'; " +
+			"connect-src 'self' https://* wss://* http://localhost:* ws://*; " +
 			"frame-ancestors 'none'; " +
 			'upgrade-insecure-requests;'
 	);

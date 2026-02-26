@@ -28,6 +28,10 @@ export const actions: Actions = {
 			return fail(400, { error: 'Username and password are required', username });
 		}
 
+		if (!db) {
+			return fail(500, { error: 'Database is offline or not configured. Cannot login.', username });
+		}
+
 		// 1. Fetch User
 		const userRows = await db.select().from(users).where(eq(users.username, username)).limit(1);
 		const user = userRows[0];

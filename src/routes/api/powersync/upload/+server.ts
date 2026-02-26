@@ -39,20 +39,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
                         set: data
                     });
                 } else if (table === 'customers' && op === 'PUT') {
-                    // Handle customer conflicts on phone as well as id
-                    await tx.insert(customers).values(data).onConflictDoUpdate({
-                        target: [customers.id],
-                        set: data
-                    }).catch(async (err: any) => {
-                        // If ID doesn't conflict but phone does (Postgres error 23505), 
-                        // we try to update by phone instead
-                        if (err.code === '23505' && data.phone) {
+                    // Handle customer conflicts on phone as well as id without aborting the postgres transaction
+                    if (data.phone) {
+                        const existing = await tx.select().from(customers).where(eq(customers.phone, data.phone)).limit(1);
+                        if (existing.length > 0 && existing[0].id !== data.id) {
                             await tx.update(customers)
                                 .set(data)
                                 .where(eq(customers.phone, data.phone));
-                        } else {
-                            throw err;
+                            continue;
                         }
+                    }
+                    
+                    await tx.insert(customers).values(data).onConflictDoUpdate({
+                        target: customers.id,
+                        set: data
                     });
                 } else if (table === 'cashbook' && op === 'PUT') {
                     await tx.insert(cashbook).values(data).onConflictDoUpdate({
