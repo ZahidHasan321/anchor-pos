@@ -30,7 +30,7 @@ if (connectionString) {
         (globalThis as any).__POS_DB_CLIENT__ = client;
     }
     dbInstance = drizzle(client, { schema });
-} else {
+} else if (!building) {
     console.warn('[DB] No DATABASE_URL found. Running in offline-only mode.');
 }
 
