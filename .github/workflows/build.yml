@@ -9,10 +9,10 @@ on:
 jobs:
   release:
     name: Build and Release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+    runs-on: windows-latest
+    # strategy:
+    #   matrix:
+    #     os: [ubuntu-latest, windows-latest]
 
     steps:
       - name: Checkout Code
@@ -33,24 +33,19 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/electron
-            ~/.cache/electron-builder
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
           key: ${{ runner.os }}-electron-cache-${{ hashFiles('package.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-cache-
 
-      - name: Fix Permissions (Linux)
-        if: runner.os == 'Linux'
-        run: find node_modules -name "app-builder" -type f -exec chmod +x {} +
-
       - name: Build and Package
-        run: pnpm run build:electron && pnpm exec electron-builder --publish always
+        run: pnpm run build:electron && pnpm exec electron-builder --win --publish always
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_TARGET: electron
 
       - name: Upload Windows Build to VPS
-        if: matrix.os == 'windows-latest'
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.VPS_HOST }}
