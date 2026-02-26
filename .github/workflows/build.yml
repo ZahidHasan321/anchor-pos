@@ -49,13 +49,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_TARGET: electron
 
+      - name: Create SSH Key File
+        run: |
+          echo "${{ secrets.VPS_SSH_KEY }}" > vps_key
+          # On Windows, we need to ensure the key file has restricted permissions if using native ssh, 
+          # but we'll use a specific powershell method to handle the upload.
+        shell: bash
+
       - name: Upload Windows Build to VPS
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
-          source: "dist-electron/*.exe,dist-electron/latest.yml"
-          target: "/root/anchor-pos/downloads/"
-          strip_components: 1
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          USER: root
+          PORT: 22
+        run: |
+          # Use SCP directly from Git Bash (which is available on windows-latest)
+          scp -v -P $PORT -i vps_key -o StrictHostKeyChecking=no dist-electron/*.exe dist-electron/latest.yml ${USER}@${HOST}:/root/anchor-pos/downloads/
+        shell: bash
