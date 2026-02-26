@@ -39,12 +39,12 @@ docker compose build
 docker compose up -d
 
 # 5. Wait for DB to be ready and run migrations
-echo "Waiting for database to be ready..."
-# Robust wait loop instead of fixed sleep
+echo "Waiting for database connectivity from app container..."
 MAX_RETRIES=30
 COUNT=0
-until docker compose exec app pnpm drizzle-kit check --dialect postgresql > /dev/null 2>&1 || [ $COUNT -eq $MAX_RETRIES ]; do
-    echo "Database not ready yet... waiting ($((COUNT+1))/$MAX_RETRIES)"
+# Use a simple node command to check if we can actually connect to the DB
+until docker compose exec app node -e "const { Client } = require('postgres'); const sql = require('postgres')('$DATABASE_URL'); sql\`SELECT 1\`.then(() => process.exit(0)).catch(() => process.exit(1))" > /dev/null 2>&1 || [ $COUNT -eq $MAX_RETRIES ]; do
+    echo "Database not reachable yet... waiting ($((COUNT+1))/$MAX_RETRIES)"
     sleep 2
     COUNT=$((COUNT+1))
 done
