@@ -5,7 +5,6 @@ COPY pnpm-lock.yaml package.json ./
 RUN pnpm install
 COPY . .
 ENV BUILD_TARGET=node
-ENV NODE_OPTIONS="--max-old-space-size=1024"
 RUN pnpm build
 
 FROM node:22-slim
