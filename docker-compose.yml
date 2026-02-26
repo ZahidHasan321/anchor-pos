@@ -24,7 +24,8 @@ services:
       ORIGIN: https://anchorshop.cloud
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
+      POWERSYNC_PRIVATE_KEY: ${POWERSYNC_PRIVATE_KEY}
+      POWERSYNC_PUBLIC_KEY: ${POWERSYNC_PUBLIC_KEY}
     depends_on:
       db:
         condition: service_healthy
