@@ -23,7 +23,7 @@ if [ ! -f .env ]; then
 fi
 
 docker compose build
-docker compose up -d
+docker compose up -d --remove-orphans
 
 echo "Waiting for database..."
 MAX_RETRIES=30
