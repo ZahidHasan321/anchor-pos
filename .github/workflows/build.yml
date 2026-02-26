@@ -29,6 +29,20 @@ jobs:
       - name: Install Dependencies
         run: pnpm install
 
+      - name: Cache Electron Binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-cache-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-cache-
+
+      - name: Fix Permissions (Linux)
+        if: runner.os == 'Linux'
+        run: find node_modules -name "app-builder" -type f -exec chmod +x {} +
+
       - name: Build and Package
         run: pnpm run build:electron && pnpm exec electron-builder --publish always
         env:
