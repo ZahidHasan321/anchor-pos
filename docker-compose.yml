@@ -1,5 +1,5 @@
 services:
-  db:
+  pos_db:
     image: postgres:17-alpine
     container_name: pos_db
     restart: always
@@ -15,7 +15,7 @@ services:
       timeout: 5s
       retries: 10
 
-  app:
+  pos_app:
     build: .
     container_name: pos_app
     restart: always
@@ -27,15 +27,15 @@ services:
       POWERSYNC_PRIVATE_KEY: ${POWERSYNC_PRIVATE_KEY}
       POWERSYNC_PUBLIC_KEY: ${POWERSYNC_PUBLIC_KEY}
     depends_on:
-      db:
+      pos_db:
         condition: service_healthy
 
-  powersync:
+  pos_powersync:
     image: journeyapps/powersync-service:latest
     container_name: pos_powersync
     restart: always
     environment:
-      POWERSYNC_DATABASE_URL: postgres://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-clothing_pos}
+      POWERSYNC_DATABASE_URL: postgres://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/${POSTGRES_DB:-clothing_pos}
       POWERSYNC_JWKS_URL: https://anchorshop.cloud/.well-known/jwks.json
     ports:
       - "8080:8080"
@@ -43,10 +43,10 @@ services:
       - ./powersync.yaml:/etc/powersync/powersync.yaml
       - ./powersync-rules.yaml:/etc/powersync/powersync-rules.yaml
     depends_on:
-      db:
+      pos_db:
         condition: service_healthy
 
-  nginx:
+  pos_nginx:
     image: nginx:alpine
     container_name: pos_nginx
     restart: always
@@ -58,7 +58,8 @@ services:
       - ./ssl/cloudflare:/etc/nginx/ssl
       - ./downloads:/var/www/downloads
     depends_on:
-      - app
+      - pos_app
+      - pos_powersync
 
 volumes:
   postgres_data:

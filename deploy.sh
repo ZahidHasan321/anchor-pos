@@ -28,17 +28,17 @@ docker compose up -d --remove-orphans
 echo "Waiting for database..."
 MAX_RETRIES=30
 COUNT=0
-until docker compose exec db pg_isready -U pos_user -d clothing_pos &> /dev/null; do
+until docker compose exec pos_db pg_isready -U pos_user -d clothing_pos &> /dev/null; do
     COUNT=$((COUNT + 1))
     [ "$COUNT" -ge "$MAX_RETRIES" ] && { echo "Error: DB timed out."; exit 1; }
     sleep 2
 done
 
-docker compose exec app pnpm db:push
+docker compose exec pos_app pnpm db:push
 
 if grep -q "ADMIN_PASSWORD" .env; then
-    docker compose exec app pnpm run db:bootstrap
+    docker compose exec pos_app pnpm run db:bootstrap
 fi
 
-docker compose restart nginx
+docker compose restart pos_nginx
 echo "--- Deployment Complete ---"
