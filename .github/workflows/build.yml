@@ -40,7 +40,11 @@ jobs:
             ${{ runner.os }}-electron-cache-
 
       - name: Build and Package
-        run: pnpm run build:electron && pnpm exec electron-builder --win --publish always
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          command: pnpm run build:electron && pnpm exec electron-builder --win --publish always
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_TARGET: electron
