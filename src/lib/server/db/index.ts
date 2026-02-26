@@ -2,11 +2,15 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 import { env } from '$env/dynamic/private';
-import { dev } from '$app/environment';
+import { dev, browser } from '$app/environment';
+import { building } from '$app/environment';
 
-if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
-
+const isElectron = env.BUILD_TARGET === 'electron';
 const connectionString = env.DATABASE_URL;
+
+if (!connectionString && !building && !isElectron) {
+    throw new Error('DATABASE_URL is not set');
+}
 
 if (dev) {
     console.log(`[DB] Initializing in dev mode...`);
