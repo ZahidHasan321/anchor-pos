@@ -35,6 +35,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31.8
         version: 0.31.9
+      drizzle-orm:
+        specifier: ^0.45.1
+        version: 0.45.1(@types/better-sqlite3@7.6.13)(better-sqlite3@12.6.2)(kysely@0.28.11)(postgres@3.4.8)
       electron-log:
         specifier: ^5.4.3
         version: 5.4.3
@@ -111,9 +114,6 @@ importers:
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0
-      drizzle-orm:
-        specifier: ^0.45.1
-        version: 0.45.1(@types/better-sqlite3@7.6.13)(better-sqlite3@12.6.2)(kysely@0.28.11)(postgres@3.4.8)
       electron:
         specifier: ^40.6.0
         version: 40.6.0
