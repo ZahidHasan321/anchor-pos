@@ -17,4 +17,5 @@ COPY --from=builder /app/build ./build
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/scripts ./scripts
 CMD ["node", "build/index.js"]
