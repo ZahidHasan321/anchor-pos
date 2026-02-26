@@ -44,7 +44,7 @@ jobs:
         with:
           timeout_minutes: 20
           max_attempts: 3
-          command: pnpm run build:electron && pnpm exec electron-builder --win --publish always
+          command: pnpm run package:win:ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_TARGET: electron
