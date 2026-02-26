@@ -13,14 +13,14 @@ if (dev) {
 }
 
 // Use a more unique key for the global client
-const client = globalThis.__POS_DB_CLIENT__ || postgres(connectionString, { 
+const client = (globalThis as any).__POS_DB_CLIENT__ || postgres(connectionString, { 
     prepare: false,
     // Add a small idle timeout even in dev to help with HMR connection accumulation
     idle_timeout: 10
 });
 
 if (dev) {
-    globalThis.__POS_DB_CLIENT__ = client;
+    (globalThis as any).__POS_DB_CLIENT__ = client;
 }
 
 export const db = drizzle(client, { schema });
