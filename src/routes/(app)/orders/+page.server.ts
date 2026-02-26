@@ -39,6 +39,16 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	return {
 		filters: { from: dateFrom, to: dateTo, status: statusFilter, search },
 		streamed: (async () => {
+			if (!db) return {
+				orders: [],
+				pagination: {
+					currentPage: 1,
+					totalPages: 1,
+					totalOrders: 0,
+					perPage
+				}
+			};
+
 			const [countResult, allOrders] = await Promise.all([
 				db
 					.select({ count: sql<number>`count(*)` })

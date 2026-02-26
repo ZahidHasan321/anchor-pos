@@ -9,6 +9,10 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 		redirect(302, '/login');
 	}
 
+	if (!db) {
+		redirect(302, '/customers');
+	}
+
 	const customerRows = await db
 		.select()
 		.from(customers)
@@ -78,6 +82,7 @@ export const actions: Actions = {
 		if (!locals.user) {
 			return fail(403, { error: 'Unauthorized' });
 		}
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const name = (data.get('name') as string)?.trim();

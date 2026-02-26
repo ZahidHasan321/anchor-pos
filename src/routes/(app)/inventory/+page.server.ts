@@ -24,6 +24,14 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 		// Streaming everything else
 		streamed: (async () => {
+			if (!db) return {
+				stats: { totalProducts: 0, totalVariants: 0, lowStockVariants: 0, outOfStockVariants: 0, totalInventoryValue: 0 },
+				categories: [],
+				products: [],
+				total: 0,
+				totalPages: 1,
+				currentPage: 1
+			};
 			const settingsRows = await db.select().from(storeSettings);
 			const settings = settingsRows.reduce(
 				(acc: Record<string, string>, row: { key: string; value: string }) => {

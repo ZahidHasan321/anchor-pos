@@ -25,6 +25,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 	return {
 		// Summaries / Stats
 		stats: (async () => {
+			if (!db) return {
+				todaySales: { count: 0, total: 0 },
+				monthlySales: { count: 0, total: 0 },
+				todayExpenses: { total: 0 },
+				inventoryValue: 0
+			};
 			const [todaySales, monthlySales, todayExpenses, inventoryValue] = await Promise.all([
 				db
 					.select({
@@ -61,6 +67,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 		// Stock alerts (needs settings first)
 		stockAlerts: (async () => {
+			if (!db) return { lowStockItems: [], lowStockCount: 0 };
 			const settingsRows = await db.select().from(storeSettings);
 			const settings = settingsRows.reduce(
 				(acc: Record<string, string>, row: { key: string; value: string }) => {
@@ -100,9 +107,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 		})(),
 
 		// Lists
-		recentOrders: db.select().from(orders).orderBy(desc(orders.createdAt)).limit(10),
+		recentOrders: db ? db.select().from(orders).orderBy(desc(orders.createdAt)).limit(10) : Promise.resolve([]),
 
 		topProducts: (async () => {
+			if (!db) return [];
 			const topProductsRaw = await db
 				.select({
 					name: orderItems.productName,

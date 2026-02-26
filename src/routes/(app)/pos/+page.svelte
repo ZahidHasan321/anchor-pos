@@ -265,7 +265,7 @@
 
 <svelte:head><title>POS — {APP_NAME}</title></svelte:head>
 
-<div class="flex h-[calc(100vh-3rem)] flex-col md:h-screen">
+<div class="flex h-full flex-col overflow-hidden">
 	<!-- Mobile Tabs -->
 	<div class="flex border-b bg-card md:hidden">
 		<button
@@ -371,7 +371,7 @@
 
 		<!-- Right: Cart -->
 		<div
-			class="flex w-full flex-col border-l bg-card md:w-[400px] {activeMobileTab === 'cart'
+			class="flex w-full flex-col overflow-hidden border-l bg-card md:w-[400px] {activeMobileTab === 'cart'
 				? 'flex'
 				: 'hidden md:flex'}"
 		>
@@ -385,8 +385,8 @@
 					>{/if}
 			</div>
 
-			<ScrollArea class="flex-1 px-3 py-2">
-				<div class="space-y-2">
+			<ScrollArea class="min-h-0 flex-1">
+				<div class="space-y-2 px-3 py-2">
 					{#each cart.items as item (item.variantId)}
 						<div class="space-y-2 rounded-lg border p-3">
 							<div class="flex items-start justify-between gap-2">

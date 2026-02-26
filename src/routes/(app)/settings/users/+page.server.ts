@@ -14,6 +14,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		redirect(302, '/dashboard');
 	}
 
+	if (!db) return { users: [] };
+
 	const allUsers = await db
 		.select({
 			id: users.id,
@@ -33,6 +35,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 export const actions: Actions = {
 	create: async ({ request, locals }) => {
 		if (locals.user?.role !== 'admin') return fail(403);
+		if (!db) return fail(503, { message: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const username = (data.get('username') as string)?.trim();
@@ -93,6 +96,7 @@ export const actions: Actions = {
 
 	toggleActive: async ({ request, locals }) => {
 		if (locals.user?.role !== 'admin') return fail(403);
+		if (!db) return fail(503, { message: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const id = data.get('id') as string;
@@ -115,6 +119,7 @@ export const actions: Actions = {
 
 	resetPassword: async ({ request, locals }) => {
 		if (locals.user?.role !== 'admin') return fail(403);
+		if (!db) return fail(503, { message: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const id = data.get('id') as string;

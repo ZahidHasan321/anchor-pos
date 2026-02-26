@@ -19,6 +19,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, '/login');
 	}
 
+	if (!db) {
+		redirect(302, '/orders');
+	}
+
 	const orderRows = await db
 		.select({
 			id: orders.id,
@@ -86,6 +90,7 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role === 'sales') {
 			return fail(403, { error: 'Unauthorized' });
 		}
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const itemId = data.get('itemId') as string;
@@ -152,6 +157,7 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role === 'sales') {
 			return fail(403, { error: 'Unauthorized' });
 		}
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const status = data.get('status') as string;

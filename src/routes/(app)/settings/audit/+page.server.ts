@@ -17,6 +17,11 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 	return {
 		streamed: (async () => {
+			if (!db) return {
+				logs: [],
+				integrity: { valid: true, total: 0 },
+				pagination: { currentPage: 1, totalPages: 1, totalLogs: 0, perPage }
+			};
 			const [countResult, logs, integrity] = await Promise.all([
 				db.select({ count: sql<number>`count(*)` }).from(auditLogs),
 				db

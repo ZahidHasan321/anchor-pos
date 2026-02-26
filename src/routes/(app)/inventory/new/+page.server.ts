@@ -10,7 +10,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
 		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
-		const rows = await db.selectDistinct({ category: products.category }).from(products);
+
+	if (!db) return { categories: [] };
+
+	const rows = await db.selectDistinct({ category: products.category }).from(products);
 		const categories = rows.map((r: { category: string }) => r.category);
 
 	return { categories: categories.sort() };
@@ -21,6 +24,7 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role === 'sales') {
 			return fail(403, { error: 'Unauthorized' });
 		}
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const name = (data.get('name') as string)?.trim();

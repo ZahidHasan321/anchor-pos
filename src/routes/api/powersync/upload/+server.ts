@@ -9,6 +9,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
     const { mutations } = await request.json();
 
+    if (!db) {
+        return json({ success: true, message: 'Offline mode: Changes kept locally' });
+    }
+
     try {
         await db.transaction(async (tx: any) => {
             for (const mutation of mutations) {

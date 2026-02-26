@@ -32,6 +32,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 		// Streamed data
 		streamed: (async () => {
+			if (!db) return {
+				products: [],
+				hasMore: false,
+				categories: ['All'],
+				customers: [],
+				storeSettings: {}
+			};
+
 			const [variantsData, categoryRows, recentCustomers, settingsRows] = await Promise.all([
 				queryVariants(search, category),
 				// Filter categories to only those with in-stock products
@@ -86,6 +94,7 @@ interface DBVariant {
 export const actions: Actions = {
 	checkout: async ({ request, locals }) => {
 		if (!locals.user) return fail(401);
+		if (!db) return fail(503, { error: 'Direct database connection unavailable.' });
 
 		const data = await request.formData();
 		const cartItemsRaw = data.get('cartItems') as string;
@@ -232,6 +241,7 @@ export const actions: Actions = {
 	},
 
 	addCustomer: async ({ request }) => {
+		if (!db) return fail(503, { error: 'Direct database connection unavailable.' });
 		const data = await request.formData();
 		const name = (data.get('name') as string)?.trim();
 		const phone = (data.get('phone') as string)?.trim() || null;

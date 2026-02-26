@@ -9,6 +9,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		redirect(302, '/dashboard');
 	}
 
+	if (!db) return { settings: {} };
+
 	const rows = await db.select().from(storeSettings);
 	const settings = rows.reduce(
 		(acc: Record<string, string>, row: { key: string; value: string }) => {
@@ -24,6 +26,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 export const actions: Actions = {
 	update: async ({ request, locals }) => {
 		if (locals.user?.role !== 'admin') return fail(403);
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const keys = [

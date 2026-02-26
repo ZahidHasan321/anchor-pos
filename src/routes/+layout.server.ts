@@ -3,14 +3,14 @@ import { db } from '$lib/server/db';
 import { storeSettings } from '$lib/server/db/schema';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
-	const rows = await db.select().from(storeSettings);
-	const settings = rows.reduce(
-		(acc: Record<string, string>, row: { key: string; value: string }) => {
-			acc[row.key] = row.value;
-			return acc;
-		},
-		{} as Record<string, string>
-	);
+	const settings: Record<string, string> = {};
+	
+	if (db) {
+		const rows = await db.select().from(storeSettings);
+		for (const row of rows) {
+			settings[row.key] = row.value;
+		}
+	}
 
 	return {
 		user: locals.user,

@@ -30,6 +30,10 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		return json({ error: 'Missing parameters' }, { status: 400 });
 	}
 
+	if (!db) {
+		return json([], { status: 200 });
+	}
+
 	const startDate = new Date(from);
 	const endDate = new Date(to);
 	endDate.setHours(23, 59, 59, 999);

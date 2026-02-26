@@ -21,6 +21,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 		redirect(302, '/dashboard');
 	}
 
+	if (!db) return {
+		permissionsByRole: {},
+		allResources: ALL_RESOURCES,
+		configurableRoles: CONFIGURABLE_ROLES
+	};
+
 	const allPerms = await db.select().from(rolePermissions);
 
 	interface PermissionRow {
@@ -47,6 +53,7 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role !== 'admin') {
 			return fail(403, { error: 'Unauthorized' });
 		}
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const role = data.get('role') as string;

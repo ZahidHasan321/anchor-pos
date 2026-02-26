@@ -17,9 +17,9 @@ async function getKeys() {
         // We also need the public key for the JWKS endpoint
         const publicJwk = JSON.parse(env.POWERSYNC_PUBLIC_KEY || '{}');
         publicKey = await importJWK(publicJwk, 'RS256');
-    } else if (dev) {
-        // Generate for dev
-        console.warn('POWERSYNC_PRIVATE_KEY not set. Generating temporary key pair for development.');
+    } else if (dev || env.BUILD_TARGET === 'electron' || process.env.BUILD_TARGET === 'electron') {
+        // Generate for dev or electron
+        console.warn('POWERSYNC_PRIVATE_KEY not set. Generating temporary key pair.');
         const keys = await generateKeyPair('RS256');
         privateKey = keys.privateKey;
         publicKey = keys.publicKey;

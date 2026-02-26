@@ -10,7 +10,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	}
 
 	const search = url.searchParams.get('search') || '';
-	if (search.length < 2) {
+	if (search.length < 2 || !db) {
 		return json({ items: [] });
 	}
 

@@ -13,6 +13,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, '/dashboard');
 	}
 
+	if (!db) {
+		redirect(302, '/settings/users');
+	}
+
 	const userRows = await db
 		.select({
 			id: users.id,
@@ -40,6 +44,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 export const actions: Actions = {
 	update: async ({ params, request, locals }) => {
 		if (locals.user?.role !== 'admin') return fail(403);
+		if (!db) return fail(503, { message: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const name = (data.get('name') as string)?.trim();

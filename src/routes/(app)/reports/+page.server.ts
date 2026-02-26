@@ -21,7 +21,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	}
 
 	// 1. Critical data needed for initial render (Immediate)
-	const settingsRows = await db.select().from(storeSettings);
+	const settingsRows = db ? await db.select().from(storeSettings) : [];
 	const settings = settingsRows.reduce(
 		(acc: Record<string, string>, row: { key: string; value: string }) => {
 			acc[row.key] = row.value;
@@ -67,7 +67,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			break;
 		case 'all':
 		default:
-			const firstOrderResult = await db.select({ date: orders.createdAt }).from(orders).orderBy(orders.createdAt).limit(1);
+			const firstOrderResult = db ? await db.select({ date: orders.createdAt }).from(orders).orderBy(orders.createdAt).limit(1) : [];
 			startDate = firstOrderResult[0] ? new Date(firstOrderResult[0].date) : new Date(now.getFullYear(), now.getMonth(), 1);
 			startDate.setHours(0, 0, 0, 0);
 			break;
@@ -116,6 +116,12 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 		// Summaries
 		summaries: (async () => {
+			if (!db) return {
+				salesSummary: { count: 0, total: 0, avgOrder: 0, totalDiscount: 0 },
+				expenseSummary: { total: 0 },
+				itemsSold: 0,
+				grossProfit: 0
+			};
 			const [sales, expenses, items] = await Promise.all([
 				db.select({
 					count: sql<number>`count(*)`,
@@ -147,6 +153,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 		// Chart Data
 		chartData: (async () => {
+			if (!db) return [];
 			const chartDataRaw = await db.select({
 				date: dateExpressionMap[chartGrouping].as('date'),
 				total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('total'),
@@ -189,6 +196,17 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 		// All other reports
 		reports: (async () => {
+			if (!db) return {
+				topProducts: [],
+				categoryBreakdown: [],
+				cashierPerformance: [],
+				topCustomers: [],
+				paymentBreakdown: [],
+				refundSummary: [],
+				expenseBreakdown: [],
+				stockSummary: { totalStocked: 0 },
+				stockUpdates: []
+			};
 			const [topProductsRaw, categoryBreakdownRaw, cashierPerformanceRaw, topCustomersRaw, paymentBreakdown, refundSummary, expenseBreakdown, stockSummaryResult, stockUpdates] = await Promise.all([
 				db.select({ productId: products.id, productName: orderItems.productName, total_qty: sql<number>`sum(${orderItems.quantity})`.as('total_qty'), total_revenue: sql<number>`sum(${orderItems.priceAtSale} * ${orderItems.quantity} * (1 - ${orderItems.discount} / 100))`.as('total_revenue') }).from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id)).leftJoin(productVariants, eq(orderItems.variantId, productVariants.id)).leftJoin(products, eq(productVariants.productId, products.id)).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(orderItems.productName, products.id).orderBy(desc(sql`total_qty`)).limit(10),
 				db.select({ category: sql<string>`coalesce(${products.category}, 'Unknown')`.as('category'), total_qty: sql<number>`sum(${orderItems.quantity})`.as('total_qty'), total_revenue: sql<number>`sum(${orderItems.priceAtSale} * ${orderItems.quantity} * (1 - ${orderItems.discount} / 100))`.as('total_revenue') }).from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id)).leftJoin(productVariants, eq(orderItems.variantId, productVariants.id)).leftJoin(products, eq(productVariants.productId, products.id)).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(products.category).orderBy(desc(sql`total_revenue`)).limit(10),

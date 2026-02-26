@@ -37,6 +37,7 @@ export async function logAuditEvent(params: {
 	entityId?: string | null;
 	details?: string | null;
 }): Promise<void> {
+	if (!db) return;
 	const lastEntryRows = await db
 		.select({ hash: auditLogs.hash })
 		.from(auditLogs)
@@ -77,6 +78,7 @@ export async function verifyAuditChain(): Promise<{
 	brokenAt?: number;
 	total: number;
 }> {
+	if (!db) return { valid: true, total: 0 };
 	const allLogs = await db.select().from(auditLogs).orderBy(auditLogs.createdAt);
 	if (allLogs.length === 0) return { valid: true, total: 0 };
 

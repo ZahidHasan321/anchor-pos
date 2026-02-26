@@ -10,6 +10,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
 
+	if (!db) {
+		redirect(302, '/inventory');
+	}
+
 	const productRows = await db.select().from(products).where(eq(products.id, params.id)).limit(1);
 	const product = productRows[0];
 
@@ -28,6 +32,7 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role === 'sales') {
 			return fail(403, { error: 'Unauthorized' });
 		}
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const name = (data.get('name') as string)?.trim();

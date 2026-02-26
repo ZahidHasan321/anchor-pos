@@ -15,8 +15,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json({ error: 'Invalid theme' }, { status: 400 });
 	}
 
-	// Save to DB (mode-watcher handles localStorage on the client)
-	await db.update(users).set({ theme }).where(eq(users.id, locals.user.id));
+	if (db) {
+		// Save to DB (mode-watcher handles localStorage on the client)
+		await db.update(users).set({ theme }).where(eq(users.id, locals.user.id));
+	}
 
 	return json({ success: true });
 };

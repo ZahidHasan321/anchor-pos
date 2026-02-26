@@ -12,6 +12,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
 
+	if (!db) {
+		redirect(302, '/inventory');
+	}
+
 	const productRows = await db.select().from(products).where(eq(products.id, params.id)).limit(1);
 	const product = productRows[0];
 
@@ -32,6 +36,7 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role === 'sales') {
 			return fail(403, { stockError: 'Unauthorized' });
 		}
+		if (!db) return fail(503, { stockError: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const variantId = data.get('variantId') as string;
@@ -99,6 +104,7 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role === 'sales') {
 			return fail(403, { variantError: 'Unauthorized' });
 		}
+		if (!db) return fail(503, { variantError: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const sizes = data.getAll('sizes') as string[];
@@ -180,6 +186,7 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role === 'sales') {
 			return fail(403, { error: 'Unauthorized' });
 		}
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const variantId = data.get('variantId') as string;
@@ -205,6 +212,7 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role === 'sales') {
 			return fail(403, { error: 'Unauthorized' });
 		}
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
 
 		const data = await request.formData();
 		const variantId = data.get('variantId') as string;
@@ -248,6 +256,7 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role !== 'admin') {
 			return fail(403, { deleteError: 'Only admins can delete products' });
 		}
+		if (!db) return fail(503, { deleteError: 'Database connection unavailable' });
 
 		try {
 			await db.delete(products).where(eq(products.id, params.id));

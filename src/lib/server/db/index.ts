@@ -5,7 +5,10 @@ import { env } from '$env/dynamic/private';
 import { dev, browser } from '$app/environment';
 import { building } from '$app/environment';
 
-const isElectron = env.BUILD_TARGET === 'electron';
+// Robust check for Electron environment
+const isElectron = env.BUILD_TARGET === 'electron' || 
+                  (typeof process !== 'undefined' && process.env?.BUILD_TARGET === 'electron');
+
 const connectionString = env.DATABASE_URL;
 
 if (!connectionString && !building && !isElectron) {

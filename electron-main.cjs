@@ -224,6 +224,7 @@ async function createWindow() {
             process.env.ORIGIN = `http://localhost:${port}`;
             // Fix for SvelteKit adapter-node address binding
             process.env.HOST = '127.0.0.1'; 
+            process.env.BUILD_TARGET = 'electron';
             
             // Register a shortcut to open DevTools even in production for debugging
             globalShortcut.register('CommandOrControl+Shift+I', () => {

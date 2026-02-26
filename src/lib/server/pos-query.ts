@@ -3,6 +3,7 @@ import { products, productVariants } from '$lib/server/db/schema';
 import { eq, gt, and, like, or, sql } from 'drizzle-orm';
 
 export async function queryVariants(search: string, category: string, limit = 50, offset = 0) {
+	if (!db) return { items: [], hasMore: false };
 	const conditions = [gt(productVariants.stockQuantity, 0)];
 
 	if (search) {

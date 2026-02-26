@@ -17,25 +17,57 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 	const dateStr = url.searchParams.get('date');
 
 	let date: Date;
-	if (dateStr) {
-		date = new Date(`${dateStr}T00:00:00Z`);
-	} else {
-		const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: storeTimezone }).format(
-			new Date()
-		);
-		date = new Date(`${todayStr}T00:00:00Z`);
-	}
+	const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: storeTimezone }).format(new Date());
+	const targetDateStr = dateStr || todayStr;
 
-	const nextDay = new Date(date);
-	nextDay.setUTCDate(date.getUTCDate() + 1);
+	// Parse date in the store's timezone
+	date = new Date(`${targetDateStr}T00:00:00`);
+	
+	// If the browser/server environment is not in Asia/Dhaka, we need to ensure 
+	// the Date object represents midnight in Asia/Dhaka.
+	// However, simple parsing like above might still be relative to local time.
+	// A more robust way using Intl to get the offset or just calculating the UTC range:
+	
+	const getZonedDateRange = (dateStr: string, timeZone: string) => {
+		// Create a UTC date at midnight of the target date
+		const targetMidnight = new Date(`${dateStr}T00:00:00Z`);
+		
+		// Use Intl to find what time it is in the target timezone when UTC is at that midnight
+		const formatter = new Intl.DateTimeFormat('en-CA', {
+			timeZone,
+			year: 'numeric', month: '2-digit', day: '2-digit',
+			hour: '2-digit', minute: '2-digit', second: '2-digit',
+			hour12: false
+		});
+		
+		// This string will be like "2026-02-26 06:00:00" if TZ is UTC+6
+		const zonedStr = formatter.format(targetMidnight).replace(',', '');
+		const [zDate, zTime] = zonedStr.split(' ');
+		const [zh, zm, zs] = zTime.split(':').map(Number);
+		
+		// The offset in milliseconds is (zoned_hours * 3600 + zoned_minutes * 60 + zoned_seconds) * 1000
+		// But wait, the date might have shifted too. 
+		// Simpler: 
+		const actualZonedTime = new Date(zonedStr.replace(' ', 'T') + 'Z').getTime();
+		const offset = actualZonedTime - targetMidnight.getTime();
+		
+		// To get UTC start, we subtract the offset from the UTC target midnight
+		const startUtc = new Date(targetMidnight.getTime() - offset);
+		const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60 * 1000);
+		
+		return { startUtc, endUtc };
+	};
+
+	const { startUtc: dateRangeStart, endUtc: dateRangeEnd } = getZonedDateRange(targetDateStr, storeTimezone);
 
 	// Basic page data (needed immediately)
 	return {
 		view,
-		date: date.toISOString().split('T')[0],
+		date: targetDateStr,
 
 		// Deferred data for streaming
 		dailyData: (async () => {
+			if (!db) return { entries: [], summary: { totalIn: 0, totalOut: 0, net: 0 } };
 			const [entries, totals] = await Promise.all([
 				db
 					.select({
@@ -48,12 +80,12 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 					})
 					.from(cashbook)
 					.leftJoin(users, eq(cashbook.userId, users.id))
-					.where(and(gte(cashbook.createdAt, date), lt(cashbook.createdAt, nextDay)))
+					.where(and(gte(cashbook.createdAt, dateRangeStart), lt(cashbook.createdAt, dateRangeEnd)))
 					.orderBy(desc(cashbook.createdAt)),
 				db
 					.select({ type: cashbook.type, total: sql<number>`sum(${cashbook.amount})` })
 					.from(cashbook)
-					.where(and(gte(cashbook.createdAt, date), lt(cashbook.createdAt, nextDay)))
+					.where(and(gte(cashbook.createdAt, dateRangeStart), lt(cashbook.createdAt, dateRangeEnd)))
 					.groupBy(cashbook.type)
 			]);
 
@@ -67,6 +99,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 		})(),
 
 		expenseDescriptions: (async () => {
+			if (!db) return [];
 			const rows = await db
 				.selectDistinct({ description: cashbook.description })
 				.from(cashbook)
@@ -75,7 +108,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 		})(),
 
 		transactionsData: (async () => {
-			if (view !== 'all') return null;
+			if (view !== 'all' || !db) return null;
 
 			const txPage = Math.max(1, parseInt(url.searchParams.get('txPage') || '1'));
 			const txType = url.searchParams.get('txType') || 'all';

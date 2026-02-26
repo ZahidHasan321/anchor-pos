@@ -92,17 +92,14 @@
 	const isToday = $derived(
 		dateFrom === formatDateStr(new Date()) && dateTo === formatDateStr(new Date())
 	);
-	const isThisWeek = $derived(() => {
-		const now = new Date();
-		const start = new Date(now);
-		start.setDate(now.getDate() - now.getDay());
-		return dateFrom === formatDateStr(start) && dateTo === formatDateStr(now);
-	});
-	const isThisMonth = $derived(() => {
-		const now = new Date();
-		const start = new Date(now.getFullYear(), now.getMonth(), 1);
-		return dateFrom === formatDateStr(start) && dateTo === formatDateStr(now);
-	});
+	const isThisWeek = $derived(
+		dateFrom === formatDateStr(new Date(new Date().setDate(new Date().getDate() - new Date().getDay()))) && 
+		dateTo === formatDateStr(new Date())
+	);
+	const isThisMonth = $derived(
+		dateFrom === formatDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) && 
+		dateTo === formatDateStr(new Date())
+	);
 </script>
 
 <svelte:head><title>Order History — Clothing POS</title></svelte:head>
@@ -160,14 +157,14 @@
 						>
 						<Separator orientation="vertical" class="my-auto h-4" />
 						<Button
-							variant={isThisWeek() ? 'secondary' : 'ghost'}
+							variant={isThisWeek ? 'secondary' : 'ghost'}
 							size="sm"
 							onclick={setThisWeek}
 							class="h-full px-3 text-[10px] sm:text-xs">Week</Button
 						>
 						<Separator orientation="vertical" class="my-auto h-4" />
 						<Button
-							variant={isThisMonth() ? 'secondary' : 'ghost'}
+							variant={isThisMonth ? 'secondary' : 'ghost'}
 							size="sm"
 							onclick={setThisMonth}
 							class="h-full px-3 text-[10px] sm:text-xs">Month</Button
@@ -263,7 +260,7 @@
 									></Table.Cell
 								>
 								<Table.Cell class="text-right"
-									><Button variant="ghost" size="icon" href="/orders/${order.id}"
+									><Button variant="ghost" size="icon" href="/orders/{order.id}"
 										><Eye class="h-4 w-4" /></Button
 									></Table.Cell
 								>

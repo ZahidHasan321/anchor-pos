@@ -10,6 +10,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
 
+	if (!db) {
+		redirect(302, '/inventory');
+	}
+
 	const productRows = await db.select().from(products).where(eq(products.id, params.id)).limit(1);
 	const product = productRows[0];
 
