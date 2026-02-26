@@ -39,9 +39,22 @@ docker compose build
 docker compose up -d
 
 # 5. Wait for DB to be ready and run migrations
+echo "Waiting for database to be ready..."
+# Robust wait loop instead of fixed sleep
+MAX_RETRIES=30
+COUNT=0
+until docker compose exec app pnpm drizzle-kit check --dialect postgresql > /dev/null 2>&1 || [ $COUNT -eq $MAX_RETRIES ]; do
+    echo "Database not ready yet... waiting ($((COUNT+1))/$MAX_RETRIES)"
+    sleep 2
+    COUNT=$((COUNT+1))
+done
+
+if [ $COUNT -eq $MAX_RETRIES ]; then
+    echo "Error: Database timed out."
+    exit 1
+fi
+
 echo "Running database migrations..."
-# Wait for app container to be up
-sleep 10
 docker compose exec app pnpm db:push
 
 # 6. Bootstrap Admin if credentials exist in .env

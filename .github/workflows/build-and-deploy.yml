@@ -39,5 +39,5 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
           source: "dist-electron/*.exe,dist-electron/latest.yml"
-          target: "/root/anchor-pos/downloads/"
+          target: "/root/auto-pos/downloads/"
           strip_components: 1
