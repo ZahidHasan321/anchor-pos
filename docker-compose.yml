@@ -40,8 +40,8 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./powersync.yaml:/etc/powersync/powersync.yaml
-      - ./powersync-rules.yaml:/etc/powersync/powersync-rules.yaml
+      - ./powersync.yaml:/config/powersync.yaml
+      - ./powersync-rules.yaml:/config/powersync-rules.yaml
     depends_on:
       pos_db:
         condition: service_healthy
