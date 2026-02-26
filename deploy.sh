@@ -34,11 +34,9 @@ until docker compose exec pos_db pg_isready -U pos_user -d clothing_pos &> /dev/
     sleep 2
 done
 
+# Only check if the db is connecting properly to the postgres db using our script or pnpm db:push
+echo "Checking database connection and applying schema..."
 docker compose exec pos_app pnpm db:push
-
-if grep -q "ADMIN_PASSWORD" .env; then
-    docker compose exec pos_app pnpm run db:bootstrap
-fi
 
 docker compose restart pos_nginx
 echo "--- Deployment Complete ---"
