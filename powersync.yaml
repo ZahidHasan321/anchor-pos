@@ -1,14 +1,14 @@
 port: 8080
 
 replication:
-  uri: ${POWERSYNC_DATABASE_URL}
+  uri: !env POWERSYNC_DATABASE_URL
 
 storage:
   type: postgresql
-  uri: ${POWERSYNC_STORAGE_URL}
+  uri: !env POWERSYNC_STORAGE_URL
 
 sync_rules:
   path: /app/powersync-rules.yaml
 
 auth:
-  jwks_url: ${POWERSYNC_JWKS_URL}
+  jwks_url: !env POWERSYNC_JWKS_URL
