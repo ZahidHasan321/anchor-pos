@@ -1,7 +1,7 @@
 bucket_definitions:
   global:
     data:
-      - SELECT id, name, description, category, template_price AS base_price, default_discount, image_url
+      - SELECT id, name, description, category, base_price, default_discount, image_url
           FROM products
 
       - SELECT id, product_id, size, color, barcode, stock_quantity, price, discount
