@@ -14,9 +14,9 @@ client_auth:
   jwks:
     jwks_uri:
       - !env PS_JWKS_URL
-    audience:
-      - powersync-dev
-      - powersync
+  audience:
+    - powersync-dev
+    - powersync
 
 sync_rules:
   path: /app/powersync-rules.yaml
