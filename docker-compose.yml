@@ -46,8 +46,8 @@ services:
     container_name: pos_powersync
     restart: always
     environment:
-      POWERSYNC_DATABASE_URL: postgres://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/${POSTGRES_DB:-clothing_pos}
-      POWERSYNC_STORAGE_URL: postgres://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/powersync_storage
+      POWERSYNC_DATABASE_URL: postgresql://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/${POSTGRES_DB:-clothing_pos}
+      POWERSYNC_STORAGE_URL: postgresql://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/powersync_storage
       POWERSYNC_JWKS_URL: https://anchorshop.cloud/.well-known/jwks.json
       PS_CONFIG_PATH: /app/powersync.yaml
     ports:
