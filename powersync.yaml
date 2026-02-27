@@ -11,12 +11,8 @@ storage:
   uri: !env PS_STORAGE_URL
 
 client_auth:
-  jwks:
-    jwks_uri:
-      - !env PS_JWKS_URL
-  audience:
-    - powersync-dev
-    - powersync
+  jwks_uri: !env PS_JWKS_URL
+  audience: ["powersync-dev", "powersync"]
 
 sync_rules:
   path: /app/powersync-rules.yaml
