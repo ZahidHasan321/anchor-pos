@@ -53,8 +53,8 @@ services:
     container_name: pos_powersync
     restart: always
     environment:
-      PS_REPLICATION_URL: postgresql://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/${POSTGRES_DB:-clothing_pos}?sslmode=disable
-      PS_STORAGE_URL: postgresql://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/powersync_storage?sslmode=disable
+      PS_REPLICATION_URL: postgresql://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/${POSTGRES_DB:-clothing_pos}
+      PS_STORAGE_URL: postgresql://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/powersync_storage
       PS_JWKS_URL: http://pos_app:3000/.well-known/jwks.json
       PS_CONFIG_PATH: /app/powersync.yaml
     ports:
