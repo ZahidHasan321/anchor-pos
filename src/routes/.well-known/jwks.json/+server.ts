@@ -3,15 +3,13 @@ import { createPublicKey } from 'crypto';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = () => {
-  const publicKeyPem = process.env.POWERSYNC_PUBLIC_KEY;
-  if (!publicKeyPem) {
+  const publicKeyRaw = process.env.POWERSYNC_PUBLIC_KEY;
+  if (!publicKeyRaw) {
     return json({ error: 'Public key not configured' }, { status: 500 });
   }
 
-  const key = createPublicKey(publicKeyPem.replace(/\\n/g, '\n'));
-  const jwk = key.export({ format: 'jwk' }) as Record<string, string>;
+  // Key is stored as JWK JSON string
+  const jwk = JSON.parse(publicKeyRaw);
 
-  return json({
-    keys: [{ ...jwk, use: 'sig', alg: 'RS256', kid: 'powersync-key-1' }],
-  });
+  return json({ keys: [jwk] });
 };

@@ -1,15 +1,17 @@
 import { json, error } from '@sveltejs/kit';
-import { SignJWT, importPKCS8 } from 'jose';
+import { SignJWT, importJWK } from 'jose';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	const user = locals.user;
 	if (!user) throw error(401, 'Unauthorized');
 
-	const privateKeyPem = process.env.POWERSYNC_PRIVATE_KEY;
-	if (!privateKeyPem) throw error(500, 'Private key not configured');
+	const privateKeyRaw = process.env.POWERSYNC_PRIVATE_KEY;
+	if (!privateKeyRaw) throw error(500, 'Private key not configured');
 
-	const privateKey = await importPKCS8(privateKeyPem.replace(/\\n/g, '\n'), 'RS256');
+	// Key is stored as JWK JSON string
+	const jwkObject = JSON.parse(privateKeyRaw);
+	const privateKey = await importJWK(jwkObject, 'RS256');
 
 	const token = await new SignJWT({ sub: user.id })
 		.setProtectedHeader({ alg: 'RS256', kid: 'powersync-key-1' })

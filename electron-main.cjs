@@ -49,6 +49,11 @@ async function runMigrations() {
         return;
     }
 
+    if (app.isPackaged && !process.env.RUN_MIGRATIONS) {
+        log.info('App is packaged, skipping automatic migrations (use RUN_MIGRATIONS=true to force)');
+        return;
+    }
+
     try {
         const { migrate } = require('drizzle-orm/postgres-js/migrator');
         const { drizzle } = require('drizzle-orm/postgres-js');
@@ -98,6 +103,18 @@ for (const envPath of envPaths) {
         console.log('Loaded config from:', envPath);
     }
 }
+
+// Fallback defaults for packaged build — ensure app can always reach the VPS if .env is missing
+if (!process.env.DATABASE_URL) {
+    process.env.DATABASE_URL = 'postgresql://neondb_owner:npg_8NCI0VGbBXdi@ep-sparkling-cherry-a1v8fbmk-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+}
+if (!process.env.POWERSYNC_URL) {
+    process.env.POWERSYNC_URL = 'https://powersync.anchorshop.cloud';
+}
+if (!process.env.POWERSYNC_API_URL) {
+    process.env.POWERSYNC_API_URL = 'https://anchorshop.cloud';
+}
+process.env.BUILD_TARGET = 'electron';
 
 let mainWindow;
 let splashWindow;
@@ -221,10 +238,13 @@ async function createWindow() {
             // Explicitly set important environment variables for the server
             process.env.PORT = port;
             process.env.NODE_ENV = 'production';
-            process.env.ORIGIN = `http://localhost:${port}`;
+            process.env.ORIGIN = `http://127.0.0.1:${port}`;
             // Fix for SvelteKit adapter-node address binding
             process.env.HOST = '127.0.0.1'; 
             process.env.BUILD_TARGET = 'electron';
+            
+            console.log('Booting SvelteKit server on port:', port);
+            console.log('Origin:', process.env.ORIGIN);
             
             // Register a shortcut to open DevTools even in production for debugging
             globalShortcut.register('CommandOrControl+Shift+I', () => {
@@ -260,7 +280,7 @@ async function createWindow() {
                 return false;
             };
 
-            const appUrl = `http://localhost:${port}`;
+            const appUrl = `http://127.0.0.1:${port}`;
             const serverReady = await waitForServer(appUrl);
             
             if (!serverReady) {
