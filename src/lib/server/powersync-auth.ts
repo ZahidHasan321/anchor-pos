@@ -37,8 +37,13 @@ export async function createPowerSyncToken(userId: string) {
     // sub: user ID
     // aud: powersync url (optional but recommended)
     return await new SignJWT({})
-        .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
+        .setProtectedHeader({ 
+            alg: 'RS256', 
+            typ: 'JWT',
+            kid: 'powersync-key-1'
+        })
         .setSubject(userId)
+        .setAudience(['powersync-dev', 'powersync'])
         .setIssuedAt()
         .setExpirationTime('24h')
         .sign(privateKey);
