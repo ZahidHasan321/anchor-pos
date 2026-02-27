@@ -1,7 +1,6 @@
 import { db } from '$lib/server/db';
 import { products, productVariants } from '$lib/server/db/schema';
 import { eq, gt, and, like, or, sql } from 'drizzle-orm';
-import { getPowerSyncDb } from '$lib/powersync/db';
 
 export async function queryVariants(search: string, category: string, limit = 50, offset = 0) {
 	if (!db) return { items: [], hasMore: false };
@@ -48,6 +47,7 @@ export async function queryVariants(search: string, category: string, limit = 50
 }
 
 export async function queryVariantsPS(search: string, category: string, limit = 50, offset = 0) {
+	const { getPowerSyncDb } = await import('$lib/powersync/db');
 	const psDb = getPowerSyncDb();
 	let query = `
     SELECT 

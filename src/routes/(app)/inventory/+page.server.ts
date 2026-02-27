@@ -4,7 +4,6 @@ import { db } from '$lib/server/db';
 import { products, productVariants, storeSettings } from '$lib/server/db/schema';
 import { eq, sql, desc, and } from 'drizzle-orm';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
-import { getPowerSyncDb } from '$lib/powersync/db';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
@@ -27,6 +26,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		// Streaming everything else
 		streamed: (async () => {
 			if (isElectron) {
+				const { getPowerSyncDb } = await import('$lib/powersync/db');
 				const psDb = getPowerSyncDb();
 				const settingsRows = await psDb.getAll('SELECT * FROM store_settings');
 				const settings = settingsRows.reduce((acc: Record<string, string>, row: any) => {

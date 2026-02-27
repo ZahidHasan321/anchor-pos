@@ -6,7 +6,6 @@ import { eq, sql, gte, lt, and, desc } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
-import { getPowerSyncDb } from '$lib/powersync/db';
 
 export const load: PageServerLoad = async ({ url, locals, parent }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'cashbook'))) {
@@ -70,6 +69,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 		// Deferred data for streaming
 		dailyData: (async () => {
 			if (isElectron) {
+				const { getPowerSyncDb } = await import('$lib/powersync/db');
 				const psDb = getPowerSyncDb();
 				const [entries, totals] = await Promise.all([
 					psDb.getAll(
@@ -137,6 +137,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 
 		expenseDescriptions: (async () => {
 			if (isElectron) {
+				const { getPowerSyncDb } = await import('$lib/powersync/db');
 				const psDb = getPowerSyncDb();
 				const rows = await psDb.getAll(
 					"SELECT DISTINCT description FROM cashbook WHERE type = 'out'"
@@ -161,6 +162,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 			if (view !== 'all') return null;
 
 			if (isElectron) {
+				const { getPowerSyncDb } = await import('$lib/powersync/db');
 				const psDb = getPowerSyncDb();
 				let baseQuery = `FROM cashbook WHERE 1=1`;
 				const params: any[] = [];

@@ -4,7 +4,6 @@ import { db } from '$lib/server/db';
 import { customers, orders } from '$lib/server/db/schema';
 import { eq, sql, desc, and } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
-import { getPowerSyncDb } from '$lib/powersync/db';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
 	if (!locals.user) {
@@ -31,6 +30,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		// Stream the data
 		streamed: (async () => {
 			if (isElectron) {
+				const { getPowerSyncDb } = await import('$lib/powersync/db');
 				const psDb = getPowerSyncDb();
 				let baseQuery = `
 					FROM customers c

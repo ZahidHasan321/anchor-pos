@@ -3,7 +3,6 @@ import type { PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { orders, customers, users } from '$lib/server/db/schema';
 import { eq, and, gte, lte, desc, sql, like, or } from 'drizzle-orm';
-import { getPowerSyncDb } from '$lib/powersync/db';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
 	if (!locals.user) {
@@ -42,6 +41,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		filters: { from: dateFrom, to: dateTo, status: statusFilter, search },
 		streamed: (async () => {
 			if (isElectron) {
+				const { getPowerSyncDb } = await import('$lib/powersync/db');
 				const psDb = getPowerSyncDb();
 				let baseQuery = `
 					FROM orders o

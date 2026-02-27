@@ -15,7 +15,6 @@ import { eq, sql, inArray, and, gt } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import { queryVariants, queryVariantsPS } from '$lib/server/pos-query';
-import { getPowerSyncDb } from '$lib/powersync/db';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) {
@@ -35,6 +34,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		// Streamed data
 		streamed: (async () => {
 			if (isElectron) {
+				const { getPowerSyncDb } = await import('$lib/powersync/db');
 				const psDb = getPowerSyncDb();
 				const [variantsData, categoryRows, recentCustomers, settingsRows] = await Promise.all([
 					queryVariantsPS(search, category),

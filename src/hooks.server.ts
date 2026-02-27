@@ -6,7 +6,6 @@ import { hashPassword } from '$lib/server/auth';
 import { generateId } from '$lib/utils';
 import { eq } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
-import { connectPowerSync } from '$lib/powersync/init.js';
 
 // 0. Bootstrap Admin User (Runs once on first load)
 let isBootstrapped = false;
@@ -81,8 +80,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	// Connect PowerSync if user is authenticated and token is expired/near expiry
-	if (event.locals.user && Date.now() > tokenExpiresAt - 60_000) {
+	// ONLY on Electron target
+	if (process.env.BUILD_TARGET === 'electron' && event.locals.user && Date.now() > tokenExpiresAt - 60_000) {
 		try {
+			const { connectPowerSync } = await import('$lib/powersync/init.js');
 			const baseUrl = `http://localhost:${process.env.PORT || 3000}`;
 			const res = await fetch(`${baseUrl}/api/auth/powersync-token`, {
 				headers: { Cookie: event.request.headers.get('cookie') || '' }
