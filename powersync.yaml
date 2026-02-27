@@ -4,7 +4,7 @@ database:
   uri: ${POWERSYNC_DATABASE_URL}
 
 sync_rules:
-  path: /config/powersync-rules.yaml
+  path: /app/powersync-rules.yaml
 
 auth:
   jwks_url: ${POWERSYNC_JWKS_URL}

@@ -37,11 +37,12 @@ services:
     environment:
       POWERSYNC_DATABASE_URL: postgres://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/${POSTGRES_DB:-clothing_pos}
       POWERSYNC_JWKS_URL: https://anchorshop.cloud/.well-known/jwks.json
+      PS_CONFIG_PATH: /app/powersync.yaml
     ports:
       - "8080:8080"
     volumes:
-      - ./powersync.yaml:/config/powersync.yaml
-      - ./powersync-rules.yaml:/config/powersync-rules.yaml
+      - ./powersync.yaml:/app/powersync.yaml
+      - ./powersync-rules.yaml:/app/powersync-rules.yaml
     depends_on:
       pos_db:
         condition: service_healthy
