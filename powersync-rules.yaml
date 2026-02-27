@@ -1,7 +1,7 @@
 bucket_definitions:
   # Global bucket for everyone (products, categories, etc.)
   global:
-    data_queries:
+    data:
       - SELECT id, name, description, category, image_url, created_at, updated_at FROM products
       - SELECT id, product_id, sku, size, color, price, cost_price, stock_quantity, created_at, updated_at FROM product_variants
       - SELECT key, value, updated_at FROM store_settings
@@ -11,7 +11,7 @@ bucket_definitions:
   # Shop-specific data (Orders, Customers, Cashbook)
   # For now, we sync all since it's a single shop POS
   shop_data:
-    data_queries:
+    data:
       - SELECT id, name, email, phone, address, total_spent, last_visit, created_at, updated_at FROM customers
       - SELECT id, order_number, customer_id, user_id, status, subtotal, discount_amount, tax_amount, total_amount, payment_method, payment_status, created_at, updated_at FROM orders
       - SELECT id, order_id, product_id, variant_id, quantity, unit_price, total_price, created_at FROM order_items
