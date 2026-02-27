@@ -1,7 +1,11 @@
 port: 8080
 
-database:
+replication:
   uri: ${POWERSYNC_DATABASE_URL}
+
+storage:
+  type: postgresql
+  uri: ${POWERSYNC_STORAGE_URL}
 
 sync_rules:
   path: /app/powersync-rules.yaml

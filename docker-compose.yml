@@ -15,6 +15,17 @@ services:
       timeout: 5s
       retries: 10
 
+  db_init:
+    image: postgres:17-alpine
+    container_name: db_init
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    command: >
+      sh -c "psql -h pos_db -U ${POSTGRES_USER:-pos_user} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'powersync_storage'\" | grep -q 1 || psql -h pos_db -U ${POSTGRES_USER:-pos_user} -d postgres -c \"CREATE DATABASE powersync_storage\""
+    depends_on:
+      pos_db:
+        condition: service_healthy
+
   pos_app:
     build: .
     container_name: pos_app
@@ -36,6 +47,7 @@ services:
     restart: always
     environment:
       POWERSYNC_DATABASE_URL: postgres://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/${POSTGRES_DB:-clothing_pos}
+      POWERSYNC_STORAGE_URL: postgres://${POSTGRES_USER:-pos_user}:${POSTGRES_PASSWORD}@pos_db:5432/powersync_storage
       POWERSYNC_JWKS_URL: https://anchorshop.cloud/.well-known/jwks.json
       PS_CONFIG_PATH: /app/powersync.yaml
     ports:
@@ -46,6 +58,8 @@ services:
     depends_on:
       pos_db:
         condition: service_healthy
+      db_init:
+        condition: service_completed_successfully
 
   pos_nginx:
     image: nginx:alpine
