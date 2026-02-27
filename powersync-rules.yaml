@@ -4,7 +4,7 @@ bucket_definitions:
     data:
       - SELECT id, name, description, category, image_url, created_at, updated_at FROM products
       - SELECT id, product_id, sku, size, color, price, cost_price, stock_quantity, created_at, updated_at FROM product_variants
-      - SELECT key, value, updated_at FROM store_settings
+      - SELECT key as id, key, value, updated_at FROM store_settings
       - SELECT id, role, permission, created_at FROM role_permissions
       - SELECT id, username, role, is_active, created_at FROM users
   
