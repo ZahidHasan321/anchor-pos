@@ -1,6 +1,7 @@
 import { db } from '$lib/server/db';
 import { products, productVariants } from '$lib/server/db/schema';
 import { eq, gt, and, like, or, sql } from 'drizzle-orm';
+import { getPowerSyncDb } from '$lib/powersync/db';
 
 export async function queryVariants(search: string, category: string, limit = 50, offset = 0) {
 	if (!db) return { items: [], hasMore: false };
@@ -43,5 +44,43 @@ export async function queryVariants(search: string, category: string, limit = 50
 		.limit(limit)
 		.offset(offset);
 
+	return { items, hasMore: items.length === limit };
+}
+
+export async function queryVariantsPS(search: string, category: string, limit = 50, offset = 0) {
+	const psDb = getPowerSyncDb();
+	let query = `
+    SELECT 
+      pv.id,
+      pv.product_id as productId,
+      p.name as productName,
+      pv.size,
+      pv.color,
+      pv.barcode,
+      p.category,
+      pv.price,
+      pv.discount,
+      pv.stock_quantity as stockQuantity
+    FROM product_variants pv
+    INNER JOIN products p ON pv.product_id = p.id
+    WHERE pv.stock_quantity > 0
+  `;
+	const params: any[] = [];
+
+	if (search) {
+		const pattern = `%${search}%`;
+		query += ` AND (pv.barcode LIKE ? OR pv.size LIKE ? OR p.name LIKE ?)`;
+		params.push(pattern, pattern, pattern);
+	}
+
+	if (category && category !== 'All') {
+		query += ` AND p.category = ?`;
+		params.push(category);
+	}
+
+	query += ` ORDER BY p.name ASC LIMIT ? OFFSET ?`;
+	params.push(limit, offset);
+
+	const items = await psDb.getAll(query, params);
 	return { items, hasMore: items.length === limit };
 }

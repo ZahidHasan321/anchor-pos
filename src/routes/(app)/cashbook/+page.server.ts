@@ -6,6 +6,7 @@ import { eq, sql, gte, lt, and, desc } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
+import { getPowerSyncDb } from '$lib/powersync/db';
 
 export const load: PageServerLoad = async ({ url, locals, parent }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'cashbook'))) {
@@ -15,6 +16,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 	const storeTimezone = 'Asia/Dhaka';
 	const view = url.searchParams.get('view') || 'daily';
 	const dateStr = url.searchParams.get('date');
+	const isElectron = process.env.BUILD_TARGET === 'electron';
 
 	let date: Date;
 	const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: storeTimezone }).format(new Date());
@@ -67,6 +69,41 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 
 		// Deferred data for streaming
 		dailyData: (async () => {
+			if (isElectron) {
+				const psDb = getPowerSyncDb();
+				const [entries, totals] = await Promise.all([
+					psDb.getAll(
+						`
+						SELECT 
+							c.id, c.amount, c.type, c.description, c.created_at as createdAt,
+							u.name as userName
+						FROM cashbook c
+						LEFT JOIN users u ON c.user_id = u.id
+						WHERE c.created_at >= ? AND c.created_at < ?
+						ORDER BY c.created_at DESC
+					`,
+						[dateRangeStart.toISOString(), dateRangeEnd.toISOString()]
+					),
+					psDb.getAll(
+						`
+						SELECT type, sum(amount) as total
+						FROM cashbook
+						WHERE created_at >= ? AND created_at < ?
+						GROUP BY type
+					`,
+						[dateRangeStart.toISOString(), dateRangeEnd.toISOString()]
+					)
+				]);
+
+				const totalIn = (totals as any[]).find((t) => t.type === 'in')?.total || 0;
+				const totalOut = (totals as any[]).find((t) => t.type === 'out')?.total || 0;
+
+				return {
+					entries,
+					summary: { totalIn, totalOut, net: totalIn - totalOut }
+				};
+			}
+
 			if (!db) return { entries: [], summary: { totalIn: 0, totalOut: 0, net: 0 } };
 			const [entries, totals] = await Promise.all([
 				db
@@ -99,6 +136,13 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 		})(),
 
 		expenseDescriptions: (async () => {
+			if (isElectron) {
+				const psDb = getPowerSyncDb();
+				const rows = await psDb.getAll(
+					"SELECT DISTINCT description FROM cashbook WHERE type = 'out'"
+				);
+				return rows.map((r: any) => r.description);
+			}
 			if (!db) return [];
 			const rows = await db
 				.selectDistinct({ description: cashbook.description })
@@ -108,13 +152,54 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 		})(),
 
 		transactionsData: (async () => {
-			if (view !== 'all' || !db) return null;
-
 			const txPage = Math.max(1, parseInt(url.searchParams.get('txPage') || '1'));
 			const txType = url.searchParams.get('txType') || 'all';
 			const txSearch = url.searchParams.get('txSearch') || '';
 			const txLimit = 50;
 			const txOffset = (txPage - 1) * txLimit;
+
+			if (view !== 'all') return null;
+
+			if (isElectron) {
+				const psDb = getPowerSyncDb();
+				let baseQuery = `FROM cashbook WHERE 1=1`;
+				const params: any[] = [];
+				if (txType === 'in' || txType === 'out') {
+					baseQuery += ` AND type = ?`;
+					params.push(txType);
+				}
+				if (txSearch) {
+					baseQuery += ` AND description LIKE ?`;
+					params.push(`%${txSearch}%`);
+				}
+
+				const [countRes, txRes] = await Promise.all([
+					psDb.get(`SELECT count(*) as count ${baseQuery}`, params),
+					psDb.getAll(
+						`
+						SELECT 
+							id, amount, type, description, created_at as createdAt,
+							COALESCE((SELECT name FROM users WHERE id = user_id), 'System') as userName
+						${baseQuery}
+						ORDER BY created_at DESC
+						LIMIT ? OFFSET ?
+					`,
+						[...params, txLimit, txOffset]
+					)
+				]);
+
+				const totalEntries = (countRes as any).count ?? 0;
+				return {
+					transactions: txRes,
+					txPage,
+					txTotalPages: Math.max(1, Math.ceil(totalEntries / txLimit)),
+					txTotalEntries: totalEntries,
+					txType,
+					txSearch
+				};
+			}
+
+			if (!db) return null;
 
 			const txConditions: any[] = [];
 			if (txType === 'in' || txType === 'out') txConditions.push(eq(cashbook.type, txType));

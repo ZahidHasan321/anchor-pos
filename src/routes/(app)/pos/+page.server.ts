@@ -14,7 +14,8 @@ import {
 import { eq, sql, inArray, and, gt } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
-import { queryVariants } from '$lib/server/pos-query';
+import { queryVariants, queryVariantsPS } from '$lib/server/pos-query';
+import { getPowerSyncDb } from '$lib/powersync/db';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) {
@@ -23,6 +24,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 	const search = url.searchParams.get('search') || '';
 	const category = url.searchParams.get('category') || 'All';
+	const isElectron = process.env.BUILD_TARGET === 'electron';
 
 	// Immediate return, deferred streaming for everything else
 	return {
@@ -32,13 +34,39 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 		// Streamed data
 		streamed: (async () => {
-			if (!db) return {
-				products: [],
-				hasMore: false,
-				categories: ['All'],
-				customers: [],
-				storeSettings: {}
-			};
+			if (isElectron) {
+				const psDb = getPowerSyncDb();
+				const [variantsData, categoryRows, recentCustomers, settingsRows] = await Promise.all([
+					queryVariantsPS(search, category),
+					psDb.getAll(
+						'SELECT DISTINCT category FROM products p INNER JOIN product_variants pv ON p.id = pv.product_id WHERE pv.stock_quantity > 0'
+					),
+					psDb.getAll('SELECT * FROM customers LIMIT 50'),
+					psDb.getAll('SELECT * FROM store_settings')
+				]);
+
+				const settings = settingsRows.reduce((acc: Record<string, string>, row: any) => {
+					acc[row.key] = row.value;
+					return acc;
+				}, {} as Record<string, string>);
+
+				return {
+					products: variantsData.items,
+					hasMore: variantsData.hasMore,
+					categories: ['All', ...categoryRows.map((r: any) => r.category).sort()],
+					customers: recentCustomers,
+					storeSettings: settings
+				};
+			}
+
+			if (!db)
+				return {
+					products: [],
+					hasMore: false,
+					categories: ['All'],
+					customers: [],
+					storeSettings: {}
+				};
 
 			const [variantsData, categoryRows, recentCustomers, settingsRows] = await Promise.all([
 				queryVariants(search, category),

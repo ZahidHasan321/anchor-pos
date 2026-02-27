@@ -231,6 +231,11 @@ async function createWindow() {
                 if (mainWindow) mainWindow.webContents.toggleDevTools();
             });
 
+            // PowerSync config — must be set before SvelteKit server boots
+            process.env.POWERSYNC_DATA_DIR = app.getPath('userData');
+            process.env.POWERSYNC_URL = 'https://powersync.anchorshop.cloud';
+            process.env.POWERSYNC_API_URL = 'https://anchorshop.cloud';
+
             await import(buildUrl); 
             
             // Function to wait for server to be ready (Polling)
