@@ -317,6 +317,25 @@ async function createWindow() {
                 }
             });
 
+            // --- Content Security & Permissions Fixes ---
+            session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+                const headers = details.responseHeaders || {};
+                // Relax CSP for VPS communication and PowerSync WebSockets
+                headers['content-security-policy'] = [
+                    "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://127.0.0.1:* http://localhost:* https://anchorshop.cloud https://*.anchorshop.cloud ws://* wss://*; " +
+                    "connect-src 'self' http://127.0.0.1:* http://localhost:* https://anchorshop.cloud https://*.anchorshop.cloud ws://* wss://*; " +
+                    "img-src 'self' data: blob: https:; " +
+                    "frame-src 'self'; " +
+                    "worker-src 'self' blob:;"
+                ];
+                callback({ responseHeaders: headers });
+            });
+
+            // Set global permission handler
+            session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+                callback(true); // Approve all for internal tool
+            });
+
         } catch (err) {
             console.error('Failed to start server:', err);
             dialog.showErrorBox('Server Start Failed', `The application server failed to start.\n\nError: ${err.message}\n\nPlease check your .env file and database connection.`);

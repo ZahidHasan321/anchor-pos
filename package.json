@@ -32,6 +32,7 @@
 		"db:bootstrap": "pnpm tsx scripts/bootstrap-admin.ts"
 	},
 	"build": {
+		"npmRebuild": false,
 		"compression": "maximum",
 		"appId": "com.auto.pos",
 		"productName": "Auto POS",
@@ -58,7 +59,6 @@
 			"!**/*.{o,obj,d,map,ts}"
 		],
 		"asarUnpack": [
-			"node_modules/better-sqlite3/**/*",
 			"build/**/*"
 		],
 		"linux": {
@@ -138,6 +138,7 @@
 		"@powersync/node": "^0.17.1",
 		"@powersync/web": "^1.34.0",
 		"async-mutex": "^0.5.0",
+		"better-sqlite3": "^11.8.1",
 		"bson": "^7.2.0",
 		"chart.js": "^4.5.1",
 		"crypto-js": "^4.2.0",

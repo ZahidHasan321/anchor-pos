@@ -57,19 +57,23 @@ export const actions: Actions = {
 				const { getPowerSyncDb } = await import('$lib/powersync/db');
 				const psDb = getPowerSyncDb();
 				
-				await psDb.writeTransaction(async (tx) => {
-					// Update local user cache
-					await tx.execute(`
-						INSERT OR REPLACE INTO users (id, username, role, name, phone, email, image_url, is_active, theme)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-					`, [user.id, user.username, user.role, user.name, user.phone, user.email, user.imageUrl, user.isActive ? 1 : 0, user.theme]);
-					
-					// Store session locally
-					await tx.execute(`
-						INSERT INTO sessions (id, user_id, expires_at)
-						VALUES (?, ?, ?)
-					`, [sessionId, user.id, expiresAt.toISOString()]);
-				});
+				if (psDb.isFunctional) {
+					await psDb.writeTransaction(async (tx) => {
+						// Update local user cache
+						await tx.execute(`
+							INSERT OR REPLACE INTO users (id, username, role, name, phone, email, image_url, is_active, theme)
+							VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+						`, [user.id, user.username, user.role, user.name, user.phone, user.email, user.imageUrl, user.isActive ? 1 : 0, user.theme]);
+						
+						// Store session locally
+						await tx.execute(`
+							INSERT INTO sessions (id, user_id, expires_at)
+							VALUES (?, ?, ?)
+						`, [sessionId, user.id, expiresAt.toISOString()]);
+					});
+				} else {
+					console.warn('[Login] Local DB not functional, skipping cache.');
+				}
 
 				setSessionTokenCookie(event, token, expiresAt);
 				return { success: true, redirect: await getDefaultRedirect(user.role) };
