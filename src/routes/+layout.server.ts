@@ -4,11 +4,23 @@ import { storeSettings } from '$lib/server/db/schema';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const settings: Record<string, string> = {};
+	const isElectron = process.env.BUILD_TARGET === 'electron';
 	
 	if (db) {
 		const rows = await db.select().from(storeSettings);
 		for (const row of rows) {
 			settings[row.key] = row.value;
+		}
+	} else if (isElectron) {
+		try {
+			const { getPowerSyncDb } = await import('$lib/powersync/db');
+			const psDb = getPowerSyncDb();
+			const rows = await psDb.getAll('SELECT * FROM store_settings');
+			for (const row of rows) {
+				settings[row.key] = row.value;
+			}
+		} catch (e) {
+			console.warn('[layout] Failed to load settings from PowerSync:', e);
 		}
 	}
 
