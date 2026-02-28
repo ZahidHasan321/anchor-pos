@@ -9,7 +9,8 @@ import { building } from '$app/environment';
 const isElectron = env.BUILD_TARGET === 'electron' || 
                   (typeof process !== 'undefined' && process.env?.BUILD_TARGET === 'electron');
 
-const connectionString = env.DATABASE_URL;
+// Force DATABASE_URL to null in Electron to prevent any unintended Postgres connections
+const connectionString = isElectron ? null : env.DATABASE_URL;
 
 if (!connectionString && !building && !isElectron) {
     throw new Error('DATABASE_URL is not set');
