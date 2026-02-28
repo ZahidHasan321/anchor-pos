@@ -11,7 +11,7 @@ import { env } from '$env/dynamic/private';
 let isBootstrapped = false;
 let tokenExpiresAt = 0;
 async function bootstrapAdmin() {
-	if (isBootstrapped) return;
+	if (isBootstrapped || process.env.BUILD_TARGET === 'electron') return;
 	const username = env.ADMIN_USERNAME || 'admin';
 	const password = env.ADMIN_PASSWORD;
 

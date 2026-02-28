@@ -59,10 +59,55 @@ export async function createSession(token: string, userId: string) {
 
 	return { id: sessionId, userId, expiresAt };
 }
-
 export async function validateSessionToken(token: string) {
-	if (!db) return { session: null, user: null };
 	const sessionId = createHash('sha256').update(token).digest('hex');
+
+	if (!db) {
+		// FALLBACK: If primary DB (Postgres) is unavailable, try local PowerSync DB
+		// This enables offline session validation in Electron
+		if (process.env.BUILD_TARGET === 'electron') {
+			try {
+				const { getPowerSyncDb } = await import('$lib/powersync/db');
+				const psDb = getPowerSyncDb();
+				const result: any = await psDb.getOptional(
+					`SELECT 
+						s.id as sessionId, s.user_id as userId, s.expires_at as expiresAt,
+						u.name as userName, u.role as userRole, u.username,
+						u.is_active as isActive, u.theme, u.email, u.phone, u.image_url as imageUrl
+					 FROM sessions s
+					 INNER JOIN users u ON s.user_id = u.id
+					 WHERE s.id = ?`,
+					[sessionId]
+				);
+
+				if (!result) return { session: null, user: null };
+
+				const expiresAt = new Date(result.expiresAt);
+				if (expiresAt.getTime() <= Date.now() || !result.isActive) {
+					await psDb.execute('DELETE FROM sessions WHERE id = ?', [sessionId]);
+					return { session: null, user: null };
+				}
+
+				return {
+					session: { id: result.sessionId, userId: result.userId, expiresAt },
+					user: {
+						id: result.userId,
+						name: result.userName,
+						username: result.username,
+						role: result.userRole,
+						theme: result.theme,
+						email: result.email,
+						phone: result.phone,
+						imageUrl: result.imageUrl
+					}
+				};
+			} catch (e) {
+				console.error('[auth] Local validation failed:', e);
+				return { session: null, user: null };
+			}
+		}
+		return { session: null, user: null };
+	}
 
 	const results = await db
 		.select({

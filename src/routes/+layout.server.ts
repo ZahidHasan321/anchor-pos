@@ -6,12 +6,20 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 	const settings: Record<string, string> = {};
 	const isElectron = process.env.BUILD_TARGET === 'electron';
 	
+	let primaryDbSuccess = false;
 	if (db) {
-		const rows = await db.select().from(storeSettings);
-		for (const row of rows) {
-			settings[row.key] = row.value;
+		try {
+			const rows = await db.select().from(storeSettings);
+			for (const row of rows) {
+				settings[row.key] = row.value;
+			}
+			primaryDbSuccess = true;
+		} catch (e) {
+			console.warn('[layout] Primary DB query failed, falling back...');
 		}
-	} else if (isElectron) {
+	} 
+
+	if (!primaryDbSuccess && isElectron) {
 		try {
 			const { getPowerSyncDb } = await import('$lib/powersync/db');
 			const psDb = getPowerSyncDb();

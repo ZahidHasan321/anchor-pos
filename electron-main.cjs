@@ -106,7 +106,7 @@ for (const envPath of envPaths) {
 
 // Fallback defaults for packaged build — ensure app can always reach the VPS if .env is missing
 if (!process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = 'postgresql://neondb_owner:npg_8NCI0VGbBXdi@ep-sparkling-cherry-a1v8fbmk-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+    process.env.DATABASE_URL = 'postgresql://pos_user:alaaNCvo97GFpdDH@anchorshop.cloud:5432/clothing_pos';
 }
 if (!process.env.POWERSYNC_URL) {
     process.env.POWERSYNC_URL = 'https://powersync.anchorshop.cloud';

@@ -28,6 +28,57 @@ export const actions: Actions = {
 			return fail(400, { error: 'Username and password are required', username });
 		}
 
+		const isElectron = process.env.BUILD_TARGET === 'electron';
+
+		if (isElectron) {
+			// DELEGATED LOGIN: Call VPS API instead of direct DB query
+			try {
+				const vpsUrl = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
+				const response = await fetch(`${vpsUrl}/api/auth/login`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ username, password })
+				});
+
+				if (!response.ok) {
+					const err = await response.json();
+					return fail(response.status, { error: err.message || 'Login failed', username });
+				}
+
+				const { user } = await response.json();
+
+				// 3. Success - Create local session for offline access
+				const token = generateSessionToken();
+				const { id: sessionId, expiresAt } = {
+					id: require('node:crypto').createHash('sha256').update(token).digest('hex'),
+					expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+				};
+
+				const { getPowerSyncDb } = await import('$lib/powersync/db');
+				const psDb = getPowerSyncDb();
+				
+				await psDb.writeTransaction(async (tx) => {
+					// Update local user cache
+					await tx.execute(`
+						INSERT OR REPLACE INTO users (id, username, role, name, phone, email, image_url, is_active, theme)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+					`, [user.id, user.username, user.role, user.name, user.phone, user.email, user.imageUrl, user.isActive ? 1 : 0, user.theme]);
+					
+					// Store session locally
+					await tx.execute(`
+						INSERT INTO sessions (id, user_id, expires_at)
+						VALUES (?, ?, ?)
+					`, [sessionId, user.id, expiresAt.toISOString()]);
+				});
+
+				setSessionTokenCookie(event, token, expiresAt);
+				return { success: true, redirect: await getDefaultRedirect(user.role) };
+			} catch (e: any) {
+				console.error('[Login] Delegated login failed:', e);
+				return fail(500, { error: 'Connection to authentication server failed. Are you online?', username });
+			}
+		}
+
 		if (!db) {
 			return fail(500, { error: 'Database is offline or not configured. Cannot login.', username });
 		}
