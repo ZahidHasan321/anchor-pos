@@ -18,7 +18,7 @@
 		"start:electron": "pnpm run build:electron && electron .",
 		"package:linux": "pnpm run build:electron && electron-builder build --linux",
 		"package:win": "cross-env BUILD_TARGET=electron vite build && electron-builder build --win -p always",
-		"package:win:ci": "cross-env BUILD_TARGET=electron vite build && electron-builder build --win -p always",
+		"package:win:ci": "cross-env BUILD_TARGET=electron vite build && electron-builder build --win -p never",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
@@ -32,7 +32,8 @@
 		"db:bootstrap": "pnpm tsx scripts/bootstrap-admin.ts"
 	},
 	"build": {
-		"npmRebuild": false,
+		"npmRebuild": true,
+		"nativeRebuilder": "sequential",
 		"compression": "maximum",
 		"appId": "com.auto.pos",
 		"productName": "Auto POS",
@@ -59,6 +60,7 @@
 			"!**/*.{o,obj,d,map,ts}"
 		],
 		"asarUnpack": [
+			"node_modules/better-sqlite3/**/*",
 			"build/**/*"
 		],
 		"linux": {
@@ -92,6 +94,7 @@
 	"devDependencies": {
 		"@eslint/compat": "^2.0.2",
 		"@eslint/js": "^9.39.2",
+		"@electron/rebuild": "^3.7.1",
 		"@internationalized/date": "^3.11.0",
 		"@lucide/svelte": "^0.561.0",
 		"@sveltejs/adapter-auto": "^7.0.0",

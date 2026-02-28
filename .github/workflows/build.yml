@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*' # Trigger on version tags like v1.0.0
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
+          cache: pnpm
 
       - name: Install Dependencies
         run: pnpm install
@@ -35,9 +35,18 @@ jobs:
           path: |
             ~\AppData\Local\electron\Cache
             ~\AppData\Local\electron-builder\Cache
-          key: ${{ runner.os }}-electron-cache-${{ hashFiles('package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-electron-cache-
+          key: ${{ runner.os }}-electron-${{ hashFiles('package.json') }}
+          restore-keys: ${{ runner.os }}-electron-
+
+      - name: Create Electron .env
+        shell: bash
+        run: |
+          cat > .env << 'EOF'
+          POWERSYNC_URL=https://powersync.anchorshop.cloud
+          POWERSYNC_API_URL=https://anchorshop.cloud
+          APP_SECRET_HEADER=auto-pos-secret-handshake-2026
+          POWERSYNC_PUBLIC_KEY=${{ secrets.POWERSYNC_PUBLIC_KEY }}
+          EOF
 
       - name: Build and Package
         uses: nick-fields/retry@v3
@@ -46,29 +55,30 @@ jobs:
           max_attempts: 3
           command: pnpm run package:win:ci
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_TARGET: electron
 
-      - name: Create SSH Key File
-        run: |
-          printf '%s' "${{ secrets.VPS_SSH_KEY }}" > vps_key
-          chmod 600 vps_key
+      - name: Upload to VPS
         shell: bash
-
-      - name: Upload Windows Build to VPS
         env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           HOST: ${{ secrets.VPS_HOST }}
-          USER: root
-          PORT: 22
         run: |
-          # Use SCP directly from Git Bash (which is available on windows-latest)
-          # Use -o StrictHostKeyChecking=no to avoid prompt
-          scp -P $PORT -i vps_key -o StrictHostKeyChecking=no -o BatchMode=yes \
+          echo "$VPS_SSH_KEY" > vps_key
+          # On Windows runners, use icacls to restrict key permissions
+          icacls vps_key /inheritance:r /grant:r "$USERNAME:R"
+          scp -P 22 -i vps_key \
+            -o StrictHostKeyChecking=no \
+            -o BatchMode=yes \
             dist-electron/*.exe dist-electron/latest.yml \
-            ${USER}@${HOST}:/root/anchor-pos/downloads/
-        shell: bash
+            root@${HOST}:/root/anchor-pos/downloads/
+          rm -f vps_key
 
-      - name: Cleanup SSH Key
+      - name: Upload artifact (fallback)
         if: always()
-        run: rm -f vps_key
-        shell: bash
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            dist-electron/*.exe
+            dist-electron/latest.yml
+          retention-days: 7
