@@ -153,8 +153,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Global Route Guard
 	const isAuthRoute = event.url.pathname.startsWith('/login');
 	const isApiRoute = event.url.pathname.startsWith('/api');
+	const isRemoteAuthRoute = event.url.pathname.startsWith('/api/auth/remote-login') || event.url.pathname.startsWith('/api/auth/remote-powersync-token');
 
-	if (!event.locals.user && !isAuthRoute) {
+	if (!event.locals.user && !isAuthRoute && !isRemoteAuthRoute) {
 		if (isApiRoute) {
 			return new Response(JSON.stringify({ error: 'Unauthorized' }), {
 				status: 401,
