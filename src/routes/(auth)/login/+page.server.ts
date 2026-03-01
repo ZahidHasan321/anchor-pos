@@ -43,6 +43,7 @@ export const actions: Actions = {
 					headers: {
 						'Content-Type': 'application/json',
 						'x-app-secret': process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026',
+						'User-Agent': 'AutoPOS-Electron/1.0',
 					},
 					body: JSON.stringify({ username, password }),
 					signal: controller.signal

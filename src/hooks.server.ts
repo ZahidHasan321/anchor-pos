@@ -135,18 +135,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (IS_ELECTRON && event.locals.user && Date.now() > tokenExpiresAt - 60_000) {
 		try {
 			const { connectPowerSync } = await import('$lib/powersync/init.js');
-			const baseUrl = `http://127.0.0.1:${process.env.PORT || 3000}`;
-			const res = await fetch(`${baseUrl}/api/powersync/token`, {
-				headers: { Cookie: event.request.headers.get('cookie') || '' }
-			});
-
-			if (res.ok) {
-				const { token } = await res.json();
+			const { fetchRemotePowerSyncToken } = await import('$lib/server/powersync-auth');
+			
+			const token = await fetchRemotePowerSyncToken(event.locals.user.id);
+			if (token) {
 				await connectPowerSync(token);
 				tokenExpiresAt = Date.now() + 55 * 60 * 1000;
 			}
 		} catch (e) {
-			console.warn('[hooks] PowerSync init skipped:', e);
+			console.warn('[hooks] PowerSync init failed:', e);
 		}
 	}
 
@@ -154,8 +151,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const isAuthRoute = event.url.pathname.startsWith('/login');
 	const isApiRoute = event.url.pathname.startsWith('/api');
 	const isRemoteAuthRoute = event.url.pathname.startsWith('/api/auth/remote-login') || event.url.pathname.startsWith('/api/auth/remote-powersync-token');
+	const isWellKnown = event.url.pathname.startsWith('/.well-known');
 
-	if (!event.locals.user && !isAuthRoute && !isRemoteAuthRoute) {
+	if (!event.locals.user && !isAuthRoute && !isRemoteAuthRoute && !isWellKnown) {
 		if (isApiRoute) {
 			return new Response(JSON.stringify({ error: 'Unauthorized' }), {
 				status: 401,
@@ -195,11 +193,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 	response.headers.set(
 		'Content-Security-Policy',
 		"default-src 'self'; " +
-			"script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+			"script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; " +
 			"style-src 'self' 'unsafe-inline'; " +
 			"img-src 'self' data: blob: https:; " +
 			"font-src 'self' data:; " +
 			"connect-src 'self' https://* wss://* http://localhost:* http://127.0.0.1:* ws://*; " +
+			"worker-src 'self' blob:; " +
 			"frame-ancestors 'none'; " +
 			'upgrade-insecure-requests;'
 	);

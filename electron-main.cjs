@@ -2,6 +2,9 @@
 const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog, powerSaveBlocker, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
+// Disable hardware acceleration to prevent GPU crashes on Linux VMs/Wayland
+app.disableHardwareAcceleration();
+
 // Custom User Agent to hide Electron and look like a standard browser
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 // Secret header to bypass Cloudflare WAF (Make sure to add this to your Cloudflare Custom Rules)
@@ -83,7 +86,7 @@ async function runMigrations() {
 }
 
 // --- Robust .env Loading ---
-const isDev = !app.isPackaged;
+const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 const exeDir = path.dirname(app.getPath('exe'));
 const rootDir = __dirname;
 const cwd = process.cwd();
@@ -105,9 +108,6 @@ for (const envPath of envPaths) {
 }
 
 // Fallback defaults for packaged build — ensure app can always reach the VPS if .env is missing
-if (!process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = 'postgresql://pos_user:alaaNCvo97GFpdDH@anchorshop.cloud:5432/clothing_pos';
-}
 if (!process.env.POWERSYNC_URL) {
     process.env.POWERSYNC_URL = 'https://powersync.anchorshop.cloud';
 }
@@ -209,7 +209,7 @@ async function createWindow() {
     const port = await portfinder.getPortPromise();
 
     // Check if we are in development mode
-    const isDev = !app.isPackaged;
+    const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 
     if (isDev) {
         mainWindow.loadURL('http://localhost:5173');
@@ -319,9 +319,10 @@ async function createWindow() {
                 const headers = details.responseHeaders || {};
                 // Relax CSP for VPS communication and PowerSync WebSockets
                 headers['content-security-policy'] = [
-                    "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://127.0.0.1:* http://localhost:* https://anchorshop.cloud https://*.anchorshop.cloud ws://* wss://*; " +
+                    "default-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' http://127.0.0.1:* http://localhost:* https://anchorshop.cloud https://*.anchorshop.cloud ws://* wss://*; " +
                     "connect-src 'self' http://127.0.0.1:* http://localhost:* https://anchorshop.cloud https://*.anchorshop.cloud ws://* wss://*; " +
                     "img-src 'self' data: blob: https:; " +
+                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' http://127.0.0.1:* http://localhost:*; " +
                     "frame-src 'self'; " +
                     "worker-src 'self' blob:;"
                 ];

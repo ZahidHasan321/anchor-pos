@@ -27,9 +27,6 @@
 	let loading = $state(false);
 	let showPassword = $state(false);
 
-	const isNative = $derived(browser && (window as any).electron);
-	const actionUrl = $derived(isNative ? 'https://anchorshop.cloud/login' : '');
-
 	function setTheme(theme: 'light' | 'dark' | 'system') {
 		if (theme === 'system') resetMode();
 		else setMode(theme);
@@ -101,7 +98,6 @@
 			<Card.Content>
 				<form
 					method="POST"
-					action={actionUrl}
 					use:enhance={() => {
 						loading = true;
 						return async ({ result, update }) => {

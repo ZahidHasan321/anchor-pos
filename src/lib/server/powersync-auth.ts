@@ -30,6 +30,31 @@ async function getKeys() {
     return { privateKey, publicKey };
 }
 
+export async function fetchRemotePowerSyncToken(userId: string) {
+    const vpsUrl = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch(`${vpsUrl}/api/auth/remote-powersync-token`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-app-secret': process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026',
+        },
+        body: JSON.stringify({ userId }),
+        signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+        throw new Error(`Failed to fetch remote token: ${await res.text()}`);
+    }
+
+    const { token } = await res.json();
+    return token;
+}
+
 export async function createPowerSyncToken(userId: string) {
     const { privateKey } = await getKeys();
     

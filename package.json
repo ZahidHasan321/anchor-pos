@@ -15,7 +15,7 @@
 		"preview": "vite preview",
 		"dev:electron": "cross-env BUILD_TARGET=electron electron .",
 		"build:electron": "cross-env BUILD_TARGET=electron vite build",
-		"start:electron": "pnpm run build:electron && electron .",
+		"start:electron": "pnpm run build:electron && cross-env NODE_ENV=production electron .",
 		"package:linux": "pnpm run build:electron && electron-builder build --linux",
 		"package:win": "cross-env BUILD_TARGET=electron vite build && electron-builder build --win -p always",
 		"package:win:ci": "cross-env BUILD_TARGET=electron vite build && electron-builder build --win -p never",

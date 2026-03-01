@@ -38,14 +38,16 @@ export class PowerSyncManager {
             
             // Casting to any to satisfy the complex PowerSync version-specific types 
             const connector: any = {
-                endpoint: powersyncUrl,
-                fetchToken: async () => {
+                fetchCredentials: async () => {
                     const res = await fetch(`/api/powersync/token`, {
                         credentials: 'include'
                     });
                     if (!res.ok) return null;
                     const { token } = await res.json();
-                    return token;
+                    return {
+                        endpoint: powersyncUrl,
+                        token: token
+                    };
                 },
                 uploadData: async (database: any) => {
                     const transaction = await database.getNextCrudTransaction();

@@ -67,10 +67,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 					const { getPowerSyncDb } = await import('$lib/powersync/db');
 					const psDb = getPowerSyncDb();
 					const [todaySales, monthlySales, todayExpenses, inventoryValue] = await Promise.all([
-						psDb.getOptional(`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ?`, [toIso(today)]),
-						psDb.getOptional(`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ?`, [toIso(firstDayOfMonth)]),
-						psDb.getOptional(`SELECT coalesce(sum(amount), 0) as total FROM cashbook WHERE type = 'out' AND created_at >= ?`, [toIso(today)]),
-						psDb.getOptional(`SELECT coalesce(sum(price * stock_quantity), 0) as total FROM product_variants`)
+						psDb.get(`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ?`, [toIso(today)]),
+						psDb.get(`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ?`, [toIso(firstDayOfMonth)]),
+						psDb.get(`SELECT coalesce(sum(amount), 0) as total FROM cashbook WHERE type = 'out' AND created_at >= ?`, [toIso(today)]),
+						psDb.get(`SELECT coalesce(sum(price * stock_quantity), 0) as total FROM product_variants`)
 					]) as any[];
 
 					return {
@@ -81,6 +81,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 					};
 				} catch (e) {
 					console.error('[dashboard] PowerSync stats failed:', e);
+					return {
+						todaySales: { count: 0, total: 0 },
+						monthlySales: { count: 0, total: 0 },
+						todayExpenses: { total: 0 },
+						inventoryValue: 0
+					};
 				}
 			}
 
@@ -151,12 +157,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 							WHERE pv.stock_quantity > 0 AND pv.stock_quantity <= ?
 							LIMIT 10
 						`, [threshold]),
-						psDb.getOptional(`SELECT count(*) as count FROM product_variants WHERE stock_quantity > 0 AND stock_quantity <= ?`, [threshold])
+						psDb.get(`SELECT count(*) as count FROM product_variants WHERE stock_quantity > 0 AND stock_quantity <= ?`, [threshold])
 					]) as [any[], any];
 					lowStockItems = items;
 					lowStockCount = count?.count ?? 0;
 				} catch (e) {
 					console.error('[dashboard] PowerSync alerts failed:', e);
+					return { lowStockItems: [], lowStockCount: 0 };
 				}
 			}
 
