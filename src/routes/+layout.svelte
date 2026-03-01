@@ -9,31 +9,26 @@
 	import { powersync } from '$lib/powersync';
 	import { browser } from '$app/environment';
 
-	let props = $props();
+	let { data, children } = $props();
 
-	// Initialize state immediately (works on server and client)
-	if (props.data.storeSettings) {
-		globalSettings.update(
-			props.data.storeSettings.store_locale,
-			props.data.storeSettings.store_timezone,
-			props.data.storeSettings.store_currency
-		);
-	}
+	// Initialize state before DOM is updated (works on server and client)
+	$effect.pre(() => {
+		if (data.storeSettings) {
+			globalSettings.update(
+				data.storeSettings.store_locale,
+				data.storeSettings.store_timezone,
+				data.storeSettings.store_currency
+			);
+		}
+	});
 
 	$effect(() => {
 		if (browser && (window as any).electron) {
 			powersync.init().then(() => {
-				if (props.data.user) {
+				if (data.user) {
 					powersync.connect();
 				}
 			});
-		}
-		if (props.data.storeSettings) {
-			globalSettings.update(
-				props.data.storeSettings.store_locale,
-				props.data.storeSettings.store_timezone,
-				props.data.storeSettings.store_currency
-			);
 		}
 	});
 </script>
@@ -42,6 +37,6 @@
 <ModeWatcher />
 <Toaster richColors position="top-right" />
 <TooltipProvider>
-	{@render props.children()}
+	{@render children()}
 </TooltipProvider>
 <ConfirmDialog />
