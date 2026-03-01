@@ -35,6 +35,9 @@ export const actions: Actions = {
 			// In Electron: proxy auth to the VPS, get a JWT back
 			try {
 				const vpsUrl = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), 5000);
+
 				const res = await fetch(`${vpsUrl}/api/auth/remote-login`, {
 					method: 'POST',
 					headers: {
@@ -42,7 +45,10 @@ export const actions: Actions = {
 						'x-app-secret': process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026',
 					},
 					body: JSON.stringify({ username, password }),
+					signal: controller.signal
 				});
+
+				clearTimeout(timeoutId);
 
 				if (!res.ok) {
 					const { error } = await res.json().catch(() => ({ error: 'Login failed' }));

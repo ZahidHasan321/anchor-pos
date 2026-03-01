@@ -24,7 +24,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			const { getPowerSyncDb } = await import('$lib/powersync/db');
 			const psDb = getPowerSyncDb();
 			const rows = await psDb.getAll('SELECT * FROM store_settings');
-			for (const row of rows) {
+			for (const row of rows as any[]) {
 				settings[row.key] = row.value;
 			}
 		} catch (e) {

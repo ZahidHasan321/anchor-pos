@@ -71,7 +71,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 						psDb.getOptional(`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ?`, [toIso(firstDayOfMonth)]),
 						psDb.getOptional(`SELECT coalesce(sum(amount), 0) as total FROM cashbook WHERE type = 'out' AND created_at >= ?`, [toIso(today)]),
 						psDb.getOptional(`SELECT coalesce(sum(price * stock_quantity), 0) as total FROM product_variants`)
-					]);
+					]) as any[];
 
 					return {
 						todaySales: todaySales || { count: 0, total: 0 },
@@ -136,7 +136,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				try {
 					const { getPowerSyncDb } = await import('$lib/powersync/db');
 					const psDb = getPowerSyncDb();
-					const settingsRows = await psDb.getAll('SELECT * FROM store_settings');
+					const settingsRows = await psDb.getAll('SELECT * FROM store_settings') as any[];
 					settings = settingsRows.reduce((acc: any, row: any) => {
 						acc[row.key] = row.value;
 						return acc;
@@ -152,7 +152,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 							LIMIT 10
 						`, [threshold]),
 						psDb.getOptional(`SELECT count(*) as count FROM product_variants WHERE stock_quantity > 0 AND stock_quantity <= ?`, [threshold])
-					]);
+					]) as [any[], any];
 					lowStockItems = items;
 					lowStockCount = count?.count ?? 0;
 				} catch (e) {

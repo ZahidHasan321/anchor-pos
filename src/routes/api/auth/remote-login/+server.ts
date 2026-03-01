@@ -23,7 +23,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const user = await db.select().from(users)
     .where(eq(users.username, username))
-    .then(r => r[0]);
+    .then((r: any[]) => r[0]);
 
   if (!user || !await verifyPassword(password, user.passwordHash)) {
     throw error(401, 'Invalid credentials');
