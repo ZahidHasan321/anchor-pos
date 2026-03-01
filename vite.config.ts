@@ -6,7 +6,7 @@ import compression from 'vite-plugin-compression';
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), compression()],
 	ssr: {
-		noExternal: ['chart.js', 'postgres', 'drizzle-orm'],
+		noExternal: ['chart.js', 'postgres', 'drizzle-orm', 'jose'],
 		external: ['better-sqlite3', '@powersync/node']
 	},
 	optimizeDeps: {
