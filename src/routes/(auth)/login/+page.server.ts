@@ -20,65 +20,48 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 export const actions: Actions = {
 	default: async (event) => {
-		const data = await event.request.formData();
+		const { request, cookies, fetch } = event;
+		const data = await request.formData();
 		const username = (data.get('username') as string)?.trim();
 		const password = data.get('password') as string;
 
 		if (!username || !password) {
-			return fail(400, { error: 'Username and password are required', username });
+			return fail(400, { error: 'Username and password required', username });
 		}
 
 		const isElectron = process.env.BUILD_TARGET === 'electron';
 
 		if (isElectron) {
-			// DELEGATED LOGIN: Call VPS API instead of direct DB query
+			// In Electron: proxy auth to the VPS, get a JWT back
 			try {
 				const vpsUrl = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
-				const response = await fetch(`${vpsUrl}/api/auth/login`, {
+				const res = await fetch(`${vpsUrl}/api/auth/remote-login`, {
 					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ username, password })
+					headers: {
+						'Content-Type': 'application/json',
+						'x-app-secret': process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026',
+					},
+					body: JSON.stringify({ username, password }),
 				});
 
-				if (!response.ok) {
-					const err = await response.json();
-					return fail(response.status, { error: err.message || 'Login failed', username });
+				if (!res.ok) {
+					const { error } = await res.json().catch(() => ({ error: 'Login failed' }));
+					return fail(401, { error, username });
 				}
 
-				const { user } = await response.json();
+				const { token, expiresAt } = await res.json();
 
-				// 3. Success - Create local session for offline access
-				const token = generateSessionToken();
-				const { id: sessionId, expiresAt } = {
-					id: require('node:crypto').createHash('sha256').update(token).digest('hex'),
-					expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-				};
+				setSessionTokenCookie(event, token, new Date(expiresAt));
 
-				const { getPowerSyncDb } = await import('$lib/powersync/db');
-				const psDb = getPowerSyncDb();
-				
-				if (psDb.isFunctional) {
-					await psDb.writeTransaction(async (tx) => {
-						// Update local user cache
-						await tx.execute(`
-							INSERT OR REPLACE INTO users (id, username, role, name, phone, email, image_url, is_active, theme)
-							VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-						`, [user.id, user.username, user.role, user.name, user.phone, user.email, user.imageUrl, user.isActive ? 1 : 0, user.theme]);
-						
-						// Store session locally
-						await tx.execute(`
-							INSERT INTO sessions (id, user_id, expires_at)
-							VALUES (?, ?, ?)
-						`, [sessionId, user.id, expiresAt.toISOString()]);
-					});
-				} else {
-					console.warn('[Login] Local DB not functional, skipping cache.');
-				}
+				// We need to decode the token just to get the role for redirect
+				// This doesn't need signature verification here as we just got it from VPS
+				const parts = token.split('.');
+				const payload = JSON.parse(atob(parts[1]));
 
-				setSessionTokenCookie(event, token, expiresAt);
-				return { success: true, redirect: await getDefaultRedirect(user.role) };
+				throw redirect(303, await getDefaultRedirect(payload.role));
 			} catch (e: any) {
-				console.error('[Login] Delegated login failed:', e);
+				if (e.status === 303) throw e;
+				console.error('[Login] Remote auth failed:', e);
 				return fail(500, { error: 'Connection to authentication server failed. Are you online?', username });
 			}
 		}
@@ -87,27 +70,18 @@ export const actions: Actions = {
 			return fail(500, { error: 'Database is offline or not configured. Cannot login.', username });
 		}
 
-		// 1. Fetch User
+		// Web: Standard Drizzle-based auth
 		const userRows = await db.select().from(users).where(eq(users.username, username)).limit(1);
 		const user = userRows[0];
 
-		// 2. Verify
-		const genericError = 'Invalid username or password';
-
-		if (!user) {
-			return fail(400, { error: genericError, username });
+		if (!user || !await verifyPassword(password, user.passwordHash)) {
+			return fail(401, { error: 'Invalid username or password', username });
 		}
 
 		if (!user.isActive) {
-			return fail(400, { error: 'Your account has been deactivated. Contact admin.', username });
+			return fail(403, { error: 'Account disabled', username });
 		}
 
-		const validPassword = await verifyPassword(password, user.passwordHash);
-		if (!validPassword) {
-			return fail(400, { error: genericError, username });
-		}
-
-		// 3. Success - Create session
 		const token = generateSessionToken();
 		const session = await createSession(token, user.id);
 		setSessionTokenCookie(event, token, session.expiresAt);
@@ -121,14 +95,6 @@ export const actions: Actions = {
 			details: `User logged in: ${user.username}`
 		});
 
-		const redirectUrl = await getDefaultRedirect(user.role);
-
-		// If it's a cross-origin request (Electron), return JSON instead of 302
-		const origin = event.request.headers.get('origin');
-		if (origin && (origin.startsWith('http://localhost') || origin.startsWith('app://'))) {
-			return { success: true, redirect: redirectUrl };
-		}
-
-		redirect(302, redirectUrl);
-	}
+		throw redirect(303, await getDefaultRedirect(user.role));
+	},
 };

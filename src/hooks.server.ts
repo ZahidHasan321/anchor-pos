@@ -6,12 +6,31 @@ import { hashPassword } from '$lib/server/auth';
 import { generateId } from '$lib/utils';
 import { eq } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
+import { jwtVerify, importJWK } from 'jose';
+
+const IS_ELECTRON = process.env.BUILD_TARGET === 'electron';
+
+// Cache for public key used in offline JWT validation
+let _publicKey: any = null;
+async function getPublicKey() {
+	if (_publicKey) return _publicKey;
+	const jwkRaw = process.env.POWERSYNC_PUBLIC_KEY;
+	if (!jwkRaw) return null;
+	try {
+		const jwk = JSON.parse(jwkRaw);
+		_publicKey = await importJWK(jwk, 'RS256');
+		return _publicKey;
+	} catch (e) {
+		console.error('[hooks] Failed to parse POWERSYNC_PUBLIC_KEY:', e);
+		return null;
+	}
+}
 
 // 0. Bootstrap Admin User (Runs once on first load)
 let isBootstrapped = false;
 let tokenExpiresAt = 0;
 async function bootstrapAdmin() {
-	if (isBootstrapped || process.env.BUILD_TARGET === 'electron') return;
+	if (isBootstrapped || IS_ELECTRON) return;
 	const username = env.ADMIN_USERNAME || 'admin';
 	const password = env.ADMIN_PASSWORD;
 
@@ -37,12 +56,9 @@ async function bootstrapAdmin() {
 }
 
 export const handleError: HandleServerError = ({ error, event }) => {
-	// Log the full error for internal debugging
 	console.error(`[${new Date().toISOString()}] Server error at ${event.url.pathname}:`, error);
-
 	const message = error instanceof Error ? error.message : String(error);
 
-	// Detect database connection errors (common when offline with remote DB)
 	if (message.includes('ECONNREFUSED') || message.includes('ETIMEDOUT') || message.includes('database connection failed')) {
 		return {
 			message: 'The service is temporarily unavailable. Please try again later.',
@@ -63,10 +79,46 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (!token) {
 		event.locals.user = null;
 		event.locals.session = null;
+	} else if (IS_ELECTRON) {
+		// OFFLINE-SAFE JWT VALIDATION FOR ELECTRON
+		try {
+			const publicKey = await getPublicKey();
+			if (!publicKey) {
+				console.error('[hooks] No public key available for JWT validation');
+				event.locals.user = null;
+				event.locals.session = null;
+			} else {
+				const { payload } = await jwtVerify(token, publicKey, {
+					audience: 'pos-electron',
+				});
+
+				event.locals.user = {
+					id: payload.sub!,
+					username: payload.username as string,
+					role: payload.role as any,
+					name: payload.name as string,
+					email: payload.email as string || null,
+					phone: payload.phone as string || null,
+					imageUrl: payload.image_url as string || null,
+					theme: payload.theme as any || 'system'
+				};
+				event.locals.session = {
+					id: 'jwt-session',
+					userId: payload.sub!,
+					expiresAt: new Date((payload.exp || 0) * 1000)
+				};
+			}
+		} catch (e) {
+			console.warn('[hooks] JWT validation failed:', e);
+			event.locals.user = null;
+			event.locals.session = null;
+			// Clear invalid cookie
+			event.cookies.delete('session', { path: '/' });
+		}
 	} else {
+		// STANDARD DB SESSION VALIDATION FOR WEB
 		const { session, user } = await validateSessionToken(token);
 		event.locals.session = session;
-		// Prune user data for locals
 		event.locals.user = user ? {
 			id: user.id,
 			name: user.name,
@@ -79,31 +131,29 @@ export const handle: Handle = async ({ event, resolve }) => {
 		} : null;
 	}
 
-	// Connect PowerSync if user is authenticated and token is expired/near expiry
-	// ONLY on Electron target
-	if (process.env.BUILD_TARGET === 'electron' && event.locals.user && Date.now() > tokenExpiresAt - 60_000) {
+	// Connect PowerSync if user is authenticated (Electron only)
+	if (IS_ELECTRON && event.locals.user && Date.now() > tokenExpiresAt - 60_000) {
 		try {
 			const { connectPowerSync } = await import('$lib/powersync/init.js');
-			const baseUrl = `http://localhost:${process.env.PORT || 3000}`;
-			const res = await fetch(`${baseUrl}/api/auth/powersync-token`, {
+			const baseUrl = `http://127.0.0.1:${process.env.PORT || 3000}`;
+			const res = await fetch(`${baseUrl}/api/powersync/token`, {
 				headers: { Cookie: event.request.headers.get('cookie') || '' }
 			});
 
 			if (res.ok) {
 				const { token } = await res.json();
 				await connectPowerSync(token);
-				tokenExpiresAt = Date.now() + 55 * 60 * 1000; // 55 min
+				tokenExpiresAt = Date.now() + 55 * 60 * 1000;
 			}
 		} catch (e) {
 			console.warn('[hooks] PowerSync init skipped:', e);
 		}
 	}
 
-	// 1. Global Route Guard (Defense in Depth)
+	// Global Route Guard
 	const isAuthRoute = event.url.pathname.startsWith('/login');
 	const isApiRoute = event.url.pathname.startsWith('/api');
 
-	// If not logged in and trying to access anything but login
 	if (!event.locals.user && !isAuthRoute) {
 		if (isApiRoute) {
 			return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -111,7 +161,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 				headers: { 'Content-Type': 'application/json' }
 			});
 		}
-		// Allow root to pass (it redirects in +page.server.ts)
 		if (event.url.pathname !== '/') {
 			return new Response(null, {
 				status: 302,
@@ -120,8 +169,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	// 2. Security Headers (Industry Standard)
-	// Handle CORS for Electron (Hybrid Sync)
+	// CORS & Security Headers
 	const origin = event.request.headers.get('origin');
 	const isLocalOrigin = origin && (origin.startsWith('http://localhost') || origin.startsWith('app://'));
 
@@ -143,16 +191,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 		response.headers.set('Access-Control-Allow-Credentials', 'true');
 	}
 
-	// Content Security Policy (Strict for Internal App)
-	// We allow 'unsafe-inline' for styles because many Svelte components and Tailwind need it
 	response.headers.set(
 		'Content-Security-Policy',
 		"default-src 'self'; " +
-			"script-src 'self' 'unsafe-inline'; " +
+			"script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
 			"style-src 'self' 'unsafe-inline'; " +
-			"img-src 'self' data: blob:; " +
+			"img-src 'self' data: blob: https:; " +
 			"font-src 'self' data:; " +
-			"connect-src 'self' https://* wss://* http://localhost:* ws://*; " +
+			"connect-src 'self' https://* wss://* http://localhost:* http://127.0.0.1:* ws://*; " +
 			"frame-ancestors 'none'; " +
 			'upgrade-insecure-requests;'
 	);
@@ -160,9 +206,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 	response.headers.set('X-Frame-Options', 'DENY');
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-	response.headers.set('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
-
-	// Privacy for Internal App
 	response.headers.set('X-Robots-Tag', 'noindex, nofollow');
 
 	return response;

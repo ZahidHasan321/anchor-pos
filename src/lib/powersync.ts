@@ -5,7 +5,6 @@ import { browser } from '$app/environment';
 export class PowerSyncManager {
     db: PowerSyncDatabase;
     private static instance: PowerSyncManager;
-    private remoteBase = 'https://anchorshop.cloud';
 
     constructor() {
         this.db = new PowerSyncDatabase({
@@ -34,14 +33,14 @@ export class PowerSyncManager {
         if (!browser) return;
 
         try {
-            // Connect to PowerSync service via our Nginx proxy
-            const powersyncUrl = import.meta.env.VITE_POWERSYNC_URL || `${this.remoteBase}/powersync`;
+            // In Electron, VITE_POWERSYNC_URL should be the remote PowerSync service
+            const powersyncUrl = import.meta.env.VITE_POWERSYNC_URL || 'https://powersync.anchorshop.cloud';
             
             // Casting to any to satisfy the complex PowerSync version-specific types 
             const connector: any = {
                 endpoint: powersyncUrl,
                 fetchToken: async () => {
-                    const res = await fetch(`${this.remoteBase}/api/powersync/token`, {
+                    const res = await fetch(`/api/powersync/token`, {
                         credentials: 'include'
                     });
                     if (!res.ok) return null;
@@ -53,7 +52,7 @@ export class PowerSyncManager {
                     if (!transaction) return;
 
                     try {
-                        const res = await fetch(`${this.remoteBase}/api/powersync/upload`, {
+                        const res = await fetch(`/api/powersync/upload`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             credentials: 'include',

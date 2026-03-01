@@ -87,11 +87,6 @@ const store_settings = new Table({
   value: column.text,
 });
 
-const sessions = new Table({
-  user_id: column.text,
-  expires_at: column.text,
-});
-
 export const AppSchema = new Schema({
   products,
   product_variants,
@@ -103,7 +98,6 @@ export const AppSchema = new Schema({
   users,
   role_permissions,
   store_settings,
-  sessions,
 });
 
 export type Database = (typeof AppSchema)['types'];

@@ -242,19 +242,16 @@ async function createWindow() {
             // Fix for SvelteKit adapter-node address binding
             process.env.HOST = '127.0.0.1'; 
             process.env.BUILD_TARGET = 'electron';
+            process.env.APP_SECRET_HEADER = APP_SECRET_HEADER;
             
             console.log('Booting SvelteKit server on port:', port);
             console.log('Origin:', process.env.ORIGIN);
             
-            // Register a shortcut to open DevTools even in production for debugging
-            globalShortcut.register('CommandOrControl+Shift+I', () => {
-                if (mainWindow) mainWindow.webContents.toggleDevTools();
-            });
-
             // PowerSync config — must be set before SvelteKit server boots
             process.env.POWERSYNC_DATA_DIR = app.getPath('userData');
-            process.env.POWERSYNC_URL = 'https://powersync.anchorshop.cloud';
-            process.env.POWERSYNC_API_URL = 'https://anchorshop.cloud';
+            process.env.POWERSYNC_URL = process.env.POWERSYNC_URL || 'https://powersync.anchorshop.cloud';
+            process.env.POWERSYNC_API_URL = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
+            process.env.POWERSYNC_PUBLIC_KEY = process.env.POWERSYNC_PUBLIC_KEY;
 
             await import(buildUrl); 
             
