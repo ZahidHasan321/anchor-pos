@@ -23,8 +23,84 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { createDebounced } from '$lib/debounce.svelte';
+	import { powersync } from '$lib/powersync';
+	import { browser } from '$app/environment';
 
 	let { data } = $props();
+
+	const isNative = $derived(browser && !!(window as any).electron);
+
+	let nativeData = $state<any>(null);
+
+	async function loadNativeInventory() {
+		if (!isNative || !powersync.ready) return;
+		const perPage = 20;
+		const pg = parseInt(new URLSearchParams(window.location.search).get('page') ?? '1');
+		const offset = (pg - 1) * perPage;
+		const categoryFilter = data.filters.category;
+		const search = data.filters.search;
+		const stockStatus = data.filters.stockStatus;
+
+		// Stats
+		const statsResult = await powersync.db.get(`
+			SELECT COUNT(DISTINCT p.id) as totalProducts, COUNT(pv.id) as totalVariants,
+				SUM(CASE WHEN pv.stock_quantity > 0 AND pv.stock_quantity <= 5 THEN 1 ELSE 0 END) as lowStockVariants,
+				SUM(CASE WHEN pv.stock_quantity = 0 THEN 1 ELSE 0 END) as outOfStockVariants,
+				COALESCE(SUM(pv.price * pv.stock_quantity), 0) as totalInventoryValue
+			FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id
+		`);
+
+		const categoryRows = await powersync.db.getAll('SELECT DISTINCT category FROM products');
+
+		let where = 'WHERE 1=1';
+		const params: any[] = [];
+		if (categoryFilter) { where += ' AND p.category = ?'; params.push(categoryFilter); }
+		if (search) {
+			where += ' AND (p.name LIKE ? OR p.category LIKE ? OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.barcode LIKE ?))';
+			const p = `%${search}%`;
+			params.push(p, p, p);
+		}
+		if (stockStatus === 'out') where += ' AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity = 0)';
+		else if (stockStatus === 'low') where += ' AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity > 0 AND pv.stock_quantity <= 5)';
+		else if (stockStatus === 'healthy') where += ' AND NOT EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity <= 5)';
+
+		const [countResult, productList] = await Promise.all([
+			powersync.db.get(`SELECT count(*) as count FROM products p ${where}`, params),
+			powersync.db.getAll(`
+				SELECT p.id, p.name, p.category, p.base_price as templatePrice, p.default_discount as defaultDiscount,
+					COALESCE((SELECT SUM(pv.stock_quantity) FROM product_variants pv WHERE pv.product_id = p.id), 0) as totalStock
+				FROM products p ${where} ORDER BY p.id DESC LIMIT ? OFFSET ?
+			`, [...params, perPage, offset])
+		]);
+
+		const productIds = (productList as any[]).map(p => p.id);
+		let variants: any[] = [];
+		if (productIds.length > 0) {
+			const placeholders = productIds.map(() => '?').join(',');
+			variants = await powersync.db.getAll(`SELECT * FROM product_variants WHERE product_id IN (${placeholders})`, productIds) as any[];
+		}
+
+		const variantsByProduct = new Map();
+		for (const v of variants) {
+			const list = variantsByProduct.get(v.product_id) ?? [];
+			list.push({ ...v, productId: v.product_id, stockQuantity: v.stock_quantity });
+			variantsByProduct.set(v.product_id, list);
+		}
+
+		const total = (countResult as any)?.count ?? 0;
+		nativeData = {
+			stats: statsResult ?? { totalProducts: 0, totalVariants: 0, lowStockVariants: 0, outOfStockVariants: 0, totalInventoryValue: 0 },
+			categories: (categoryRows as any[]).map(c => c.category).sort(),
+			products: (productList as any[]).map(p => ({ ...p, variants: variantsByProduct.get(p.id) ?? [] })),
+			total,
+			totalPages: Math.ceil(total / perPage),
+			currentPage: pg
+		};
+	}
+
+	$effect(() => {
+		if (isNative && powersync.ready) loadNativeInventory();
+	});
 
 	let searchQuery = $state('');
 	let selectedCategory = $state('');
@@ -108,9 +184,7 @@
 
 	<!-- Summary Cards -->
 	<div class="flex flex-wrap gap-3">
-		{#await data.streamed}
-			{#each Array(4) as _}<Skeleton class="h-20 min-w-[200px] flex-1" />{/each}
-		{:then streamed}
+		{#if isNative && nativeData}
 			<div
 				class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 shadow-sm"
 			>
@@ -121,7 +195,7 @@
 				</div>
 				<div>
 					<p class="text-[10px] font-bold text-muted-foreground uppercase">Products</p>
-					<p class="mt-1 text-xl font-black">{streamed.stats.totalProducts}</p>
+					<p class="mt-1 text-xl font-black">{nativeData.stats.totalProducts}</p>
 				</div>
 			</div>
 			<div
@@ -135,7 +209,7 @@
 				<div>
 					<p class="text-[10px] font-bold text-muted-foreground uppercase">Value</p>
 					<p class="mt-1 text-xl font-black">
-						{formatCurrency(streamed.stats.totalInventoryValue)}
+						{formatCurrency(nativeData.stats.totalInventoryValue)}
 					</p>
 				</div>
 			</div>
@@ -153,7 +227,7 @@
 				</div>
 				<div>
 					<p class="text-[10px] font-bold text-muted-foreground uppercase">Low Stock</p>
-					<p class="mt-1 text-xl font-black">{streamed.stats.lowStockVariants}</p>
+					<p class="mt-1 text-xl font-black">{nativeData.stats.lowStockVariants}</p>
 				</div>
 			</button>
 			<button
@@ -170,10 +244,79 @@
 				</div>
 				<div>
 					<p class="text-[10px] font-bold text-muted-foreground uppercase">Out of Stock</p>
-					<p class="mt-1 text-xl font-black">{streamed.stats.outOfStockVariants}</p>
+					<p class="mt-1 text-xl font-black">{nativeData.stats.outOfStockVariants}</p>
 				</div>
 			</button>
-		{/await}
+		{:else if isNative}
+			{#each Array(4) as _}<Skeleton class="h-20 min-w-[200px] flex-1" />{/each}
+		{:else}
+			{#await data.streamed}
+				{#each Array(4) as _}<Skeleton class="h-20 min-w-[200px] flex-1" />{/each}
+			{:then streamed}
+				<div
+					class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 shadow-sm"
+				>
+					<div
+						class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600"
+					>
+						<Package class="h-5 w-5" />
+					</div>
+					<div>
+						<p class="text-[10px] font-bold text-muted-foreground uppercase">Products</p>
+						<p class="mt-1 text-xl font-black">{streamed.stats.totalProducts}</p>
+					</div>
+				</div>
+				<div
+					class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 shadow-sm"
+				>
+					<div
+						class="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600"
+					>
+						<TrendingUp class="h-5 w-5" />
+					</div>
+					<div>
+						<p class="text-[10px] font-bold text-muted-foreground uppercase">Value</p>
+						<p class="mt-1 text-xl font-black">
+							{formatCurrency(streamed.stats.totalInventoryValue)}
+						</p>
+					</div>
+				</div>
+				<button
+					class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm {selectedStock ===
+					'low'
+						? 'ring-2 ring-amber-500'
+						: ''}"
+					onclick={() => setStockFilter(selectedStock === 'low' ? '' : 'low')}
+				>
+					<div
+						class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"
+					>
+						<AlertTriangle class="h-5 w-5" />
+					</div>
+					<div>
+						<p class="text-[10px] font-bold text-muted-foreground uppercase">Low Stock</p>
+						<p class="mt-1 text-xl font-black">{streamed.stats.lowStockVariants}</p>
+					</div>
+				</button>
+				<button
+					class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm {selectedStock ===
+					'out'
+						? 'ring-2 ring-red-500'
+						: ''}"
+					onclick={() => setStockFilter(selectedStock === 'out' ? '' : 'out')}
+				>
+					<div
+						class="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10 text-red-600"
+					>
+						<PackageX class="h-5 w-5" />
+					</div>
+					<div>
+						<p class="text-[10px] font-bold text-muted-foreground uppercase">Out of Stock</p>
+						<p class="mt-1 text-xl font-black">{streamed.stats.outOfStockVariants}</p>
+					</div>
+				</button>
+			{/await}
+		{/if}
 	</div>
 
 	<!-- Filters -->
@@ -192,21 +335,37 @@
 				<div class="flex flex-wrap items-center gap-3">
 					<div class="flex items-center gap-2">
 						<span class="text-xs font-bold text-muted-foreground">CATEGORY:</span>
-						{#await data.streamed}
-							<Skeleton class="h-9 w-[160px]" />
-						{:then streamed}
+						{#if isNative && nativeData}
 							<Select.Root type="single" bind:value={selectedCategory} onValueChange={applyFilters}>
 								<Select.Trigger class="h-9 w-[160px] text-xs"
 									>{selectedCategory || 'All'}</Select.Trigger
 								>
 								<Select.Content>
 									<Select.Item value="" class="text-xs">All Categories</Select.Item>
-									{#each streamed.categories as cat}<Select.Item value={cat} class="text-xs"
+									{#each nativeData.categories as cat}<Select.Item value={cat} class="text-xs"
 											>{cat}</Select.Item
 										>{/each}
 								</Select.Content>
 							</Select.Root>
-						{/await}
+						{:else if isNative}
+							<Skeleton class="h-9 w-[160px]" />
+						{:else}
+							{#await data.streamed}
+								<Skeleton class="h-9 w-[160px]" />
+							{:then streamed}
+								<Select.Root type="single" bind:value={selectedCategory} onValueChange={applyFilters}>
+									<Select.Trigger class="h-9 w-[160px] text-xs"
+										>{selectedCategory || 'All'}</Select.Trigger
+									>
+									<Select.Content>
+										<Select.Item value="" class="text-xs">All Categories</Select.Item>
+										{#each streamed.categories as cat}<Select.Item value={cat} class="text-xs"
+												>{cat}</Select.Item
+											>{/each}
+									</Select.Content>
+								</Select.Root>
+							{/await}
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -226,17 +385,8 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#await data.streamed}
-						{#each Array(8) as _}
-							<Table.Row>
-								<Table.Cell><Skeleton class="h-10 w-full" /></Table.Cell>
-								<Table.Cell><Skeleton class="h-10 w-full" /></Table.Cell>
-								<Table.Cell><Skeleton class="h-10 w-full" /></Table.Cell>
-								<Table.Cell><Skeleton class="h-10 w-10" /></Table.Cell>
-							</Table.Row>
-						{/each}
-					{:then streamed}
-						{#each streamed.products as product}
+					{#if isNative && nativeData}
+						{#each nativeData.products as product}
 							<Table.Row
 								class="cursor-pointer hover:bg-muted/50"
 								onclick={() => goto(`/inventory/${product.id}`)}
@@ -290,36 +440,137 @@
 								</Table.Cell>
 							</Table.Row>
 						{/each}
-					{/await}
+					{:else if isNative}
+						{#each Array(8) as _}
+							<Table.Row>
+								<Table.Cell><Skeleton class="h-10 w-full" /></Table.Cell>
+								<Table.Cell><Skeleton class="h-10 w-full" /></Table.Cell>
+								<Table.Cell><Skeleton class="h-10 w-full" /></Table.Cell>
+								<Table.Cell><Skeleton class="h-10 w-10" /></Table.Cell>
+							</Table.Row>
+						{/each}
+					{:else}
+						{#await data.streamed}
+							{#each Array(8) as _}
+								<Table.Row>
+									<Table.Cell><Skeleton class="h-10 w-full" /></Table.Cell>
+									<Table.Cell><Skeleton class="h-10 w-full" /></Table.Cell>
+									<Table.Cell><Skeleton class="h-10 w-full" /></Table.Cell>
+									<Table.Cell><Skeleton class="h-10 w-10" /></Table.Cell>
+								</Table.Row>
+							{/each}
+						{:then streamed}
+							{#each streamed.products as product}
+								<Table.Row
+									class="cursor-pointer hover:bg-muted/50"
+									onclick={() => goto(`/inventory/${product.id}`)}
+								>
+									<Table.Cell>
+										<div class="flex flex-col">
+											<span class="font-medium">{product.name}</span><Badge
+												variant="secondary"
+												class="w-fit text-[10px]">{product.category}</Badge
+											>
+										</div>
+									</Table.Cell>
+									<Table.Cell><span class="font-semibold">{getPriceRange(product)}</span></Table.Cell>
+									<Table.Cell>
+										{@const total = product.variants.reduce(
+											(s: number, v: { stockQuantity: number }) => s + v.stockQuantity,
+											0
+										)}
+										<div class="flex flex-col gap-1">
+											<Badge
+												variant={total === 0 ? 'destructive' : total <= 5 ? 'secondary' : 'outline'}
+												>{total} in stock</Badge
+											>
+											<div class="flex flex-wrap gap-1">
+												{#each product.variants as v}<span
+														class="rounded border px-1 py-0.5 text-[10px] {stockChipClass(
+															v.stockQuantity
+														)}">{v.size}: {v.stockQuantity}</span
+													>{/each}
+											</div>
+										</div>
+									</Table.Cell>
+									<Table.Cell class="text-right"
+										><div class="flex justify-end gap-1">
+											<Button variant="ghost" size="icon" href="/inventory/${product.id}/labels"
+												><Printer class="h-4 w-4" /></Button
+											>
+										</div></Table.Cell
+									>
+								</Table.Row>
+							{:else}
+								<Table.Row>
+									<Table.Cell colspan={4} class="h-48 text-center text-muted-foreground italic">
+										<div class="flex flex-col items-center justify-center gap-2">
+											<Package class="h-10 w-10 opacity-20" />
+											<p>No products found in inventory.</p>
+											<Button href="/inventory/new" variant="outline" size="sm" class="mt-2">
+												<Plus class="mr-2 h-4 w-4" /> Add your first product
+											</Button>
+										</div>
+									</Table.Cell>
+								</Table.Row>
+							{/each}
+						{/await}
+					{/if}
 				</Table.Body>
 			</Table.Root>
 		</Card.Content>
 		<Card.Footer class="border-t p-4">
-			{#await data.streamed then streamed}
-				{#if streamed.totalPages > 1}
+			{#if isNative && nativeData}
+				{#if nativeData.totalPages > 1}
 					<div class="flex w-full items-center justify-between">
 						<p class="text-xs text-muted-foreground">
-							Showing {streamed.products.length} of {streamed.total}
+							Showing {nativeData.products.length} of {nativeData.total}
 						</p>
 						<div class="flex gap-1">
 							<Button
 								variant="outline"
 								size="icon"
-								disabled={streamed.currentPage <= 1}
-								onclick={() => goToPage(streamed.currentPage - 1)}
+								disabled={nativeData.currentPage <= 1}
+								onclick={() => goToPage(nativeData.currentPage - 1)}
 								class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
 							>
 							<Button
 								variant="outline"
 								size="icon"
-								disabled={streamed.currentPage >= streamed.totalPages}
-								onclick={() => goToPage(streamed.currentPage + 1)}
+								disabled={nativeData.currentPage >= nativeData.totalPages}
+								onclick={() => goToPage(nativeData.currentPage + 1)}
 								class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
 							>
 						</div>
 					</div>
 				{/if}
-			{/await}
+			{:else if !isNative}
+				{#await data.streamed then streamed}
+					{#if streamed.totalPages > 1}
+						<div class="flex w-full items-center justify-between">
+							<p class="text-xs text-muted-foreground">
+								Showing {streamed.products.length} of {streamed.total}
+							</p>
+							<div class="flex gap-1">
+								<Button
+									variant="outline"
+									size="icon"
+									disabled={streamed.currentPage <= 1}
+									onclick={() => goToPage(streamed.currentPage - 1)}
+									class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
+								>
+								<Button
+									variant="outline"
+									size="icon"
+									disabled={streamed.currentPage >= streamed.totalPages}
+									onclick={() => goToPage(streamed.currentPage + 1)}
+									class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
+								>
+							</div>
+						</div>
+					{/if}
+				{/await}
+			{/if}
 		</Card.Footer>
 	</Card.Root>
 </div>

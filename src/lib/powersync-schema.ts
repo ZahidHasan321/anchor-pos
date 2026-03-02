@@ -83,5 +83,29 @@ export const AppSchema = new Schema([
       new Column({ name: 'is_active', type: ColumnType.INTEGER }),
       new Column({ name: 'theme', type: ColumnType.TEXT })
     ]
+  }),
+  new Table({
+    name: 'stock_logs',
+    columns: [
+      new Column({ name: 'variant_id', type: ColumnType.TEXT }),
+      new Column({ name: 'change_amount', type: ColumnType.INTEGER }),
+      new Column({ name: 'reason', type: ColumnType.TEXT }),
+      new Column({ name: 'user_id', type: ColumnType.TEXT }),
+      new Column({ name: 'created_at', type: ColumnType.TEXT })
+    ]
+  }),
+  new Table({
+    name: 'role_permissions',
+    columns: [
+      new Column({ name: 'role', type: ColumnType.TEXT }),
+      new Column({ name: 'resource', type: ColumnType.TEXT })
+    ]
+  }),
+  new Table({
+    name: 'store_settings',
+    columns: [
+      new Column({ name: 'key', type: ColumnType.TEXT }),
+      new Column({ name: 'value', type: ColumnType.TEXT })
+    ]
   })
 ]);

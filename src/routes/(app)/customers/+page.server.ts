@@ -27,61 +27,13 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 	return {
 		search,
+		isElectron,
 		// Stream the data
 		streamed: (async () => {
 			if (isElectron) {
-				const { getPowerSyncDb } = await import('$lib/powersync/db');
-				const psDb = getPowerSyncDb();
-				let baseQuery = `
-					FROM customers c
-					WHERE 1=1
-				`;
-				const params: any[] = [];
-				if (search) {
-					baseQuery += ` AND (c.name LIKE ? OR c.phone LIKE ?)`;
-					const p = `%${search}%`;
-					params.push(p, p);
-				}
-
-				const countQuery = `SELECT count(*) as count ${baseQuery}`;
-				const dataQuery = `
-					SELECT 
-						c.id, 
-						c.name, 
-						c.phone, 
-						c.email,
-						(SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id AND o.status = 'completed') as orderCount,
-						COALESCE((SELECT SUM(o.total_amount) FROM orders o WHERE o.customer_id = c.id AND o.status = 'completed'), 0) as totalSpent,
-						(SELECT MAX(o.created_at) FROM orders o WHERE o.customer_id = c.id AND o.status = 'completed') as lastOrderDate
-					${baseQuery}
-					ORDER BY totalSpent DESC
-					LIMIT ? OFFSET ?
-				`;
-
-				const [countResult, customerList] = await Promise.all([
-					psDb.get(countQuery, params),
-					psDb.getAll(dataQuery, [...params, perPage, offset]) as Promise<any[]>
-				]);
-
-				const total = (countResult as any).count ?? 0;
-				const mappedCustomers = customerList.map((c) => ({
-					id: c.id,
-					name: c.name,
-					phone: c.phone,
-					email: c.email,
-					orderCount: c.orderCount,
-					totalSpent: c.totalSpent,
-					lastOrderDate: c.lastOrderDate ? new Date(c.lastOrderDate) : null
-				}));
-
 				return {
-					customers: mappedCustomers,
-					pagination: {
-						currentPage,
-						totalPages: Math.ceil(total / perPage),
-						total,
-						perPage
-					}
+					customers: [],
+					pagination: { currentPage: 1, totalPages: 1, total: 0, perPage }
 				};
 			}
 

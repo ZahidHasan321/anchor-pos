@@ -31,6 +31,23 @@
 			});
 		}
 	});
+
+	// In Electron mode, load store settings from PowerSync once ready
+	$effect(() => {
+		if (browser && (window as any).electron && powersync.ready) {
+			powersync.db.getAll('SELECT * FROM store_settings').then((rows: any[]) => {
+				const settings: Record<string, string> = {};
+				for (const row of rows) {
+					settings[row.key] = row.value;
+				}
+				globalSettings.update(
+					settings.store_locale,
+					settings.store_timezone,
+					settings.store_currency
+				);
+			});
+		}
+	});
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>

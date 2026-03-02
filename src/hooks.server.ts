@@ -28,7 +28,6 @@ async function getPublicKey() {
 
 // 0. Bootstrap Admin User (Runs once on first load)
 let isBootstrapped = false;
-let tokenExpiresAt = 0;
 async function bootstrapAdmin() {
 	if (isBootstrapped || IS_ELECTRON) return;
 	const username = env.ADMIN_USERNAME || 'admin';
@@ -129,36 +128,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 			email: user.email,
 			phone: user.phone
 		} : null;
-	}
-
-	// Connect PowerSync if user is authenticated (Electron only)
-	if (IS_ELECTRON && event.locals.user && Date.now() > tokenExpiresAt - 60_000) {
-		const startPs = Date.now();
-		console.log('[hooks] Starting PowerSync initialization...');
-		try {
-			const { connectPowerSync } = await import('$lib/powersync/init.js');
-			const { fetchRemotePowerSyncToken } = await import('$lib/server/powersync-auth');
-			
-			// Race the token fetch with a timeout
-			const tokenPromise = fetchRemotePowerSyncToken(event.locals.user.id);
-			const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Token fetch timeout')), 5000));
-			
-			const token = await Promise.race([tokenPromise, timeoutPromise]) as string;
-			
-			if (token) {
-				console.log('[hooks] Fetched token, connecting PowerSync...');
-				// Race the connection with a timeout
-				const connectPromise = connectPowerSync(token);
-				const connectTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('PowerSync connect timeout')), 5000));
-				
-				await Promise.race([connectPromise, connectTimeout]);
-				
-				tokenExpiresAt = Date.now() + 55 * 60 * 1000;
-				console.log(`[hooks] PowerSync connected in ${Date.now() - startPs}ms`);
-			}
-		} catch (e) {
-			console.warn('[hooks] PowerSync init failed or timed out:', e instanceof Error ? e.message : e);
-		}
 	}
 
 	// Global Route Guard

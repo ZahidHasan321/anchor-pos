@@ -14,7 +14,7 @@ import {
 import { eq, sql, inArray, and, gt } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
-import { queryVariants, queryVariantsPS } from '$lib/server/pos-query';
+import { queryVariants } from '$lib/server/pos-query';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) {
@@ -31,31 +31,17 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		category,
 		user: locals.user,
 
+		isElectron,
+
 		// Streamed data
 		streamed: (async () => {
 			if (isElectron) {
-				const { getPowerSyncDb } = await import('$lib/powersync/db');
-				const psDb = getPowerSyncDb();
-				const [variantsData, categoryRows, recentCustomers, settingsRows] = await Promise.all([
-					queryVariantsPS(search, category),
-					psDb.getAll(
-						'SELECT DISTINCT category FROM products p INNER JOIN product_variants pv ON p.id = pv.product_id WHERE pv.stock_quantity > 0'
-					),
-					psDb.getAll('SELECT * FROM customers LIMIT 50'),
-					psDb.getAll('SELECT * FROM store_settings')
-				]);
-
-				const settings = settingsRows.reduce((acc: Record<string, string>, row: any) => {
-					acc[row.key] = row.value;
-					return acc;
-				}, {} as Record<string, string>);
-
 				return {
-					products: variantsData.items,
-					hasMore: variantsData.hasMore,
-					categories: ['All', ...categoryRows.map((r: any) => r.category).sort()],
-					customers: recentCustomers,
-					storeSettings: settings
+					products: [],
+					hasMore: false,
+					categories: ['All'],
+					customers: [],
+					storeSettings: {}
 				};
 			}
 
@@ -149,88 +135,9 @@ export const actions: Actions = {
 		const round2 = (val: number) => Math.round((val + Number.EPSILON) * 100) / 100;
 		const variantIds = cartItems.map((item: CartItem) => item.variantId);
 
+		// In Electron mode, checkout is handled client-side via PowerSync Web
 		if (isElectron) {
-			// OFFLINE CHECKOUT via PowerSync
-			try {
-				const { getPowerSyncDb } = await import('$lib/powersync/db');
-				const psDb = getPowerSyncDb();
-				
-				const result = await psDb.writeTransaction(async (tx) => {
-					// 1. Fetch variants from local DB
-					const placeholders = variantIds.map(() => '?').join(',');
-					const dbVariants = await tx.getAll(`
-						SELECT pv.id, pv.price, p.name as productName, pv.size, pv.color, pv.stock_quantity as stockQuantity
-						FROM product_variants pv
-						INNER JOIN products p ON pv.product_id = p.id
-						WHERE pv.id IN (${placeholders})
-					`, variantIds);
-
-					const dbVariantsMap = new Map(dbVariants.map((v: any) => [v.id, v]));
-					const orderId = generateId();
-					let subtotal = 0;
-					let totalDiscount = 0;
-
-					for (const item of cartItems) {
-						const dbVariant = dbVariantsMap.get(item.variantId) as any;
-						if (!dbVariant) throw new Error(`Product not found locally: ${item.variantId}`);
-						if (dbVariant.stockQuantity < item.quantity) {
-							throw new Error(`Insufficient stock for ${dbVariant.productName}.`);
-						}
-
-						item.price = dbVariant.price;
-						item.productName = dbVariant.productName;
-						item.size = dbVariant.size;
-						item.color = dbVariant.color;
-						item.discount = Math.min(100, Math.max(0, item.discount || 0));
-
-						const linePrice = item.price * item.quantity;
-						const lineDiscount = round2(linePrice * (item.discount / 100));
-						subtotal += linePrice - lineDiscount;
-						totalDiscount += lineDiscount;
-					}
-
-					const finalGlobalDiscount = round2(subtotal * (globalDiscount / 100));
-					const totalAmount = round2(subtotal - finalGlobalDiscount);
-					totalDiscount = round2(totalDiscount + finalGlobalDiscount);
-					const changeGiven = round2(Math.max(0, cashReceived - totalAmount));
-
-					const now = new Date().toISOString();
-
-					// 3. Create order
-					await tx.execute(`
-						INSERT INTO orders (id, customer_id, user_id, total_amount, status, payment_method, discount_amount, cash_received, change_given, created_at)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-					`, [orderId, customerId, locals.user!.id, totalAmount, 'completed', paymentMethod, totalDiscount, cashReceived, changeGiven, now]);
-
-					// 4. Record items & Adjust stock
-					for (const item of cartItems) {
-						await tx.execute(`
-							INSERT INTO order_items (id, order_id, variant_id, quantity, price_at_sale, discount, product_name, variant_label)
-							VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-						`, [generateId(), orderId, item.variantId, item.quantity, item.price, item.discount, item.productName, `${item.size}${item.color ? ' / ' + item.color : ''}`]);
-
-						await tx.execute('UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.variantId]);
-
-						await tx.execute(`
-							INSERT INTO stock_logs (id, variant_id, change_amount, reason, user_id, created_at)
-							VALUES (?, ?, ?, ?, ?, ?)
-						`, [generateId(), item.variantId, -item.quantity, 'sale', locals.user!.id, now]);
-					}
-
-					// 5. Update cashbook
-					await tx.execute(`
-						INSERT INTO cashbook (id, amount, type, description, user_id, created_at)
-						VALUES (?, ?, ?, ?, ?, ?)
-					`, [generateId(), totalAmount, 'in', `Sale ${orderId.slice(0, 8).toUpperCase()}`, locals.user!.id, now]);
-
-					return { orderId, orderNumber: orderId.slice(0, 8).toUpperCase(), changeGiven };
-				});
-
-				return { success: true, ...result };
-			} catch (e: any) {
-				console.error('[POS] Local checkout failed:', e);
-				return fail(500, { error: e.message || 'Local transaction failed' });
-			}
+			return fail(400, { error: 'Electron checkout should use client-side PowerSync' });
 		}
 
 		if (!db) return fail(503, { error: 'Direct database connection unavailable.' });

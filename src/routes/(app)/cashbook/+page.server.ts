@@ -65,43 +65,14 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 	return {
 		view,
 		date: targetDateStr,
+		isElectron,
+		dateRangeStart: dateRangeStart.toISOString(),
+		dateRangeEnd: dateRangeEnd.toISOString(),
 
 		// Deferred data for streaming
 		dailyData: (async () => {
 			if (isElectron) {
-				const { getPowerSyncDb } = await import('$lib/powersync/db');
-				const psDb = getPowerSyncDb();
-				const [entries, totals] = await Promise.all([
-					psDb.getAll(
-						`
-						SELECT 
-							c.id, c.amount, c.type, c.description, c.created_at as createdAt,
-							u.name as userName
-						FROM cashbook c
-						LEFT JOIN users u ON c.user_id = u.id
-						WHERE c.created_at >= ? AND c.created_at < ?
-						ORDER BY c.created_at DESC
-					`,
-						[dateRangeStart.toISOString(), dateRangeEnd.toISOString()]
-					),
-					psDb.getAll(
-						`
-						SELECT type, sum(amount) as total
-						FROM cashbook
-						WHERE created_at >= ? AND created_at < ?
-						GROUP BY type
-					`,
-						[dateRangeStart.toISOString(), dateRangeEnd.toISOString()]
-					)
-				]);
-
-				const totalIn = (totals as any[]).find((t) => t.type === 'in')?.total || 0;
-				const totalOut = (totals as any[]).find((t) => t.type === 'out')?.total || 0;
-
-				return {
-					entries,
-					summary: { totalIn, totalOut, net: totalIn - totalOut }
-				};
+				return { entries: [], summary: { totalIn: 0, totalOut: 0, net: 0 } };
 			}
 
 			if (!db) return { entries: [], summary: { totalIn: 0, totalOut: 0, net: 0 } };
@@ -136,14 +107,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 		})(),
 
 		expenseDescriptions: (async () => {
-			if (isElectron) {
-				const { getPowerSyncDb } = await import('$lib/powersync/db');
-				const psDb = getPowerSyncDb();
-				const rows = await psDb.getAll(
-					"SELECT DISTINCT description FROM cashbook WHERE type = 'out'"
-				);
-				return rows.map((r: any) => r.description);
-			}
+			if (isElectron) return [];
 			if (!db) return [];
 			const rows = await db
 				.selectDistinct({ description: cashbook.description })
@@ -161,45 +125,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 
 			if (view !== 'all') return null;
 
-			if (isElectron) {
-				const { getPowerSyncDb } = await import('$lib/powersync/db');
-				const psDb = getPowerSyncDb();
-				let baseQuery = `FROM cashbook WHERE 1=1`;
-				const params: any[] = [];
-				if (txType === 'in' || txType === 'out') {
-					baseQuery += ` AND type = ?`;
-					params.push(txType);
-				}
-				if (txSearch) {
-					baseQuery += ` AND description LIKE ?`;
-					params.push(`%${txSearch}%`);
-				}
-
-				const [countRes, txRes] = await Promise.all([
-					psDb.get(`SELECT count(*) as count ${baseQuery}`, params),
-					psDb.getAll(
-						`
-						SELECT 
-							id, amount, type, description, created_at as createdAt,
-							COALESCE((SELECT name FROM users WHERE id = user_id), 'System') as userName
-						${baseQuery}
-						ORDER BY created_at DESC
-						LIMIT ? OFFSET ?
-					`,
-						[...params, txLimit, txOffset]
-					)
-				]);
-
-				const totalEntries = (countRes as any).count ?? 0;
-				return {
-					transactions: txRes,
-					txPage,
-					txTotalPages: Math.max(1, Math.ceil(totalEntries / txLimit)),
-					txTotalEntries: totalEntries,
-					txType,
-					txSearch
-				};
-			}
+			if (isElectron) return null;
 
 			if (!db) return null;
 

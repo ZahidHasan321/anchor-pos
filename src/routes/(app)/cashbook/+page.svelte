@@ -30,8 +30,90 @@
 	import { cn } from '$lib/utils';
 	import { createDebounced } from '$lib/debounce.svelte';
 	import { fly, fade } from 'svelte/transition';
+	import { powersync } from '$lib/powersync';
+	import { browser } from '$app/environment';
 
 	let { data, form } = $props();
+
+	const isNative = $derived(browser && !!(window as any).electron);
+
+	// Electron: client-side PowerSync data
+	let nativeDailyData = $state<any>(null);
+	let nativeExpenseDescriptions = $state<string[]>([]);
+	let nativeTransactionsData = $state<any>(null);
+
+	async function loadNativeData() {
+		if (!browser || !(window as any).electron || !powersync.ready) return;
+
+		const dateStart = data.dateRangeStart;
+		const dateEnd = data.dateRangeEnd;
+
+		// Daily data
+		Promise.all([
+			powersync.db.getAll(`
+				SELECT c.id, c.amount, c.type, c.description, c.created_at as createdAt, u.name as userName
+				FROM cashbook c LEFT JOIN users u ON c.user_id = u.id
+				WHERE c.created_at >= ? AND c.created_at < ?
+				ORDER BY c.created_at DESC
+			`, [dateStart, dateEnd]),
+			powersync.db.getAll(`
+				SELECT type, sum(amount) as total FROM cashbook
+				WHERE created_at >= ? AND created_at < ? GROUP BY type
+			`, [dateStart, dateEnd])
+		]).then(([entries, totals]) => {
+			const totalIn = (totals as any[]).find(t => t.type === 'in')?.total || 0;
+			const totalOut = (totals as any[]).find(t => t.type === 'out')?.total || 0;
+			nativeDailyData = { entries, summary: { totalIn, totalOut, net: totalIn - totalOut } };
+		});
+
+		// Expense descriptions
+		powersync.db.getAll("SELECT DISTINCT description FROM cashbook WHERE type = 'out'")
+			.then(rows => nativeExpenseDescriptions = (rows as any[]).map(r => r.description));
+
+		// Transactions (if view is 'all')
+		if (data.view === 'all') {
+			const txPage = parseInt(new URLSearchParams(window.location.search).get('txPage') || '1');
+			const txType = new URLSearchParams(window.location.search).get('txType') || 'all';
+			const txSearch = new URLSearchParams(window.location.search).get('txSearch') || '';
+			const txLimit = 50;
+			const txOffset = (txPage - 1) * txLimit;
+			let where = 'WHERE 1=1';
+			const params: any[] = [];
+			if (txType === 'in' || txType === 'out') { where += ' AND type = ?'; params.push(txType); }
+			if (txSearch) { where += ' AND description LIKE ?'; params.push(`%${txSearch}%`); }
+
+			Promise.all([
+				powersync.db.get(`SELECT count(*) as count FROM cashbook ${where}`, params),
+				powersync.db.getAll(`
+					SELECT id, amount, type, description, created_at as createdAt,
+						COALESCE((SELECT name FROM users WHERE id = user_id), 'System') as userName
+					FROM cashbook ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?
+				`, [...params, txLimit, txOffset])
+			]).then(([countRes, txRes]) => {
+				const totalEntries = (countRes as any)?.count ?? 0;
+				nativeTransactionsData = {
+					transactions: txRes,
+					txPage, txTotalPages: Math.max(1, Math.ceil(totalEntries / txLimit)),
+					txTotalEntries: totalEntries, txType, txSearch
+				};
+			});
+		}
+	}
+
+	$effect(() => {
+		if (!isNative || !powersync.ready) return;
+		loadNativeData();
+	});
+
+	async function handleNativeAddExpense(description: string, amount: number) {
+		if (!data.user) return;
+		await powersync.db.execute(`
+			INSERT INTO cashbook (id, amount, type, description, user_id, created_at)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, [crypto.randomUUID(), amount, 'out', description, data.user.id, new Date().toISOString()]);
+		// Reload data
+		loadNativeData();
+	}
 	let loading = $state(false);
 	let selectedDate = $state('');
 
@@ -61,12 +143,19 @@
 	let txSearchInput = $state('');
 
 	$effect(() => {
-		data.transactionsData.then((td) => {
-			if (td) {
-				txTypeFilter = td.txType;
-				txSearchInput = td.txSearch;
+		if (isNative) {
+			if (nativeTransactionsData) {
+				txTypeFilter = nativeTransactionsData.txType;
+				txSearchInput = nativeTransactionsData.txSearch;
 			}
-		});
+		} else {
+			data.transactionsData.then((td) => {
+				if (td) {
+					txTypeFilter = td.txType;
+					txSearchInput = td.txSearch;
+				}
+			});
+		}
 	});
 
 	const debouncedTxSearch = createDebounced(() => txSearchInput);
@@ -182,57 +271,111 @@
 					<div class="space-y-6">
 						<!-- Summary Cards -->
 						<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
-							{#await data.dailyData}
-								{#each Array(3) as _}
-									<Card.Root class="space-y-2 p-4"
-										><Skeleton class="h-4 w-20" /><Skeleton class="h-8 w-full" /></Card.Root
-									>
-								{/each}
-							{:then daily}
-								<Card.Root class="border-l-4 border-l-emerald-500">
-									<Card.Header class="flex flex-row items-center justify-between pb-2">
-										<Card.Title class="text-sm font-medium">Cash In</Card.Title>
-										<div class="rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
-											<ArrowUpCircle class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-										</div>
-									</Card.Header>
-									<Card.Content>
-										<div
-											class="text-2xl font-bold break-all text-emerald-600 dark:text-emerald-400"
+							{#if isNative}
+								{#if nativeDailyData === null}
+									{#each Array(3) as _}
+										<Card.Root class="space-y-2 p-4"
+											><Skeleton class="h-4 w-20" /><Skeleton class="h-8 w-full" /></Card.Root
 										>
-											{formatCurrency(daily.summary.totalIn)}
-										</div>
-									</Card.Content>
-								</Card.Root>
+									{/each}
+								{:else}
+									<Card.Root class="border-l-4 border-l-emerald-500">
+										<Card.Header class="flex flex-row items-center justify-between pb-2">
+											<Card.Title class="text-sm font-medium">Cash In</Card.Title>
+											<div class="rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
+												<ArrowUpCircle class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+											</div>
+										</Card.Header>
+										<Card.Content>
+											<div
+												class="text-2xl font-bold break-all text-emerald-600 dark:text-emerald-400"
+											>
+												{formatCurrency(nativeDailyData.summary.totalIn)}
+											</div>
+										</Card.Content>
+									</Card.Root>
 
-								<Card.Root class="border-l-4 border-l-red-500">
-									<Card.Header class="flex flex-row items-center justify-between pb-2">
-										<Card.Title class="text-sm font-medium">Cash Out</Card.Title>
-										<div class="rounded-full bg-red-100 p-2 dark:bg-red-500/20">
-											<ArrowDownCircle class="h-4 w-4 text-red-600 dark:text-red-400" />
-										</div>
-									</Card.Header>
-									<Card.Content>
-										<div class="text-2xl font-bold break-all text-red-600 dark:text-red-400">
-											{formatCurrency(daily.summary.totalOut)}
-										</div>
-									</Card.Content>
-								</Card.Root>
+									<Card.Root class="border-l-4 border-l-red-500">
+										<Card.Header class="flex flex-row items-center justify-between pb-2">
+											<Card.Title class="text-sm font-medium">Cash Out</Card.Title>
+											<div class="rounded-full bg-red-100 p-2 dark:bg-red-500/20">
+												<ArrowDownCircle class="h-4 w-4 text-red-600 dark:text-red-400" />
+											</div>
+										</Card.Header>
+										<Card.Content>
+											<div class="text-2xl font-bold break-all text-red-600 dark:text-red-400">
+												{formatCurrency(nativeDailyData.summary.totalOut)}
+											</div>
+										</Card.Content>
+									</Card.Root>
 
-								<Card.Root class="border-l-4 border-l-blue-500">
-									<Card.Header class="flex flex-row items-center justify-between pb-2">
-										<Card.Title class="text-sm font-medium">Net Cash</Card.Title>
-										<div class="rounded-full bg-blue-100 p-2 dark:bg-blue-500/20">
-											<Wallet class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-										</div>
-									</Card.Header>
-									<Card.Content>
-										<div class="text-2xl font-bold break-all text-blue-600 dark:text-blue-400">
-											{formatCurrency(daily.summary.net)}
-										</div>
-									</Card.Content>
-								</Card.Root>
-							{/await}
+									<Card.Root class="border-l-4 border-l-blue-500">
+										<Card.Header class="flex flex-row items-center justify-between pb-2">
+											<Card.Title class="text-sm font-medium">Net Cash</Card.Title>
+											<div class="rounded-full bg-blue-100 p-2 dark:bg-blue-500/20">
+												<Wallet class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+											</div>
+										</Card.Header>
+										<Card.Content>
+											<div class="text-2xl font-bold break-all text-blue-600 dark:text-blue-400">
+												{formatCurrency(nativeDailyData.summary.net)}
+											</div>
+										</Card.Content>
+									</Card.Root>
+								{/if}
+							{:else}
+								{#await data.dailyData}
+									{#each Array(3) as _}
+										<Card.Root class="space-y-2 p-4"
+											><Skeleton class="h-4 w-20" /><Skeleton class="h-8 w-full" /></Card.Root
+										>
+									{/each}
+								{:then daily}
+									<Card.Root class="border-l-4 border-l-emerald-500">
+										<Card.Header class="flex flex-row items-center justify-between pb-2">
+											<Card.Title class="text-sm font-medium">Cash In</Card.Title>
+											<div class="rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
+												<ArrowUpCircle class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+											</div>
+										</Card.Header>
+										<Card.Content>
+											<div
+												class="text-2xl font-bold break-all text-emerald-600 dark:text-emerald-400"
+											>
+												{formatCurrency(daily.summary.totalIn)}
+											</div>
+										</Card.Content>
+									</Card.Root>
+
+									<Card.Root class="border-l-4 border-l-red-500">
+										<Card.Header class="flex flex-row items-center justify-between pb-2">
+											<Card.Title class="text-sm font-medium">Cash Out</Card.Title>
+											<div class="rounded-full bg-red-100 p-2 dark:bg-red-500/20">
+												<ArrowDownCircle class="h-4 w-4 text-red-600 dark:text-red-400" />
+											</div>
+										</Card.Header>
+										<Card.Content>
+											<div class="text-2xl font-bold break-all text-red-600 dark:text-red-400">
+												{formatCurrency(daily.summary.totalOut)}
+											</div>
+										</Card.Content>
+									</Card.Root>
+
+									<Card.Root class="border-l-4 border-l-blue-500">
+										<Card.Header class="flex flex-row items-center justify-between pb-2">
+											<Card.Title class="text-sm font-medium">Net Cash</Card.Title>
+											<div class="rounded-full bg-blue-100 p-2 dark:bg-blue-500/20">
+												<Wallet class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+											</div>
+										</Card.Header>
+										<Card.Content>
+											<div class="text-2xl font-bold break-all text-blue-600 dark:text-blue-400">
+												{formatCurrency(daily.summary.net)}
+											</div>
+										</Card.Content>
+									</Card.Root>
+								{/await}
+							{/if}
 						</div>
 
 						<div class="grid gap-6 lg:grid-cols-3">
@@ -243,24 +386,24 @@
 									<Card.Description>Record a new cash outflow.</Card.Description>
 								</Card.Header>
 								<Card.Content>
-									{#await data.expenseDescriptions}
-										<div class="space-y-4">
-											<Skeleton class="h-10 w-full" />
-											<Skeleton class="h-10 w-full" />
-											<Skeleton class="h-10 w-full" />
-										</div>
-									{:then descriptions}
+									{#if isNative}
+										{@const descriptions = nativeExpenseDescriptions}
 										<form
-											method="POST"
-											action="?/addExpense"
-											use:enhance={() => {
-												loading = true;
-												return async ({ update }) => {
-													loading = false;
-													await update();
-												};
-											}}
 											class="space-y-4"
+											onsubmit={(e) => {
+												e.preventDefault();
+												const fd = new FormData(e.currentTarget as HTMLFormElement);
+												const desc = fd.get('description') as string;
+												const amt = parseFloat(fd.get('amount') as string);
+												if (desc && !isNaN(amt)) {
+													loading = true;
+													handleNativeAddExpense(desc, amt).finally(() => {
+														loading = false;
+														(e.currentTarget as HTMLFormElement).reset();
+														toast.success('Expense added successfully');
+													});
+												}
+											}}
 										>
 											<div class="space-y-2">
 												<Label for="description">Description</Label>
@@ -288,7 +431,54 @@
 												Record Expense
 											</Button>
 										</form>
-									{/await}
+									{:else}
+										{#await data.expenseDescriptions}
+											<div class="space-y-4">
+												<Skeleton class="h-10 w-full" />
+												<Skeleton class="h-10 w-full" />
+												<Skeleton class="h-10 w-full" />
+											</div>
+										{:then descriptions}
+											<form
+												method="POST"
+												action="?/addExpense"
+												use:enhance={() => {
+													loading = true;
+													return async ({ update }) => {
+														loading = false;
+														await update();
+													};
+												}}
+												class="space-y-4"
+											>
+												<div class="space-y-2">
+													<Label for="description">Description</Label>
+													<Autocomplete
+														id="description"
+														name="description"
+														placeholder="e.g. Tea"
+														required
+														suggestions={descriptions}
+													/>
+												</div>
+												<div class="space-y-2">
+													<Label for="amount">Amount ({getCurrencySymbol()})</Label>
+													<Input
+														id="amount"
+														name="amount"
+														type="number"
+														step="0.01"
+														placeholder="0.00"
+														required
+													/>
+												</div>
+												<Button type="submit" class="w-full cursor-pointer" disabled={loading}>
+													{#if loading}<Loader2 class="mr-2 h-4 w-4 animate-spin" />{/if}
+													Record Expense
+												</Button>
+											</form>
+										{/await}
+									{/if}
 								</Card.Content>
 							</Card.Root>
 
@@ -299,59 +489,115 @@
 									<Card.Description>Transactions for {formatDate(data.date)}</Card.Description>
 								</Card.Header>
 								<Card.Content class="p-0">
-									{#await data.dailyData}
-										<div class="space-y-3 p-4">
-											{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
-										</div>
-									{:then daily}
-										<Table.Root class="min-w-[600px]">
-											<Table.Header>
-												<Table.Row>
-													<Table.Head>Time</Table.Head>
-													<Table.Head>Description</Table.Head>
-													<Table.Head>By</Table.Head>
-													<Table.Head>Type</Table.Head>
-													<Table.Head class="text-right">Amount</Table.Head>
-												</Table.Row>
-											</Table.Header>
-											<Table.Body>
-												{#each daily.entries as entry}
+									{#if isNative}
+										{#if nativeDailyData === null}
+											<div class="space-y-3 p-4">
+												{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
+											</div>
+										{:else}
+											<Table.Root class="min-w-[600px]">
+												<Table.Header>
 													<Table.Row>
-														<Table.Cell class="text-xs"
-															>{formatDateTime(entry.createdAt)}</Table.Cell
-														>
-														<Table.Cell class="font-medium">{entry.description}</Table.Cell>
-														<Table.Cell class="text-xs text-muted-foreground"
-															>{entry.userName}</Table.Cell
-														>
-														<Table.Cell
-															><Badge
-																variant={entry.type === 'in' ? 'secondary' : 'destructive'}
-																class="capitalize">{entry.type}</Badge
-															></Table.Cell
-														>
-														<Table.Cell
-															class={cn(
-																'text-right font-bold',
-																entry.type === 'in' ? 'text-emerald-500' : 'text-destructive'
-															)}
-														>
-															{entry.type === 'in' ? '+' : '-'}{formatCurrency(entry.amount)}
-														</Table.Cell>
+														<Table.Head>Time</Table.Head>
+														<Table.Head>Description</Table.Head>
+														<Table.Head>By</Table.Head>
+														<Table.Head>Type</Table.Head>
+														<Table.Head class="text-right">Amount</Table.Head>
 													</Table.Row>
-												{/each}
-												{#if daily.entries.length === 0}
-													<Table.Row
-														><Table.Cell
-															colspan={5}
-															class="h-32 text-center text-muted-foreground italic"
-															>No entries for this date.</Table.Cell
-														></Table.Row
-													>
-												{/if}
-											</Table.Body>
-										</Table.Root>
-									{/await}
+												</Table.Header>
+												<Table.Body>
+													{#each nativeDailyData.entries as entry}
+														<Table.Row>
+															<Table.Cell class="text-xs"
+																>{formatDateTime(entry.createdAt)}</Table.Cell
+															>
+															<Table.Cell class="font-medium">{entry.description}</Table.Cell>
+															<Table.Cell class="text-xs text-muted-foreground"
+																>{entry.userName}</Table.Cell
+															>
+															<Table.Cell
+																><Badge
+																	variant={entry.type === 'in' ? 'secondary' : 'destructive'}
+																	class="capitalize">{entry.type}</Badge
+																></Table.Cell
+															>
+															<Table.Cell
+																class={cn(
+																	'text-right font-bold',
+																	entry.type === 'in' ? 'text-emerald-500' : 'text-destructive'
+																)}
+															>
+																{entry.type === 'in' ? '+' : '-'}{formatCurrency(entry.amount)}
+															</Table.Cell>
+														</Table.Row>
+													{/each}
+													{#if nativeDailyData.entries.length === 0}
+														<Table.Row
+															><Table.Cell
+																colspan={5}
+																class="h-32 text-center text-muted-foreground italic"
+																>No entries for this date.</Table.Cell
+															></Table.Row
+														>
+													{/if}
+												</Table.Body>
+											</Table.Root>
+										{/if}
+									{:else}
+										{#await data.dailyData}
+											<div class="space-y-3 p-4">
+												{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
+											</div>
+										{:then daily}
+											<Table.Root class="min-w-[600px]">
+												<Table.Header>
+													<Table.Row>
+														<Table.Head>Time</Table.Head>
+														<Table.Head>Description</Table.Head>
+														<Table.Head>By</Table.Head>
+														<Table.Head>Type</Table.Head>
+														<Table.Head class="text-right">Amount</Table.Head>
+													</Table.Row>
+												</Table.Header>
+												<Table.Body>
+													{#each daily.entries as entry}
+														<Table.Row>
+															<Table.Cell class="text-xs"
+																>{formatDateTime(entry.createdAt)}</Table.Cell
+															>
+															<Table.Cell class="font-medium">{entry.description}</Table.Cell>
+															<Table.Cell class="text-xs text-muted-foreground"
+																>{entry.userName}</Table.Cell
+															>
+															<Table.Cell
+																><Badge
+																	variant={entry.type === 'in' ? 'secondary' : 'destructive'}
+																	class="capitalize">{entry.type}</Badge
+																></Table.Cell
+															>
+															<Table.Cell
+																class={cn(
+																	'text-right font-bold',
+																	entry.type === 'in' ? 'text-emerald-500' : 'text-destructive'
+																)}
+															>
+																{entry.type === 'in' ? '+' : '-'}{formatCurrency(entry.amount)}
+															</Table.Cell>
+														</Table.Row>
+													{/each}
+													{#if daily.entries.length === 0}
+														<Table.Row
+															><Table.Cell
+																colspan={5}
+																class="h-32 text-center text-muted-foreground italic"
+																>No entries for this date.</Table.Cell
+															></Table.Row
+														>
+													{/if}
+												</Table.Body>
+											</Table.Root>
+										{/await}
+									{/if}
 								</Card.Content>
 							</Card.Root>
 						</div>
@@ -404,12 +650,13 @@
 								</div>
 							</div>
 
-							{#await data.transactionsData}
-								<div class="space-y-3 p-4">
-									{#each Array(8) as _}<Skeleton class="h-12 w-full" />{/each}
-								</div>
-							{:then td}
-								{#if td}
+							{#if isNative}
+								{#if nativeTransactionsData === null}
+									<div class="space-y-3 p-4">
+										{#each Array(8) as _}<Skeleton class="h-12 w-full" />{/each}
+									</div>
+								{:else}
+									{@const td = nativeTransactionsData}
 									<Table.Root class="min-w-[800px]">
 										<Table.Header>
 											<Table.Row>
@@ -470,29 +717,111 @@
 													variant="outline"
 													size="icon"
 													disabled={td.txPage <= 1}
-													onclick={() =>
-														goto(buildTxUrl({ txPage: td.txPage - 1 }), {
-															noScroll: true,
-															keepFocus: true
-														})}
+													onclick={() => { nativeTransactionsData = null; loadNativeData(); }}
 													class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
 												>
 												<Button
 													variant="outline"
 													size="icon"
 													disabled={td.txPage >= td.txTotalPages}
-													onclick={() =>
-														goto(buildTxUrl({ txPage: td.txPage + 1 }), {
-															noScroll: true,
-															keepFocus: true
-														})}
+													onclick={() => { nativeTransactionsData = null; loadNativeData(); }}
 													class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
 												>
 											</div>
 										</div>
 									{/if}
 								{/if}
-							{/await}
+							{:else}
+								{#await data.transactionsData}
+									<div class="space-y-3 p-4">
+										{#each Array(8) as _}<Skeleton class="h-12 w-full" />{/each}
+									</div>
+								{:then td}
+									{#if td}
+										<Table.Root class="min-w-[800px]">
+											<Table.Header>
+												<Table.Row>
+													<Table.Head>Date/Time</Table.Head>
+													<Table.Head>Description</Table.Head>
+													<Table.Head>Type</Table.Head>
+													<Table.Head>By</Table.Head>
+													<Table.Head class="text-right">Amount</Table.Head>
+												</Table.Row>
+											</Table.Header>
+											<Table.Body>
+												{#each td.transactions as tx}
+													<Table.Row>
+														<Table.Cell class="text-xs whitespace-nowrap"
+															>{formatDateTime(tx.createdAt)}</Table.Cell
+														>
+														<Table.Cell class="font-medium">{tx.description}</Table.Cell>
+														<Table.Cell
+															><Badge
+																variant={tx.type === 'in' ? 'secondary' : 'destructive'}
+																class="capitalize">{tx.type === 'in' ? 'Cash In' : 'Cash Out'}</Badge
+															></Table.Cell
+														>
+														<Table.Cell class="text-xs text-muted-foreground"
+															>{tx.userName}</Table.Cell
+														>
+														<Table.Cell
+															class={cn(
+																'text-right font-bold',
+																tx.type === 'in' ? 'text-emerald-500' : 'text-destructive'
+															)}
+														>
+															{tx.type === 'in' ? '+' : '-'}{formatCurrency(tx.amount)}
+														</Table.Cell>
+													</Table.Row>
+												{/each}
+												{#if td.transactions.length === 0}
+													<Table.Row
+														><Table.Cell
+															colspan={5}
+															class="h-32 text-center text-muted-foreground italic"
+															>No transactions found.</Table.Cell
+														></Table.Row
+													>
+												{/if}
+											</Table.Body>
+										</Table.Root>
+
+										{#if td.txTotalPages > 1}
+											<div
+												class="flex flex-col items-center justify-between gap-4 border-t p-4 sm:flex-row"
+											>
+												<p class="text-xs text-muted-foreground">
+													Showing {td.transactions.length} of {td.txTotalEntries}
+												</p>
+												<div class="flex gap-1">
+													<Button
+														variant="outline"
+														size="icon"
+														disabled={td.txPage <= 1}
+														onclick={() =>
+															goto(buildTxUrl({ txPage: td.txPage - 1 }), {
+																noScroll: true,
+																keepFocus: true
+															})}
+														class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
+													>
+													<Button
+														variant="outline"
+														size="icon"
+														disabled={td.txPage >= td.txTotalPages}
+														onclick={() =>
+															goto(buildTxUrl({ txPage: td.txPage + 1 }), {
+																noScroll: true,
+																keepFocus: true
+															})}
+														class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
+													>
+												</div>
+											</div>
+										{/if}
+									{/if}
+								{/await}
+							{/if}
 						</Card.Content>
 					</Card.Root>
 				{/if}

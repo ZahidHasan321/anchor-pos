@@ -19,8 +19,16 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, '/login');
 	}
 
-	if (!db) {
-		redirect(302, '/orders');
+	const isElectron = process.env.BUILD_TARGET === 'electron';
+	if (isElectron || !db) {
+		return {
+			order: null,
+			items: [],
+			storeSettings: {},
+			user: locals.user,
+			isElectron,
+			orderId: params.id
+		};
 	}
 
 	const orderRows = await db
@@ -81,7 +89,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		order,
 		items,
 		storeSettings: settings,
-		user: locals.user
+		user: locals.user,
+		isElectron: false,
+		orderId: params.id
 	};
 };
 

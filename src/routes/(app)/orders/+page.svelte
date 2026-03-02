@@ -12,8 +12,57 @@
 	import * as Table from '$lib/components/ui/table';
 	import { formatCurrency, formatDate } from '$lib/format';
 	import { ChevronLeft, ChevronRight, Eye, Search, X } from '@lucide/svelte';
+	import { powersync } from '$lib/powersync';
+	import { browser } from '$app/environment';
 
 	let { data } = $props();
+	const isNative = $derived(browser && !!(window as any).electron);
+
+	// Electron: client-side PowerSync data
+	let nativeOrders = $state<any[]>([]);
+	let nativePagination = $state({ currentPage: 1, totalPages: 1, totalOrders: 0, perPage: 20 });
+
+	async function loadNativeOrders() {
+		if (!isNative || !powersync.ready) return;
+		const perPage = 20;
+		const page = parseInt(new URLSearchParams(window.location.search).get('page') ?? '1');
+		const offset = (page - 1) * perPage;
+		let where = 'WHERE 1=1';
+		const params: any[] = [];
+
+		if (dateFrom) { where += ' AND o.created_at >= ?'; params.push(dateFrom + 'T00:00:00'); }
+		if (dateTo) { where += ' AND o.created_at <= ?'; params.push(dateTo + 'T23:59:59.999'); }
+		if (statusFilter) { where += ' AND o.status = ?'; params.push(statusFilter); }
+		if (searchQuery) {
+			where += ' AND (o.id LIKE ? OR CAST(o.order_number AS TEXT) LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)';
+			const p = `%${searchQuery}%`;
+			params.push(p, p, p, p);
+		}
+
+		const [countResult, orders] = await Promise.all([
+			powersync.db.get(`SELECT count(*) as count FROM orders o LEFT JOIN customers c ON o.customer_id = c.id ${where}`, params),
+			powersync.db.getAll(`
+				SELECT o.id, o.order_number as orderNumber, o.total_amount as totalAmount,
+					o.status, o.payment_method as paymentMethod, o.created_at as createdAt,
+					c.name as customerName, u.name as userName
+				FROM orders o
+				LEFT JOIN customers c ON o.customer_id = c.id
+				LEFT JOIN users u ON o.user_id = u.id
+				${where}
+				ORDER BY o.created_at DESC LIMIT ? OFFSET ?
+			`, [...params, perPage, offset])
+		]);
+
+		const total = (countResult as any)?.count ?? 0;
+		nativeOrders = orders as any[];
+		nativePagination = { currentPage: page, totalPages: Math.ceil(total / perPage), totalOrders: total, perPage };
+	}
+
+	$effect(() => {
+		if (isNative && powersync.ready) {
+			loadNativeOrders();
+		}
+	});
 
 	let dateFrom = $state('');
 	let dateTo = $state('');
@@ -223,6 +272,50 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
+					{#if isNative}
+						{#each nativeOrders as order}
+							<Table.Row
+								class="cursor-pointer hover:bg-muted/50"
+								onclick={() => goto(`/orders/${order.id}`)}
+							>
+								<Table.Cell class="font-bold">
+									#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
+								</Table.Cell>
+								<Table.Cell
+									><div class="flex flex-col">
+										<span class="text-sm">{formatDate(order.createdAt)}</span><span
+											class="text-[10px] text-muted-foreground"
+											>{new Date(order.createdAt).toLocaleTimeString()}</span
+										>
+									</div></Table.Cell
+								>
+								<Table.Cell
+									><span class="text-sm">{order.customerName ?? 'Walk-in'}</span></Table.Cell
+								>
+								<Table.Cell class="text-[11px] text-muted-foreground">{order.userName}</Table.Cell>
+								<Table.Cell class="text-xs capitalize">{order.paymentMethod}</Table.Cell>
+								<Table.Cell class="font-bold">{formatCurrency(order.totalAmount)}</Table.Cell>
+								<Table.Cell
+									><Badge
+										variant={order.status === 'completed' ? 'secondary' : 'destructive'}
+										class="text-[10px]">{order.status}</Badge
+									></Table.Cell
+								>
+								<Table.Cell class="text-right"
+									><Button variant="ghost" size="icon" href="/orders/{order.id}"
+										><Eye class="h-4 w-4" /></Button
+									></Table.Cell
+								>
+							</Table.Row>
+						{/each}
+						{#if nativeOrders.length === 0}
+							<Table.Row
+								><Table.Cell colspan={8} class="h-48 text-center text-muted-foreground italic"
+									>No orders found.</Table.Cell
+								></Table.Row
+							>
+						{/if}
+					{:else}
 					{#await data.streamed}
 						{#each Array(8) as _}
 							<Table.Row>
@@ -274,10 +367,36 @@
 							>
 						{/if}
 					{/await}
+					{/if}
 				</Table.Body>
 			</Table.Root>
 		</Card.Content>
 		<Card.Footer class="border-t p-4">
+			{#if isNative}
+				<div class="flex w-full items-center justify-between">
+					<p class="text-xs text-muted-foreground">
+						Showing {nativeOrders.length} of {nativePagination.totalOrders}
+					</p>
+					{#if nativePagination.totalPages > 1}
+						<div class="flex gap-1">
+							<Button
+								variant="outline"
+								size="icon"
+								disabled={nativePagination.currentPage <= 1}
+								onclick={() => goToPage(nativePagination.currentPage - 1)}
+								class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
+							>
+							<Button
+								variant="outline"
+								size="icon"
+								disabled={nativePagination.currentPage >= nativePagination.totalPages}
+								onclick={() => goToPage(nativePagination.currentPage + 1)}
+								class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
+							>
+						</div>
+					{/if}
+				</div>
+			{:else}
 			{#await data.streamed then streamed}
 				<div class="flex w-full items-center justify-between">
 					<p class="text-xs text-muted-foreground">
@@ -303,6 +422,7 @@
 					{/if}
 				</div>
 			{/await}
+			{/if}
 		</Card.Footer>
 	</Card.Root>
 </div>

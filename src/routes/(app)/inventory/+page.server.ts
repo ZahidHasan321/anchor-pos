@@ -19,136 +19,23 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const stockStatus = url.searchParams.get('stock') ?? '';
 	const isElectron = process.env.BUILD_TARGET === 'electron';
 
+	const emptyResult = {
+		stats: { totalProducts: 0, totalVariants: 0, lowStockVariants: 0, outOfStockVariants: 0, totalInventoryValue: 0 },
+		categories: [],
+		products: [],
+		total: 0,
+		totalPages: 1,
+		currentPage: 1
+	};
+
 	// Immediate data
 	return {
 		filters: { category: categoryFilter, search, stockStatus },
+		isElectron,
 
 		// Streaming everything else
 		streamed: (async () => {
-			try {
-				if (isElectron) {
-					const { getPowerSyncDb } = await import('$lib/powersync/db');
-					const psDb = getPowerSyncDb();
-					const settingsRows = await psDb.getAll('SELECT * FROM store_settings');
-					const settings = settingsRows.reduce((acc: Record<string, string>, row: any) => {
-						acc[row.key] = row.value;
-						return acc;
-					}, {} as Record<string, string>);
-					const threshold = parseInt(settings.low_stock_threshold || '5');
-
-					const [statsResult, categoryRows] = await Promise.all([
-						psDb.get(
-							`
-							SELECT 
-								COUNT(DISTINCT p.id) as totalProducts,
-								COUNT(pv.id) as totalVariants,
-								SUM(CASE WHEN pv.stock_quantity > 0 AND pv.stock_quantity <= ? THEN 1 ELSE 0 END) as lowStockVariants,
-								SUM(CASE WHEN pv.stock_quantity = 0 THEN 1 ELSE 0 END) as outOfStockVariants,
-								COALESCE(SUM(pv.price * pv.stock_quantity), 0) as totalInventoryValue
-							FROM product_variants pv
-							INNER JOIN products p ON pv.product_id = p.id
-						`,
-							[threshold]
-						),
-						psDb.getAll('SELECT DISTINCT category FROM products')
-					]);
-
-					let baseQuery = `FROM products p WHERE 1=1`;
-					const params: any[] = [];
-					if (categoryFilter) {
-						baseQuery += ` AND p.category = ?`;
-						params.push(categoryFilter);
-					}
-					if (search) {
-						baseQuery += ` AND (p.name LIKE ? OR p.category LIKE ? OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.barcode LIKE ?))`;
-						const p = `%${search}%`;
-						params.push(p, p, p);
-					}
-					if (stockStatus === 'out') {
-						baseQuery += ` AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity = 0)`;
-					} else if (stockStatus === 'low') {
-						baseQuery += ` AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity > 0 AND pv.stock_quantity <= ?)`;
-						params.push(threshold);
-					} else if (stockStatus === 'healthy') {
-						baseQuery += ` AND NOT EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity <= ?)`;
-						params.push(threshold);
-					}
-
-					const [countResult, productList] = await Promise.all([
-						psDb.get(`SELECT count(*) as count ${baseQuery}`, params),
-						psDb.getAll(
-							`
-							SELECT 
-								p.id, 
-								p.name, 
-								p.category, 
-								p.base_price as templatePrice, 
-								p.default_discount as defaultDiscount,
-								COALESCE((SELECT SUM(pv.stock_quantity) FROM product_variants pv WHERE pv.product_id = p.id), 0) as totalStock
-							${baseQuery}
-							ORDER BY p.id DESC
-							LIMIT ? OFFSET ?
-						`,
-							[...params, perPage, offset]
-						)
-					]);
-
-					const productIds = productList.map((p: any) => p.id);
-					let variants: any[] = [];
-					if (productIds.length > 0) {
-						const placeholders = productIds.map(() => '?').join(',');
-						variants = await psDb.getAll(
-							`SELECT * FROM product_variants WHERE product_id IN (${placeholders})`,
-							productIds
-						);
-					}
-
-					const variantsByProduct = new Map();
-					for (const v of variants) {
-						const list = variantsByProduct.get(v.product_id) ?? [];
-						list.push({
-							...v,
-							productId: v.product_id,
-							stockQuantity: v.stock_quantity
-						});
-						variantsByProduct.set(v.product_id, list);
-					}
-
-					return {
-						stats: statsResult ?? {
-							totalProducts: 0,
-							totalVariants: 0,
-							lowStockVariants: 0,
-							outOfStockVariants: 0,
-							totalInventoryValue: 0
-						},
-						categories: categoryRows.map((c: any) => c.category).sort(),
-						products: productList.map((p: any) => ({
-							...p,
-							variants: variantsByProduct.get(p.id) ?? []
-						})),
-						total: (countResult as any).count ?? 0,
-						totalPages: Math.ceil(((countResult as any).count ?? 0) / perPage),
-						currentPage
-					};
-				}
-			} catch (e) {
-				console.error('[inventory] PowerSync failed:', e);
-				return {
-					stats: {
-						totalProducts: 0,
-						totalVariants: 0,
-						lowStockVariants: 0,
-						outOfStockVariants: 0,
-						totalInventoryValue: 0
-					},
-					categories: [],
-					products: [],
-					total: 0,
-					totalPages: 1,
-					currentPage: 1
-				};
-			}
+			if (isElectron) return emptyResult;
 
 			if (!db)
 				return {

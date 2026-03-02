@@ -268,8 +268,7 @@ async function createWindow() {
             console.log(`[Boot] Port: ${port}`);
             console.log(`[Boot] Origin: ${process.env.ORIGIN}`);
             
-            process.env.POWERSYNC_DATA_DIR = app.getPath('userData');
-            console.log(`[Boot] PowerSync Data Dir: ${process.env.POWERSYNC_DATA_DIR}`);
+            // PowerSync Web SDK uses OPFS in the renderer - no data dir needed
 
             log.info('[Boot] Importing SvelteKit server from:', buildPath);
             

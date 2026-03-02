@@ -39,63 +39,12 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 	return {
 		filters: { from: dateFrom, to: dateTo, status: statusFilter, search },
+		isElectron,
 		streamed: (async () => {
 			if (isElectron) {
-				const { getPowerSyncDb } = await import('$lib/powersync/db');
-				const psDb = getPowerSyncDb();
-				let baseQuery = `
-					FROM orders o
-					LEFT JOIN customers c ON o.customer_id = c.id
-					LEFT JOIN users u ON o.user_id = u.id
-					WHERE 1=1
-				`;
-				const params: any[] = [];
-
-				if (dateFrom) {
-					baseQuery += ` AND o.created_at >= ?`;
-					params.push(dateFrom + 'T00:00:00');
-				}
-				if (dateTo) {
-					baseQuery += ` AND o.created_at <= ?`;
-					params.push(dateTo + 'T23:59:59.999');
-				}
-				if (statusFilter) {
-					baseQuery += ` AND o.status = ?`;
-					params.push(statusFilter);
-				}
-				if (search) {
-					baseQuery += ` AND (o.id LIKE ? OR CAST(o.order_number AS TEXT) LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)`;
-					const p = `%${search}%`;
-					params.push(p, p, p, p);
-				}
-
-				const [countResult, allOrders] = await Promise.all([
-					psDb.get(`SELECT count(*) as count ${baseQuery}`, params),
-					psDb.getAll(
-						`SELECT 
-							o.id,
-							o.order_number as orderNumber,
-							o.total_amount as totalAmount,
-							o.status,
-							o.payment_method as paymentMethod,
-							o.created_at as createdAt,
-							c.name as customerName,
-							u.name as userName
-						 ${baseQuery} 
-						 ORDER BY o.created_at DESC LIMIT ? OFFSET ?`,
-						[...params, perPage, offset]
-					)
-				]);
-
-				const totalOrders = (countResult as any).count ?? 0;
 				return {
-					orders: allOrders,
-					pagination: {
-						currentPage,
-						totalPages: Math.ceil(totalOrders / perPage),
-						totalOrders,
-						perPage
-					}
+					orders: [],
+					pagination: { currentPage: 1, totalPages: 1, totalOrders: 0, perPage }
 				};
 			}
 

@@ -9,8 +9,17 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 		redirect(302, '/login');
 	}
 
-	if (!db) {
-		redirect(302, '/customers');
+	const isElectron = process.env.BUILD_TARGET === 'electron';
+	if (isElectron || !db) {
+		return {
+			customer: null,
+			orders: [],
+			totalSpent: 0,
+			totalOrders: 0,
+			pagination: { currentPage: 1, totalPages: 1, totalOrders: 0, perPage: 10 },
+			isElectron,
+			customerId: params.id
+		};
 	}
 
 	const customerRows = await db
@@ -73,7 +82,9 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 			totalPages,
 			totalOrders: allCount,
 			perPage
-		}
+		},
+		isElectron: false,
+		customerId: params.id
 	};
 };
 

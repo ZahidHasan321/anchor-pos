@@ -239,27 +239,35 @@
 
 	let activeMobileTab = $state<'products' | 'cart'>('products');
 
-	function handlePrintReceipt(preview = true) {
+	async function handlePrintReceipt(preview = true) {
 		if (!completedOrder) return;
-		data.streamed.then((s: any) => {
-			printReceipt({
-				storeSettings: s.storeSettings,
-				orderId: '#' + completedOrder.orderNumber,
-				orderUuid: completedOrder.orderId,
-				date: formatDateTime(new Date()),
-				cashier: data.user?.name ?? '',
-				items: completedOrder.items.map((item: any) => ({
-					name: item.productName,
-					variant: item.size + (item.color ? ' / ' + item.color : ''),
-					qty: item.quantity,
-					total: item.price * item.quantity * (1 - (item.discount ?? 0) / 100)
-				})),
-				total: completedOrder.total,
-				cashReceived: completedOrder.cashReceived,
-				changeGiven: completedOrder.changeGiven,
-				footerNote: 'Printed on ' + formatDateTime(new Date())
-			}, preview);
-		});
+		let storeSettings: any = {};
+		if (isNative) {
+			try {
+				const rows = await powersync.db.getAll('SELECT * FROM store_settings');
+				for (const row of rows as any[]) storeSettings[row.key] = row.value;
+			} catch {}
+		} else {
+			const s = await data.streamed;
+			storeSettings = (s as any).storeSettings;
+		}
+		printReceipt({
+			storeSettings,
+			orderId: '#' + completedOrder.orderNumber,
+			orderUuid: completedOrder.orderId,
+			date: formatDateTime(new Date()),
+			cashier: data.user?.name ?? '',
+			items: completedOrder.items.map((item: any) => ({
+				name: item.productName,
+				variant: item.size + (item.color ? ' / ' + item.color : ''),
+				qty: item.quantity,
+				total: item.price * item.quantity * (1 - (item.discount ?? 0) / 100)
+			})),
+			total: completedOrder.total,
+			cashReceived: completedOrder.cashReceived,
+			changeGiven: completedOrder.changeGiven,
+			footerNote: 'Printed on ' + formatDateTime(new Date())
+		}, preview);
 	}
 </script>
 
