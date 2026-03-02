@@ -45,10 +45,21 @@ console.error = log.error;
 // Catch uncaught exceptions and rejections
 process.on('uncaughtException', (error) => {
     log.error('Uncaught Exception:', error);
+    try {
+        dialog.showErrorBox('Critical Startup Error', `An uncaught exception occurred:\n\n${error.message}\n\nStack:\n${error.stack}`);
+    } catch (e) {
+        // Fallback if dialog is not ready
+        console.error('FATAL:', error);
+    }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     log.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    try {
+        dialog.showErrorBox('Critical Promise Rejection', `An unhandled promise rejection occurred:\n\nReason: ${reason}`);
+    } catch (e) {
+        console.error('FATAL REJECTION:', reason);
+    }
 });
 
 log.info('App starting...');
