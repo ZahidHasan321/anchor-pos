@@ -15,7 +15,7 @@
 	} from '@lucide/svelte';
 	import { formatCurrency, formatDateTime } from '$lib/format';
 	import { Button } from '$lib/components/ui/button';
-	import { powersync } from '$lib/powersync';
+	import { powersync } from '$lib/powersync.svelte';
 	import { browser } from '$app/environment';
 
 	let { data } = $props();

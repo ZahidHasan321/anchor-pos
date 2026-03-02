@@ -23,7 +23,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { createDebounced } from '$lib/debounce.svelte';
-	import { powersync } from '$lib/powersync';
+	import { powersync } from '$lib/powersync.svelte';
 	import { browser } from '$app/environment';
 
 	let { data } = $props();

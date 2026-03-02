@@ -30,7 +30,7 @@
 	import { cn } from '$lib/utils';
 	import { createDebounced } from '$lib/debounce.svelte';
 	import { fly, fade } from 'svelte/transition';
-	import { powersync } from '$lib/powersync';
+	import { powersync } from '$lib/powersync.svelte';
 	import { browser } from '$app/environment';
 
 	let { data, form } = $props();

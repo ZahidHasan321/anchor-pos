@@ -12,7 +12,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import { formatCurrency, formatDate } from '$lib/format';
 	import { ChevronLeft, ChevronRight, Eye, Search, X } from '@lucide/svelte';
-	import { powersync } from '$lib/powersync';
+	import { powersync } from '$lib/powersync.svelte';
 	import { browser } from '$app/environment';
 
 	let { data } = $props();

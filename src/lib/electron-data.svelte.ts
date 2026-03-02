@@ -3,7 +3,7 @@
  * Wraps PowerSync queries for use in Svelte components.
  * Each query returns reactive state that auto-refreshes via PowerSync's watch().
  */
-import { powersync } from './powersync';
+import { powersync } from './powersync.svelte';
 import { browser } from '$app/environment';
 import { generateId } from './utils';
 

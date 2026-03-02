@@ -6,7 +6,7 @@
 	import ConfirmDialog from '$lib/components/ui/confirm-dialog.svelte';
 	import { ModeWatcher } from 'mode-watcher';
 	import { globalSettings } from '$lib/settings.svelte';
-	import { powersync } from '$lib/powersync';
+	import { powersync } from '$lib/powersync.svelte';
 	import { browser } from '$app/environment';
 
 	let { data, children } = $props();

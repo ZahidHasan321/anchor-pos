@@ -1,4 +1,4 @@
-import { powersync } from './powersync';
+import { powersync } from './powersync.svelte';
 import { writable } from 'svelte/store';
 
 export function watchQuery(query: string, params: any[] = []) {

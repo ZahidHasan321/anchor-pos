@@ -35,7 +35,7 @@
 	import { APP_NAME } from '$lib/constants';
 
 	import { productsStore, categoriesStore } from '$lib/powersync-queries';
-	import { powersync } from '$lib/powersync';
+	import { powersync } from '$lib/powersync.svelte';
 
 	let { data, form } = $props();
 	const isNative = $derived(browser && (window as any).electron);
