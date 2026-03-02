@@ -246,50 +246,48 @@ async function createWindow() {
 
             const buildUrl = pathToFileURL(buildPath).href;
             
-            // Explicitly set important environment variables for the server
+            console.log('--- STARTING SVELTEKIT SERVER BOOT ---');
             process.env.PORT = port;
             process.env.NODE_ENV = 'production';
             process.env.ORIGIN = `http://127.0.0.1:${port}`;
-            // Fix for SvelteKit adapter-node address binding
             process.env.HOST = '127.0.0.1'; 
             process.env.BUILD_TARGET = 'electron';
             process.env.APP_SECRET_HEADER = APP_SECRET_HEADER;
             
-            console.log('Booting SvelteKit server on port:', port);
-            console.log('Origin:', process.env.ORIGIN);
+            console.log(`[Boot] Port: ${port}`);
+            console.log(`[Boot] Origin: ${process.env.ORIGIN}`);
             
-            // PowerSync config — must be set before SvelteKit server boots
             process.env.POWERSYNC_DATA_DIR = app.getPath('userData');
-            process.env.POWERSYNC_URL = process.env.POWERSYNC_URL || 'https://powersync.anchorshop.cloud';
-            process.env.POWERSYNC_API_URL = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
-            process.env.POWERSYNC_PUBLIC_KEY = process.env.POWERSYNC_PUBLIC_KEY;
+            console.log(`[Boot] PowerSync Data Dir: ${process.env.POWERSYNC_DATA_DIR}`);
 
-            log.info('Importing SvelteKit server from:', buildPath);
-            log.info('Build URL:', buildUrl);
+            log.info('[Boot] Importing SvelteKit server from:', buildPath);
             
-            if (!fs.existsSync(buildPath)) {
-                throw new Error(`SvelteKit build file not found at: ${buildPath}\n\nMake sure the app was built correctly (pnpm run build:electron).`);
-            }
-            
+            const importStart = Date.now();
             await import(buildUrl); 
+            console.log(`[Boot] SvelteKit server imported successfully in ${Date.now() - importStart}ms`);
             
             // Function to wait for server to be ready (Polling)
             const waitForServer = async (targetUrl, maxRetries = 20) => {
                 const http = require('http');
+                console.log(`[Boot] Polling for server readiness at ${targetUrl}...`);
                 for (let i = 0; i < maxRetries; i++) {
                     try {
                         await new Promise((resolve, reject) => {
                             const req = http.get(targetUrl, (res) => {
+                                console.log(`[Boot] Poll attempt ${i+1}: Received status ${res.statusCode}`);
                                 if (res.statusCode < 500) resolve();
                                 else reject();
                             });
-                            req.on('error', reject);
+                            req.on('error', (e) => {
+                                // console.log(`[Boot] Poll attempt ${i+1} error: ${e.message}`);
+                                reject(e);
+                            });
                             req.setTimeout(500);
                             req.end();
                         });
                         return true;
                     } catch (e) {
-                        await new Promise(r => setTimeout(r, 250));
+                        await new Promise(r => setTimeout(r, 500));
                     }
                 }
                 return false;

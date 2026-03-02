@@ -3,16 +3,18 @@ import { AppSchema } from './powersync-schema';
 import { browser } from '$app/environment';
 
 export class PowerSyncManager {
-    db: PowerSyncDatabase;
+    db!: PowerSyncDatabase;
     private static instance: PowerSyncManager;
 
     constructor() {
-        this.db = new PowerSyncDatabase({
-            schema: AppSchema,
-            database: {
-                dbFilename: 'powersync.db'
-            }
-        });
+        if (browser) {
+            this.db = new PowerSyncDatabase({
+                schema: AppSchema,
+                database: {
+                    dbFilename: 'powersync.db'
+                }
+            });
+        }
     }
 
     public static getInstance(): PowerSyncManager {

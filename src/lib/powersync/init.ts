@@ -5,6 +5,7 @@ let connected = false;
 
 export async function connectPowerSync(token: string) {
   const db = getPowerSyncDb();
+  console.log('[PowerSync-Node] Starting connection to backend...');
 
   posConnector.setCredentials({
     token,

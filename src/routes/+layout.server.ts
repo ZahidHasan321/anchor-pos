@@ -20,15 +20,23 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 	} 
 
 	if (!primaryDbSuccess && isElectron) {
+		console.log('[layout] Attempting to load settings from PowerSync...');
 		try {
 			const { getPowerSyncDb } = await import('$lib/powersync/db');
 			const psDb = getPowerSyncDb();
-			const rows = await psDb.getAll('SELECT * FROM store_settings');
-			for (const row of rows as any[]) {
+			
+			// Race the PowerSync query with a timeout
+			const psQuery = psDb.getAll('SELECT * FROM store_settings');
+			const psTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('PowerSync layout query timeout')), 3000));
+			
+			const rows = await Promise.race([psQuery, psTimeout]) as any[];
+			
+			for (const row of rows) {
 				settings[row.key] = row.value;
 			}
+			console.log('[layout] Settings loaded from PowerSync successfully');
 		} catch (e) {
-			console.warn('[layout] Failed to load settings from PowerSync:', e);
+			console.warn('[layout] Failed to load settings from PowerSync or timed out:', e instanceof Error ? e.message : e);
 		}
 	}
 

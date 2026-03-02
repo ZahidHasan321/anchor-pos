@@ -8,9 +8,11 @@ let _db: PowerSyncDatabase | null = null;
 export function getPowerSyncDb(): PowerSyncDatabase {
   if (!_db) {
     const dataDir = process.env.POWERSYNC_DATA_DIR ?? os.homedir();
+    const dbPath = path.join(dataDir, 'pos-local.db');
+    console.log(`[PowerSync-Node] Initializing database at: ${dbPath}`);
     _db = new PowerSyncDatabase({
       schema: AppSchema,
-      database: { dbFilename: path.join(dataDir, 'pos-local.db') },
+      database: { dbFilename: dbPath },
     });
   }
   return _db;
