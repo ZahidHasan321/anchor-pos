@@ -42,6 +42,15 @@ console.log = log.log;
 console.warn = log.warn;
 console.error = log.error;
 
+// Catch uncaught exceptions and rejections
+process.on('uncaughtException', (error) => {
+    log.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    log.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 log.info('App starting...');
 
 // --- Database Migrations ---
@@ -103,7 +112,9 @@ const envPaths = [
 for (const envPath of envPaths) {
     if (fs.existsSync(envPath)) {
         dotenv.config({ path: envPath, override: true });
-        console.log('Loaded config from:', envPath);
+        log.info('Loaded .env config from:', envPath);
+    } else {
+        log.info('Checked for .env at (not found):', envPath);
     }
 }
 
@@ -253,6 +264,13 @@ async function createWindow() {
             process.env.POWERSYNC_API_URL = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
             process.env.POWERSYNC_PUBLIC_KEY = process.env.POWERSYNC_PUBLIC_KEY;
 
+            log.info('Importing SvelteKit server from:', buildPath);
+            log.info('Build URL:', buildUrl);
+            
+            if (!fs.existsSync(buildPath)) {
+                throw new Error(`SvelteKit build file not found at: ${buildPath}\n\nMake sure the app was built correctly (pnpm run build:electron).`);
+            }
+            
             await import(buildUrl); 
             
             // Function to wait for server to be ready (Polling)
@@ -312,6 +330,13 @@ async function createWindow() {
                 if (input.key === 'F12' && input.type === 'keyDown') {
                     mainWindow.webContents.toggleDevTools();
                 }
+                
+                // Shortcut to open the log file folder (Ctrl+Shift+L)
+                if (input.control && input.shift && input.key.toLowerCase() === 'l' && input.type === 'keyDown') {
+                    const { shell } = require('electron');
+                    const logPath = path.dirname(log.transports.file.getFile().path);
+                    shell.openPath(logPath).catch(err => console.error('Failed to open log folder:', err));
+                }
             });
 
             // --- Content Security & Permissions Fixes ---
@@ -336,7 +361,28 @@ async function createWindow() {
 
         } catch (err) {
             console.error('Failed to start server:', err);
-            dialog.showErrorBox('Server Start Failed', `The application server failed to start.\n\nError: ${err.message}\n\nPlease check your .env file and database connection.`);
+            
+            // Build a detailed diagnostic message
+            const diagnosticInfo = [
+                `Error: ${err.message}`,
+                `Stack: ${err.stack}`,
+                '',
+                'Environment:',
+                `NODE_ENV: ${process.env.NODE_ENV}`,
+                `DATABASE_URL: ${process.env.DATABASE_URL ? 'PRESENT' : 'MISSING'}`,
+                `POWERSYNC_URL: ${process.env.POWERSYNC_URL}`,
+                `userData: ${app.getPath('userData')}`,
+                `resourcesPath: ${process.resourcesPath}`,
+                `cwd: ${process.cwd()}`,
+                '',
+                'Common Issues:',
+                '1. Check if PostgreSQL is running if DATABASE_URL is set.',
+                '2. Ensure .env is present in the install directory (next to the .exe).',
+                '3. Press Ctrl+Shift+L to open the log folder for full details.'
+            ].join('\n');
+
+            dialog.showErrorBox('Server Start Failed', diagnosticInfo);
+            
             // Show the main window anyway so the user can see if something loaded
             mainWindow.show();
             if (splashWindow) splashWindow.close();
