@@ -119,6 +119,7 @@
 
 	$effect(() => {
 		if (!isNative || !powersync.ready) return;
+		powersync.dataVersion; // re-run when sync completes with new data
 		loadNativeData();
 	});
 

@@ -55,7 +55,10 @@
 	}
 
 	$effect(() => {
-		if (isNative && powersync.ready) loadNativeOrderDetail();
+		if (isNative && powersync.ready) {
+			powersync.dataVersion; // re-run when sync completes with new data
+			loadNativeOrderDetail();
+		}
 	});
 
 	const order = $derived(isNative ? nativeOrder : data.order);
@@ -99,41 +102,48 @@
 </svelte:head>
 
 {#if order}
-<div class="space-y-6 p-6">
-	<div class="flex items-center justify-between">
-		<div class="flex items-center gap-4">
-			<Button variant="outline" size="icon" href="/orders" class="cursor-pointer">
+<div class="space-y-6 p-4 sm:p-6">
+	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+		<div class="flex items-center gap-3">
+			<Button variant="outline" size="icon" href="/orders" class="h-9 w-9 shrink-0">
 				<ArrowLeft class="h-4 w-4" />
 			</Button>
-			<div>
-				<h1 class="text-3xl font-bold tracking-tight">Order #{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}</h1>
+			<div class="overflow-hidden">
+				<h1 class="truncate text-xl font-black tracking-tight sm:text-3xl">
+					Order #{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
+				</h1>
+				<p class="text-[10px] uppercase tracking-widest text-muted-foreground">
+					{formatDateTime(order.createdAt)}
+				</p>
 			</div>
 		</div>
-		<div class="flex gap-2">
+		<div class="flex flex-wrap items-center gap-2">
 			{#if data.user?.role !== 'sales' && order.status === 'completed'}
-				<div class="mr-4 flex gap-2 border-r pr-4">
+				<div class="flex gap-2 border-r pr-2 sm:mr-2 sm:pr-4">
 					<form method="POST" action="?/updateStatus" use:enhance>
 						<input type="hidden" name="status" value="refunded" />
 						<Button
 							variant="outline"
+							size="sm"
 							type="button"
-							class="cursor-pointer text-amber-600"
+							class="h-9 px-3 text-xs font-bold text-amber-600 hover:bg-amber-50 hover:text-amber-700"
 							onclick={async (e) => {
 								const formElement = e.currentTarget.closest('form');
-								if (await confirmState.confirm('Mark this order as refunded?')) {
+								if (await confirmState.confirm('Mark this entire order as refunded?')) {
 									formElement?.requestSubmit();
 								}
 							}}
 						>
-							Mark Refunded
+							Refund
 						</Button>
 					</form>
 					<form method="POST" action="?/updateStatus" use:enhance>
 						<input type="hidden" name="status" value="void" />
 						<Button
 							variant="destructive"
+							size="sm"
 							type="button"
-							class="cursor-pointer"
+							class="h-9 px-3 text-xs font-bold"
 							onclick={async (e) => {
 								const formElement = e.currentTarget.closest('form');
 								if (await confirmState.confirm('Void this order? This cannot be undone.')) {
@@ -141,170 +151,179 @@
 								}
 							}}
 						>
-							Void Order
+							Void
 						</Button>
 					</form>
 				</div>
 			{/if}
-			<Button onclick={handlePrintReceipt} class="cursor-pointer">
-				<Printer class="mr-2 h-4 w-4" /> Reprint Receipt
+			<Button onclick={handlePrintReceipt} size="sm" class="h-9 px-3 text-xs font-bold">
+				<Printer class="mr-2 h-3.5 w-3.5" /> Receipt
 			</Button>
 		</div>
 	</div>
 
-	<div class="grid gap-6 md:grid-cols-3">
-		<Card.Root class="md:col-span-2">
-			<Card.Header>
-				<Card.Title>Order Items</Card.Title>
+	<div class="grid gap-6 lg:grid-cols-3">
+		<Card.Root class="lg:col-span-2 overflow-hidden border-primary/10 shadow-sm">
+			<Card.Header class="bg-muted/30 pb-4">
+				<Card.Title class="text-lg font-bold">Order Items</Card.Title>
 			</Card.Header>
-			<Card.Content>
+			<Card.Content class="p-0">
 				<Table.Root>
-					<Table.Header>
+					<Table.Header class="bg-muted/10">
 						<Table.Row>
-							<Table.Head>Product</Table.Head>
-							<Table.Head class="text-center">Quantity</Table.Head>
-							<Table.Head class="text-right">Price</Table.Head>
-							<Table.Head class="text-right">Total</Table.Head>
-							<Table.Head class="text-right"></Table.Head>
+							<Table.Head class="pl-4">Product</Table.Head>
+							<Table.Head class="hidden text-center sm:table-cell">Qty</Table.Head>
+							<Table.Head class="hidden text-right sm:table-cell">Price</Table.Head>
+							<Table.Head class="text-right pr-4">Total</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
 						{#each items as item}
-							<Table.Row class={item.status === 'refunded' ? 'opacity-50 grayscale bg-muted/30' : ''}>
-								<Table.Cell>
-									<div class="flex items-center gap-2">
-										{#if item.status === 'refunded'}
-											<Badge variant="destructive" class="h-5 px-1.5 text-[9px] uppercase tracking-wider">Refunded</Badge>
-										{/if}
-										<div>
+							<Table.Row class="{item.status === 'refunded' ? 'opacity-40 grayscale bg-muted/20' : ''} group">
+								<Table.Cell class="pl-4 py-4">
+									<div class="flex flex-col gap-1">
+										<div class="flex items-center gap-2">
+											{#if item.status === 'refunded'}
+												<Badge variant="destructive" class="h-4 px-1 text-[8px] font-black uppercase tracking-tighter">Refunded</Badge>
+											{/if}
 											{#if item.productId}
 												<a
 													href="/inventory/{item.productId}"
-													class="font-medium text-primary hover:underline"
+													class="text-sm font-bold text-primary hover:underline"
 												>
 													{item.productName}
 												</a>
 											{:else}
-												<div class="font-medium">{item.productName}</div>
+												<span class="text-sm font-bold">{item.productName}</span>
 											{/if}
-											<div class="text-xs text-muted-foreground">{item.variantLabel}</div>
+										</div>
+										<div class="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{item.variantLabel}</div>
+										<!-- Mobile-only info -->
+										<div class="flex items-center gap-2 text-[10px] font-bold sm:hidden">
+											<span class="rounded bg-muted px-1.5 py-0.5">{item.quantity}x</span>
+											<span class="text-muted-foreground">{formatCurrency(item.priceAtSale)}</span>
 										</div>
 									</div>
 								</Table.Cell>
-								<Table.Cell class="text-center">{item.quantity}</Table.Cell>
-								<Table.Cell class="text-right">{formatCurrency(item.priceAtSale)}</Table.Cell>
-								<Table.Cell class="text-right font-bold">
-									{formatCurrency(
-										item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100)
-									)}
-								</Table.Cell>
-								<Table.Cell class="text-right">
-									{#if item.status !== 'refunded' && order.status === 'completed' && data.user?.role !== 'sales'}
-										<form method="POST" action="?/refundItem" use:enhance>
-											<input type="hidden" name="itemId" value={item.id} />
-											<Button
-												variant="ghost"
-												size="sm"
-												type="button"
-												class="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-												onclick={async (e) => {
-													const formElement = e.currentTarget.closest('form');
-													if (await confirmState.confirm({
-														title: 'Refund Item',
-														message: `Refund ${item.productName} (${item.variantLabel})? This will restore stock and update order total.`,
-														confirmText: 'Refund',
-														variant: 'destructive'
-													})) {
-														formElement?.requestSubmit();
-													}
-												}}
-											>
-												Refund
-											</Button>
-										</form>
-									{/if}
+								<Table.Cell class="hidden text-center sm:table-cell font-bold">{item.quantity}</Table.Cell>
+								<Table.Cell class="hidden text-right sm:table-cell text-muted-foreground">{formatCurrency(item.priceAtSale)}</Table.Cell>
+								<Table.Cell class="text-right pr-4 py-4">
+									<div class="flex flex-col items-end gap-2">
+										<span class="font-black text-sm">
+											{formatCurrency(
+												item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100)
+											)}
+										</span>
+										{#if item.status !== 'refunded' && order.status === 'completed' && data.user?.role !== 'sales'}
+											<form method="POST" action="?/refundItem" use:enhance class="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+												<input type="hidden" name="itemId" value={item.id} />
+												<Button
+													variant="ghost"
+													size="sm"
+													type="button"
+													class="h-7 px-2 text-[10px] font-bold text-destructive hover:bg-destructive/10"
+													onclick={async (e) => {
+														const formElement = e.currentTarget.closest('form');
+														if (await confirmState.confirm({
+															title: 'Refund Item',
+															message: `Refund ${item.productName} (${item.variantLabel})? This will restore stock and update order total.`,
+															confirmText: 'Refund',
+															variant: 'destructive'
+														})) {
+															formElement?.requestSubmit();
+														}
+													}}
+												>
+													Refund Item
+												</Button>
+											</form>
+										{/if}
+									</div>
 								</Table.Cell>
 							</Table.Row>
 						{/each}
 					</Table.Body>
 				</Table.Root>
 			</Card.Content>
-			<Card.Footer class="flex flex-col items-end gap-2 border-t bg-muted/20 p-6">
-				<div class="flex w-full max-w-xs justify-between text-sm">
+			<Card.Footer class="flex flex-col items-end gap-2 border-t bg-muted/10 p-4 sm:p-6">
+				<div class="flex w-full max-w-[240px] justify-between text-xs font-medium text-muted-foreground">
 					<span>Subtotal</span>
 					<span>{formatCurrency(order.totalAmount + (order.discountAmount || 0))}</span>
 				</div>
-				<div class="flex w-full max-w-xs justify-between text-sm text-destructive">
+				<div class="flex w-full max-w-[240px] justify-between text-xs font-bold text-destructive">
 					<span>Discount</span>
 					<span>-{formatCurrency(order.discountAmount || 0)}</span>
 				</div>
-				<div class="flex w-full max-w-xs justify-between border-t pt-2 text-xl font-black">
-					<span>Total</span>
-					<span>{formatCurrency(order.totalAmount)}</span>
+				<div class="mt-2 flex w-full max-w-[240px] justify-between border-t border-primary/20 pt-3">
+					<span class="text-sm font-bold uppercase tracking-widest text-muted-foreground">Total</span>
+					<span class="text-2xl font-black tracking-tighter text-primary">{formatCurrency(order.totalAmount)}</span>
 				</div>
 			</Card.Footer>
 		</Card.Root>
 
 		<div class="space-y-6">
-			<Card.Root>
-				<Card.Header>
-					<Card.Title>Order Info</Card.Title>
+			<Card.Root class="border-primary/10 shadow-sm overflow-hidden">
+				<Card.Header class="bg-muted/30 pb-4">
+					<Card.Title class="text-base font-bold">Transaction Details</Card.Title>
 				</Card.Header>
-				<Card.Content class="space-y-4">
-					<div class="flex items-center gap-3">
-						<div class="rounded-full bg-primary/10 p-2">
-							<ShoppingBag class="h-4 w-4 text-primary" />
+				<Card.Content class="space-y-4 pt-4">
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-3">
+							<div class="rounded-full bg-primary/10 p-2">
+								<ShoppingBag class="h-3.5 w-3.5 text-primary" />
+							</div>
+							<span class="text-xs font-bold text-muted-foreground uppercase tracking-wider">Status</span>
 						</div>
-						<div>
-							<div class="text-xs text-muted-foreground">Order Status</div>
-							<Badge
-								variant={order.status === 'completed' ? 'secondary' : 'destructive'}
-								class="capitalize">{order.status}</Badge
-							>
-						</div>
+						<Badge
+							variant={order.status === 'completed' ? 'secondary' : 'destructive'}
+							class="h-5 px-2 text-[10px] font-black uppercase tracking-wider">{order.status}</Badge
+						>
 					</div>
-					<div class="flex items-center gap-3">
-						<div class="rounded-full bg-primary/10 p-2">
-							<User class="h-4 w-4 text-primary" />
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-3">
+							<div class="rounded-full bg-primary/10 p-2">
+								<User class="h-3.5 w-3.5 text-primary" />
+							</div>
+							<span class="text-xs font-bold text-muted-foreground uppercase tracking-wider">Cashier</span>
 						</div>
-						<div>
-							<div class="text-xs text-muted-foreground">Cashier</div>
-							<div class="font-medium">{order.userName}</div>
-						</div>
+						<span class="text-sm font-black">{order.userName}</span>
 					</div>
-					<div class="flex items-center gap-3">
-						<div class="rounded-full bg-primary/10 p-2">
-							{#if order.paymentMethod === 'cash'}
-								<Banknote class="h-4 w-4 text-primary" />
-							{:else}
-								<CreditCard class="h-4 w-4 text-primary" />
-							{/if}
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-3">
+							<div class="rounded-full bg-primary/10 p-2">
+								{#if order.paymentMethod === 'cash'}
+									<Banknote class="h-3.5 w-3.5 text-primary" />
+								{:else}
+									<CreditCard class="h-3.5 w-3.5 text-primary" />
+								{/if}
+							</div>
+							<span class="text-xs font-bold text-muted-foreground uppercase tracking-wider">Payment</span>
 						</div>
-						<div>
-							<div class="text-xs text-muted-foreground">Payment Method</div>
-							<div class="font-medium capitalize">{order.paymentMethod}</div>
-						</div>
+						<span class="text-sm font-black capitalize">{order.paymentMethod}</span>
 					</div>
 				</Card.Content>
 			</Card.Root>
 
-			<Card.Root>
-				<Card.Header>
-					<Card.Title>Customer</Card.Title>
+			<Card.Root class="border-primary/10 shadow-sm overflow-hidden">
+				<Card.Header class="bg-muted/30 pb-4">
+					<Card.Title class="text-base font-bold">Customer Info</Card.Title>
 				</Card.Header>
-				<Card.Content>
+				<Card.Content class="pt-4">
 					{#if order.customerId}
 						<a
 							href="/customers/{order.customerId}"
-							class="text-lg font-bold text-primary hover:underline"
+							class="text-lg font-black text-primary hover:underline"
 						>
 							{order.customerName}
 						</a>
 					{:else}
-						<div class="text-lg font-bold">{order.customerName ?? 'Walk-in Customer'}</div>
+						<div class="text-lg font-black">{order.customerName ?? 'Walk-in Customer'}</div>
 					{/if}
 					{#if order.customerPhone}
-						<div class="text-muted-foreground">{order.customerPhone}</div>
+						<div class="mt-1 flex items-center gap-2 text-xs font-bold text-muted-foreground">
+							<span class="h-1.5 w-1.5 rounded-full bg-primary/40"></span>
+							{order.customerPhone}
+						</div>
 					{/if}
 				</Card.Content>
 			</Card.Root>

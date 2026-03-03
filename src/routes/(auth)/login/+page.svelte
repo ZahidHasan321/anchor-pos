@@ -102,13 +102,20 @@
 						loading = true;
 						return async ({ result, update }) => {
 							loading = false;
-							
+
+							// Handle failure directly without SSR re-render
+							// (SSR can fail in Electron when @powersync/web is missing from server bundle)
+							if (result.type === 'failure') {
+								form = result.data as any;
+								return;
+							}
+
 							// Special handling for JSON redirect (Native App)
 							if (result.type === 'success' && result.data?.redirect) {
 								goto(result.data.redirect as string);
 								return;
 							}
-							
+
 							await update();
 						};
 					}}

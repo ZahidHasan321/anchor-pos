@@ -60,6 +60,7 @@
 
 	$effect(() => {
 		if (isNative && powersync.ready) {
+			powersync.dataVersion; // re-run when sync completes with new data
 			loadNativeOrders();
 		}
 	});
@@ -151,78 +152,120 @@
 	);
 </script>
 
+{#snippet orderCard(order: any)}
+	<div
+		role="button"
+		tabindex="0"
+		class="relative rounded-lg border bg-card p-4 text-card-foreground shadow-sm transition-colors hover:bg-muted/50 cursor-pointer"
+		onclick={() => goto(`/orders/${order.id}`)}
+		onkeydown={(e) => e.key === 'Enter' && goto(`/orders/${order.id}`)}
+	>
+		<div class="mb-3 flex items-start justify-between">
+			<div class="space-y-1">
+				<div class="font-bold text-sm tracking-tight">#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}</div>
+				<div class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+					<span>{formatDate(order.createdAt)}</span>
+					<span class="h-1 w-1 rounded-full bg-muted-foreground/30"></span>
+					<span>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+				</div>
+			</div>
+			<Badge
+				variant={order.status === 'completed' ? 'secondary' : 'destructive'}
+				class="h-5 px-2 text-[9px] font-bold uppercase tracking-wider"
+			>
+				{order.status}
+			</Badge>
+		</div>
+		<div class="flex items-end justify-between">
+			<div class="space-y-0.5">
+				<div class="text-xs font-semibold">{order.customerName ?? 'Walk-in'}</div>
+				<div class="text-[10px] text-muted-foreground capitalize">
+					{order.paymentMethod} <span class="mx-1 opacity-30">|</span> {order.userName}
+				</div>
+			</div>
+			<div class="text-base font-black tracking-tight text-primary">
+				{formatCurrency(order.totalAmount)}
+			</div>
+		</div>
+	</div>
+{/snippet}
+
 <svelte:head><title>Order History — Clothing POS</title></svelte:head>
 
-<div class="space-y-6 p-3 sm:p-6">
+<div class="space-y-6 p-4 sm:p-6">
 	<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 		<div>
-			<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Order History</h1>
-			<p class="text-sm text-muted-foreground">Manage and view your store's orders.</p>
+			<h1 class="text-2xl font-black tracking-tight sm:text-3xl">Order History</h1>
+			<p class="text-xs text-muted-foreground sm:text-sm">Manage and view your store's orders.</p>
 		</div>
-		<div class="relative w-full sm:w-96">
-			<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-primary" />
+		<div class="relative w-full lg:w-96">
+			<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 			<Input
 				type="text"
-				placeholder="Search orders..."
-				class="h-11 border-primary/50 pr-10 pl-10"
+				placeholder="Search order #, customer, phone..."
+				class="h-11 border-primary/20 bg-muted/20 pr-10 pl-10 focus-visible:ring-primary/30"
 				bind:value={searchQuery}
 				oninput={handleSearchInput}
 			/>
-			{#if searchQuery}<button
-					onclick={() => (searchQuery = '')}
+			{#if searchQuery}
+				<button
+					onclick={() => (searchQuery = '', applyFilters())}
 					class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-					><X class="h-4 w-4" /></button
-				>{/if}
+				>
+					<X class="h-4 w-4" />
+				</button>
+			{/if}
 		</div>
 	</div>
 
 	<!-- Filters -->
-	<Card.Root>
-		<Card.Content class="p-3 sm:p-4">
-			<div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-				<div class="flex flex-1 flex-col gap-4 sm:flex-row sm:items-end">
-					<div class="space-y-2">
-						<Label class="text-xs font-semibold text-muted-foreground">Date Range</Label>
-						<div class="flex items-center gap-2">
-							<DateInput
-								bind:value={dateFrom}
-								onchange={applyFilters}
-								class="h-9 w-full text-xs sm:w-48"
-							/>
-							<span class="text-xs text-muted-foreground">to</span>
-							<DateInput
-								bind:value={dateTo}
-								onchange={applyFilters}
-								class="h-9 w-full text-xs sm:w-48"
-							/>
+	<Card.Root class="border-primary/10 shadow-sm overflow-hidden">
+		<Card.Content class="p-0">
+			<div class="flex flex-col lg:flex-row lg:items-stretch">
+				<!-- Date Section -->
+				<div class="flex-1 border-b p-4 lg:border-b-0 lg:border-r">
+					<div class="mb-3 flex items-center justify-between">
+						<Label class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Date Range</Label>
+						<div class="flex rounded-md border bg-muted/30 p-0.5">
+							<Button
+								variant={isToday ? 'secondary' : 'ghost'}
+								size="sm"
+								onclick={setToday}
+								class="h-6 px-2 text-[10px]">Today</Button
+							>
+							<Button
+								variant={isThisWeek ? 'secondary' : 'ghost'}
+								size="sm"
+								onclick={setThisWeek}
+								class="h-6 px-2 text-[10px]">Week</Button
+							>
+							<Button
+								variant={isThisMonth ? 'secondary' : 'ghost'}
+								size="sm"
+								onclick={setThisMonth}
+								class="h-6 px-2 text-[10px]">Month</Button
+							>
 						</div>
 					</div>
-					<div class="flex h-9 w-fit rounded-md border bg-muted/30 p-0.5">
-						<Button
-							variant={isToday ? 'secondary' : 'ghost'}
-							size="sm"
-							onclick={setToday}
-							class="h-full px-3 text-[10px] sm:text-xs">Today</Button
-						>
-						<Separator orientation="vertical" class="my-auto h-4" />
-						<Button
-							variant={isThisWeek ? 'secondary' : 'ghost'}
-							size="sm"
-							onclick={setThisWeek}
-							class="h-full px-3 text-[10px] sm:text-xs">Week</Button
-						>
-						<Separator orientation="vertical" class="my-auto h-4" />
-						<Button
-							variant={isThisMonth ? 'secondary' : 'ghost'}
-							size="sm"
-							onclick={setThisMonth}
-							class="h-full px-3 text-[10px] sm:text-xs">Month</Button
-						>
+					<div class="flex items-center gap-2">
+						<DateInput
+							bind:value={dateFrom}
+							onchange={applyFilters}
+							class="h-9 flex-1 text-xs"
+						/>
+						<span class="text-[10px] font-bold text-muted-foreground/50 uppercase">to</span>
+						<DateInput
+							bind:value={dateTo}
+							onchange={applyFilters}
+							class="h-9 flex-1 text-xs"
+						/>
 					</div>
 				</div>
-				<div class="flex items-end gap-2 sm:gap-3">
-					<div class="flex-1 space-y-2 sm:flex-none">
-						<Label class="text-xs font-semibold text-muted-foreground">Status</Label>
+
+				<!-- Status & Clear Section -->
+				<div class="flex items-center gap-3 bg-muted/5 p-4 sm:flex-row">
+					<div class="flex-1 space-y-1.5">
+						<Label class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</Label>
 						<Select.Root
 							type="single"
 							bind:value={statusFilter}
@@ -231,11 +274,11 @@
 								applyFilters();
 							}}
 						>
-							<Select.Trigger class="h-9 w-full text-xs sm:w-35"
+							<Select.Trigger class="h-9 w-full text-xs sm:w-40 bg-background"
 								>{statusFilter || 'All Status'}</Select.Trigger
 							>
 							<Select.Content>
-								<Select.Item value="" class="text-xs text-muted-foreground">All Status</Select.Item>
+								<Select.Item value="" class="text-xs">All Status</Select.Item>
 								<Select.Item value="completed" class="text-xs">Completed</Select.Item>
 								<Select.Item value="refunded" class="text-xs">Refunded</Select.Item>
 								<Select.Item value="void" class="text-xs">Void</Select.Item>
@@ -243,186 +286,248 @@
 						</Select.Root>
 					</div>
 					{#if dateFrom || dateTo || statusFilter || searchQuery}
-						<Button
-							variant="outline"
-							size="sm"
-							onclick={clearFilters}
-							class="flex h-9 gap-2 px-3 text-xs text-muted-foreground hover:text-destructive"
-							><X class="h-3.5 w-3.5" /> Clear</Button
-						>
+						<div class="mt-auto">
+							<Button
+								variant="outline"
+								size="sm"
+								onclick={clearFilters}
+								class="h-9 border-destructive/20 px-3 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground"
+							>
+								<X class="mr-1.5 h-3.5 w-3.5" /> Clear
+							</Button>
+						</div>
 					{/if}
 				</div>
 			</div>
 		</Card.Content>
 	</Card.Root>
 
-	<Card.Root>
-		<Card.Content class="overflow-x-auto p-0">
-			<Table.Root class="min-w-[800px]">
-				<Table.Header>
-					<Table.Row>
-						<Table.Head>Order #</Table.Head>
-						<Table.Head>Date</Table.Head>
-						<Table.Head>Customer</Table.Head>
-						<Table.Head>Cashier</Table.Head>
-						<Table.Head>Payment</Table.Head>
-						<Table.Head>Amount</Table.Head>
-						<Table.Head>Status</Table.Head>
-						<Table.Head class="text-right">Actions</Table.Head>
-					</Table.Row>
-				</Table.Header>
-				<Table.Body>
-					{#if isNative}
-						{#each nativeOrders as order}
-							<Table.Row
-								class="cursor-pointer hover:bg-muted/50"
-								onclick={() => goto(`/orders/${order.id}`)}
-							>
-								<Table.Cell class="font-bold">
-									#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
-								</Table.Cell>
-								<Table.Cell
-									><div class="flex flex-col">
-										<span class="text-sm">{formatDate(order.createdAt)}</span><span
-											class="text-[10px] text-muted-foreground"
-											>{new Date(order.createdAt).toLocaleTimeString()}</span
-										>
-									</div></Table.Cell
-								>
-								<Table.Cell
-									><span class="text-sm">{order.customerName ?? 'Walk-in'}</span></Table.Cell
-								>
-								<Table.Cell class="text-[11px] text-muted-foreground">{order.userName}</Table.Cell>
-								<Table.Cell class="text-xs capitalize">{order.paymentMethod}</Table.Cell>
-								<Table.Cell class="font-bold">{formatCurrency(order.totalAmount)}</Table.Cell>
-								<Table.Cell
-									><Badge
-										variant={order.status === 'completed' ? 'secondary' : 'destructive'}
-										class="text-[10px]">{order.status}</Badge
-									></Table.Cell
-								>
-								<Table.Cell class="text-right"
-									><Button variant="ghost" size="icon" href="/orders/{order.id}"
-										><Eye class="h-4 w-4" /></Button
-									></Table.Cell
-								>
-							</Table.Row>
-						{/each}
-						{#if nativeOrders.length === 0}
-							<Table.Row
-								><Table.Cell colspan={8} class="h-48 text-center text-muted-foreground italic"
-									>No orders found.</Table.Cell
-								></Table.Row
-							>
-						{/if}
-					{:else}
-					{#await data.streamed}
-						{#each Array(8) as _}
+	<!-- Orders List -->
+	<div class="space-y-4">
+		{#if isNative}
+			<!-- Mobile View (Native) -->
+			<div class="grid gap-3 sm:grid-cols-2 lg:hidden">
+				{#each nativeOrders as order}
+					{@render orderCard(order)}
+				{/each}
+				{#if nativeOrders.length === 0}
+					<div class="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground sm:col-span-2">
+						<p class="text-sm italic">No orders found.</p>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Desktop View (Native) -->
+			<Card.Root class="hidden lg:block overflow-hidden">
+				<Card.Content class="p-0">
+					<Table.Root>
+						<Table.Header class="bg-muted/30">
 							<Table.Row>
-								{#each Array(8) as _}<Table.Cell><Skeleton class="h-10 w-full" /></Table.Cell
-									>{/each}
+								<Table.Head class="w-[120px]">Order #</Table.Head>
+								<Table.Head>Date</Table.Head>
+								<Table.Head>Customer</Table.Head>
+								<Table.Head>Cashier</Table.Head>
+								<Table.Head>Payment</Table.Head>
+								<Table.Head>Amount</Table.Head>
+								<Table.Head>Status</Table.Head>
+								<Table.Head class="text-right">Actions</Table.Head>
 							</Table.Row>
-						{/each}
-					{:then streamed}
-						{#each streamed.orders as order}
-							<Table.Row
-								class="cursor-pointer hover:bg-muted/50"
-								onclick={() => goto(`/orders/${order.id}`)}
-							>
-								<Table.Cell class="font-bold">
-									#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
-								</Table.Cell>
-								<Table.Cell
-									><div class="flex flex-col">
-										<span class="text-sm">{formatDate(order.createdAt)}</span><span
-											class="text-[10px] text-muted-foreground"
-											>{new Date(order.createdAt).toLocaleTimeString()}</span
+						</Table.Header>
+						<Table.Body>
+							{#each nativeOrders as order}
+								<Table.Row
+									class="cursor-pointer group"
+									onclick={() => goto(`/orders/${order.id}`)}
+								>
+									<Table.Cell class="font-black text-primary">
+										#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
+									</Table.Cell>
+									<Table.Cell>
+										<div class="flex flex-col">
+											<span class="text-sm font-medium">{formatDate(order.createdAt)}</span>
+											<span class="text-[10px] text-muted-foreground"
+												>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span
+											>
+										</div>
+									</Table.Cell>
+									<Table.Cell>
+										<span class="text-sm font-medium">{order.customerName ?? 'Walk-in'}</span>
+									</Table.Cell>
+									<Table.Cell class="text-xs text-muted-foreground">{order.userName}</Table.Cell>
+									<Table.Cell class="text-xs capitalize">{order.paymentMethod}</Table.Cell>
+									<Table.Cell class="font-bold">{formatCurrency(order.totalAmount)}</Table.Cell>
+									<Table.Cell>
+										<Badge
+											variant={order.status === 'completed' ? 'secondary' : 'destructive'}
+											class="text-[10px] font-bold uppercase tracking-wider"
 										>
-									</div></Table.Cell
-								>
-								<Table.Cell
-									><span class="text-sm">{order.customerName ?? 'Walk-in'}</span></Table.Cell
-								>
-								<Table.Cell class="text-[11px] text-muted-foreground">{order.userName}</Table.Cell>
-								<Table.Cell class="text-xs capitalize">{order.paymentMethod}</Table.Cell>
-								<Table.Cell class="font-bold">{formatCurrency(order.totalAmount)}</Table.Cell>
-								<Table.Cell
-									><Badge
-										variant={order.status === 'completed' ? 'secondary' : 'destructive'}
-										class="text-[10px]">{order.status}</Badge
-									></Table.Cell
-								>
-								<Table.Cell class="text-right"
-									><Button variant="ghost" size="icon" href="/orders/{order.id}"
-										><Eye class="h-4 w-4" /></Button
-									></Table.Cell
-								>
-							</Table.Row>
-						{/each}
+											{order.status}
+										</Badge>
+									</Table.Cell>
+									<Table.Cell class="text-right">
+										<Button variant="ghost" size="icon" href="/orders/{order.id}" class="opacity-0 group-hover:opacity-100 transition-opacity">
+											<Eye class="h-4 w-4" />
+										</Button>
+									</Table.Cell>
+								</Table.Row>
+							{/each}
+						</Table.Body>
+					</Table.Root>
+					{#if nativeOrders.length === 0}
+						<div class="flex h-48 items-center justify-center text-muted-foreground italic">
+							No orders found.
+						</div>
+					{/if}
+				</Card.Content>
+			</Card.Root>
+
+		{:else}
+			{#await data.streamed}
+				<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+					{#each Array(6) as _}
+						<Skeleton class="h-32 w-full rounded-xl" />
+					{/each}
+				</div>
+			{:then streamed}
+				<!-- Mobile View (Streamed) -->
+				<div class="grid gap-3 sm:grid-cols-2 lg:hidden">
+					{#each streamed.orders as order}
+						{@render orderCard(order)}
+					{/each}
+					{#if streamed.orders.length === 0}
+						<div class="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground sm:col-span-2">
+							<p class="text-sm italic">No orders found.</p>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Desktop View (Streamed) -->
+				<Card.Root class="hidden lg:block overflow-hidden">
+					<Card.Content class="p-0">
+						<Table.Root>
+							<Table.Header class="bg-muted/30">
+								<Table.Row>
+									<Table.Head class="w-[120px]">Order #</Table.Head>
+									<Table.Head>Date</Table.Head>
+									<Table.Head>Customer</Table.Head>
+									<Table.Head>Cashier</Table.Head>
+									<Table.Head>Payment</Table.Head>
+									<Table.Head>Amount</Table.Head>
+									<Table.Head>Status</Table.Head>
+									<Table.Head class="text-right">Actions</Table.Head>
+								</Table.Row>
+							</Table.Header>
+							<Table.Body>
+								{#each streamed.orders as order}
+									<Table.Row
+										class="cursor-pointer group"
+										onclick={() => goto(`/orders/${order.id}`)}
+									>
+										<Table.Cell class="font-black text-primary">
+											#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
+										</Table.Cell>
+										<Table.Cell>
+											<div class="flex flex-col">
+												<span class="text-sm font-medium">{formatDate(order.createdAt)}</span>
+												<span class="text-[10px] text-muted-foreground"
+													>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span
+												>
+											</div>
+										</Table.Cell>
+										<Table.Cell>
+											<span class="text-sm font-medium">{order.customerName ?? 'Walk-in'}</span>
+										</Table.Cell>
+										<Table.Cell class="text-xs text-muted-foreground">{order.userName}</Table.Cell>
+										<Table.Cell class="text-xs capitalize">{order.paymentMethod}</Table.Cell>
+										<Table.Cell class="font-bold">{formatCurrency(order.totalAmount)}</Table.Cell>
+										<Table.Cell>
+											<Badge
+												variant={order.status === 'completed' ? 'secondary' : 'destructive'}
+												class="text-[10px] font-bold uppercase tracking-wider"
+											>
+												{order.status}
+											</Badge>
+										</Table.Cell>
+										<Table.Cell class="text-right">
+											<Button variant="ghost" size="icon" href="/orders/{order.id}" class="opacity-0 group-hover:opacity-100 transition-opacity">
+												<Eye class="h-4 w-4" />
+											</Button>
+										</Table.Cell>
+									</Table.Row>
+								{/each}
+							</Table.Body>
+						</Table.Root>
 						{#if streamed.orders.length === 0}
-							<Table.Row
-								><Table.Cell colspan={8} class="h-48 text-center text-muted-foreground italic"
-									>No orders found.</Table.Cell
-								></Table.Row
-							>
+							<div class="flex h-48 items-center justify-center text-muted-foreground italic">
+								No orders found.
+							</div>
 						{/if}
-					{/await}
-					{/if}
-				</Table.Body>
-			</Table.Root>
-		</Card.Content>
-		<Card.Footer class="border-t p-4">
-			{#if isNative}
-				<div class="flex w-full items-center justify-between">
-					<p class="text-xs text-muted-foreground">
-						Showing {nativeOrders.length} of {nativePagination.totalOrders}
-					</p>
-					{#if nativePagination.totalPages > 1}
-						<div class="flex gap-1">
-							<Button
-								variant="outline"
-								size="icon"
-								disabled={nativePagination.currentPage <= 1}
-								onclick={() => goToPage(nativePagination.currentPage - 1)}
-								class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
-							>
-							<Button
-								variant="outline"
-								size="icon"
-								disabled={nativePagination.currentPage >= nativePagination.totalPages}
-								onclick={() => goToPage(nativePagination.currentPage + 1)}
-								class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
-							>
-						</div>
-					{/if}
-				</div>
-			{:else}
-			{#await data.streamed then streamed}
-				<div class="flex w-full items-center justify-between">
-					<p class="text-xs text-muted-foreground">
-						Showing {streamed.orders.length} of {streamed.pagination.totalOrders}
-					</p>
-					{#if streamed.pagination.totalPages > 1}
-						<div class="flex gap-1">
-							<Button
-								variant="outline"
-								size="icon"
-								disabled={streamed.pagination.currentPage <= 1}
-								onclick={() => goToPage(streamed.pagination.currentPage - 1)}
-								class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
-							>
-							<Button
-								variant="outline"
-								size="icon"
-								disabled={streamed.pagination.currentPage >= streamed.pagination.totalPages}
-								onclick={() => goToPage(streamed.pagination.currentPage + 1)}
-								class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
-							>
-						</div>
-					{/if}
-				</div>
+					</Card.Content>
+				</Card.Root>
 			{/await}
-			{/if}
-		</Card.Footer>
-	</Card.Root>
+		{/if}
+
+		<!-- Pagination Footer -->
+		<Card.Root class="border-t-0 rounded-t-none">
+			<Card.Footer class="p-4">
+				{#if isNative}
+					<div class="flex w-full items-center justify-between">
+						<p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+							{nativeOrders.length} of {nativePagination.totalOrders} Records
+						</p>
+						{#if nativePagination.totalPages > 1}
+							<div class="flex gap-1">
+								<Button
+									variant="outline"
+									size="icon"
+									disabled={nativePagination.currentPage <= 1}
+									onclick={() => goToPage(nativePagination.currentPage - 1)}
+									class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
+								>
+								<div class="flex h-8 items-center px-3 text-[10px] font-bold border rounded-md bg-muted/30">
+									{nativePagination.currentPage} / {nativePagination.totalPages}
+								</div>
+								<Button
+									variant="outline"
+									size="icon"
+									disabled={nativePagination.currentPage >= nativePagination.totalPages}
+									onclick={() => goToPage(nativePagination.currentPage + 1)}
+									class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
+								>
+							</div>
+						{/if}
+					</div>
+				{:else}
+				{#await data.streamed then streamed}
+					<div class="flex w-full items-center justify-between">
+						<p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+							{streamed.orders.length} of {streamed.pagination.totalOrders} Records
+						</p>
+						{#if streamed.pagination.totalPages > 1}
+							<div class="flex gap-1">
+								<Button
+									variant="outline"
+									size="icon"
+									disabled={streamed.pagination.currentPage <= 1}
+									onclick={() => goToPage(streamed.pagination.currentPage - 1)}
+									class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
+								>
+								<div class="flex h-8 items-center px-3 text-[10px] font-bold border rounded-md bg-muted/30">
+									{streamed.pagination.currentPage} / {streamed.pagination.totalPages}
+								</div>
+								<Button
+									variant="outline"
+									size="icon"
+									disabled={streamed.pagination.currentPage >= streamed.pagination.totalPages}
+									onclick={() => goToPage(streamed.pagination.currentPage + 1)}
+									class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
+								>
+							</div>
+						{/if}
+					</div>
+				{/await}
+				{/if}
+			</Card.Footer>
+		</Card.Root>
+	</div>
 </div>

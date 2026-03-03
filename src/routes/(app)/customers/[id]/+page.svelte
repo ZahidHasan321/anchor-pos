@@ -57,7 +57,10 @@
 	}
 
 	$effect(() => {
-		if (isNative && powersync.ready) loadNativeCustomerDetail();
+		if (isNative && powersync.ready) {
+			powersync.dataVersion; // re-run when sync completes with new data
+			loadNativeCustomerDetail();
+		}
 	});
 
 	const customer = $derived(isNative ? nativeCustomer : data.customer);

@@ -8,6 +8,8 @@ export class PowerSyncManager {
     private static instance: PowerSyncManager;
     ready = $state(false);
     isConnected = $state(false);
+    /** Increments each time a sync completes — use as a dependency in $effect to re-query */
+    dataVersion = $state(0);
     private _readyResolve: (() => void) | null = null;
     private _readyPromise: Promise<void>;
 
@@ -37,6 +39,29 @@ export class PowerSyncManager {
 
         await this.db.init();
         console.log('PowerSync initialized');
+
+        // Check for cached data immediately after init
+        // OPFS retains data from previous sessions, so we can show it right away
+        await this._checkCachedData();
+    }
+
+    private async _checkCachedData() {
+        try {
+            const count = await this.db.get('SELECT COUNT(*) as cnt FROM ps_oplog') as { cnt: number } | null;
+            if (count && count.cnt > 0) {
+                console.log('PowerSync: cached data found, marking ready immediately');
+                this._markReady();
+            }
+        } catch {
+            // ps_oplog may not exist yet on first run - that's fine
+        }
+    }
+
+    private _markReady() {
+        if (!this.ready) {
+            this.ready = true;
+            this._readyResolve?.();
+        }
     }
 
     async connect() {
@@ -101,38 +126,63 @@ export class PowerSyncManager {
             this.isConnected = true;
             console.log('PowerSync connected');
 
-            // Wait for initial sync to mark as ready
-            this._waitForInitialSync();
+            // Listen for sync status changes to bump dataVersion
+            this._listenForSyncChanges();
+
+            // Wait for initial sync if not already ready from cached data
+            if (!this.ready) {
+                this._waitForInitialSync();
+            }
         } catch (e) {
             console.error('PowerSync connection failed:', e);
+            // If connection fails, still mark ready after a short delay
+            // so the UI isn't stuck on skeletons forever
+            setTimeout(() => this._markReady(), 2000);
         }
+    }
+
+    private _listenForSyncChanges() {
+        let lastConnected = false;
+
+        this.db.registerListener({
+            statusChanged: (status: any) => {
+                // Detect when downloading completes (transition from downloading to idle)
+                const downloading = status?.dataFlowStatus?.downloading;
+                const connected = status?.connected;
+
+                if (connected && downloading === false && lastConnected) {
+                    // Sync just finished downloading — bump version so pages re-query
+                    this.dataVersion++;
+                    console.log('PowerSync: sync completed, dataVersion =', this.dataVersion);
+                }
+
+                lastConnected = !!connected;
+            }
+        });
     }
 
     private async _waitForInitialSync() {
         try {
-            // Check if we already have data (from a previous session's OPFS cache)
+            // Check if data appeared since init
             const count = await this.db.get('SELECT COUNT(*) as cnt FROM ps_oplog') as { cnt: number } | null;
             if (count && count.cnt > 0) {
-                this.ready = true;
-                this._readyResolve?.();
+                this._markReady();
                 return;
             }
 
-            // Otherwise wait for the first sync complete status
+            // Check sync status
             const status = this.db.currentStatus;
             if (status?.dataFlowStatus?.downloading === false && status?.connected) {
-                this.ready = true;
-                this._readyResolve?.();
+                this._markReady();
                 return;
             }
 
-            // Poll for ready state
+            // Poll for data arrival
             const check = setInterval(async () => {
                 try {
                     const count = await this.db.get('SELECT COUNT(*) as cnt FROM ps_oplog') as { cnt: number } | null;
                     if (count && count.cnt > 0) {
-                        this.ready = true;
-                        this._readyResolve?.();
+                        this._markReady();
                         clearInterval(check);
                     }
                 } catch {
@@ -140,21 +190,17 @@ export class PowerSyncManager {
                 }
             }, 500);
 
-            // Timeout after 30s - mark ready anyway (may have cached data)
+            // Timeout after 5s - mark ready anyway (first-time user with no data)
             setTimeout(() => {
                 if (!this.ready) {
-                    console.warn('PowerSync initial sync timeout, marking ready with cached data');
-                    this.ready = true;
-                    this._readyResolve?.();
+                    console.warn('PowerSync initial sync timeout, marking ready');
+                    this._markReady();
                     clearInterval(check);
                 }
-            }, 30000);
+            }, 5000);
         } catch {
-            // If ps_oplog doesn't exist yet, wait a bit
-            setTimeout(() => {
-                this.ready = true;
-                this._readyResolve?.();
-            }, 2000);
+            // If ps_oplog doesn't exist yet, mark ready quickly
+            setTimeout(() => this._markReady(), 1000);
         }
     }
 

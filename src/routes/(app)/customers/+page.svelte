@@ -73,6 +73,7 @@
 
 	$effect(() => {
 		if (isNative && powersync.ready) {
+			powersync.dataVersion; // re-run when sync completes with new data
 			loadNativeCustomers();
 		}
 	});

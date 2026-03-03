@@ -19,7 +19,7 @@ export default defineConfig({
 			/^@journeyapps\/.*/,
 			/^@oslojs\/.*/
 		],
-		external: ['electron']
+		external: ['electron', '@powersync/web', '@journeyapps/wa-sqlite']
 	},
 	optimizeDeps: {
 		exclude: ['@powersync/web', '@journeyapps/wa-sqlite']

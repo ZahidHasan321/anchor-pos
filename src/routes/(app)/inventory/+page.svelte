@@ -48,6 +48,7 @@
 
 	async function loadNativeInventory() {
 		if (!isNative || !powersync.ready) return;
+		powersync.dataVersion; // re-run when sync completes with new data
 		const perPage = 20;
 		const pg = parseInt(new URLSearchParams(window.location.search).get('page') ?? '1');
 		const offset = (pg - 1) * perPage;

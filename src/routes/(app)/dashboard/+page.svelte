@@ -30,6 +30,7 @@
 
 	$effect(() => {
 		if (!isNative || !powersync.ready) return;
+		powersync.dataVersion; // re-run when sync completes with new data
 
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
