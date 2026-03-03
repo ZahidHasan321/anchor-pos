@@ -25,6 +25,31 @@
 		}
 	});
 
+	function getLabelPrinter(): string {
+		return localStorage.getItem('pos-default-label-printer') || '';
+	}
+
+	async function printWithElectronOrFallback(html: string) {
+		// @ts-ignore
+		if (window.electron?.printToDevice) {
+			const printerName = getLabelPrinter();
+			// @ts-ignore
+			return await window.electron.printToDevice(html, printerName, !!printerName);
+		}
+		// @ts-ignore
+		if (window.electron?.printNative) {
+			// @ts-ignore
+			window.electron.printNative(html, true);
+			return;
+		}
+		// Web fallback
+		const printWindow = window.open('', '_blank');
+		if (!printWindow) return;
+		printWindow.document.write(html);
+		printWindow.document.close();
+		printWindow.onload = () => printWindow.print();
+	}
+
 	function printLabels() {
 		if (!labelContainer) return;
 		const html = `<!DOCTYPE html><html><head>
@@ -47,17 +72,7 @@
   @media print { body { -webkit-print-color-adjust: exact; } }
 </style></head><body>${labelContainer.innerHTML}</body></html>`;
 
-		// @ts-ignore
-		if (window.electron?.printNative) {
-			// @ts-ignore
-			window.electron.printNative(html, true);
-		} else {
-			const printWindow = window.open('', '_blank');
-			if (!printWindow) return;
-			printWindow.document.write(html);
-			printWindow.document.close();
-			printWindow.onload = () => printWindow.print();
-		}
+		printWithElectronOrFallback(html);
 	}
 
 	function printSingleLabel(element: HTMLElement) {
@@ -79,17 +94,7 @@
   @media print { body { -webkit-print-color-adjust: exact; } }
 </style></head><body>${element.outerHTML}</body></html>`;
 
-		// @ts-ignore
-		if (window.electron?.printNative) {
-			// @ts-ignore
-			window.electron.printNative(html, true);
-		} else {
-			const printWindow = window.open('', '_blank');
-			if (!printWindow) return;
-			printWindow.document.write(html);
-			printWindow.document.close();
-			printWindow.onload = () => printWindow.print();
-		}
+		printWithElectronOrFallback(html);
 	}
 </script>
 

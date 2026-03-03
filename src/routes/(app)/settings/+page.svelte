@@ -37,11 +37,111 @@
 	import { printReceipt } from '$lib/print-receipt';
 	import { formatCurrency, formatDateTime } from '$lib/format';
 	import { untrack } from 'svelte';
+	import * as Select from '$lib/components/ui/select';
 
 	let { data, form } = $props();
 	let loading = $state(false);
 	let isEditing = $state(false);
 	let showReceiptPreview = $state(false);
+
+	// --- Printer Settings (Electron only) ---
+	let isElectron = $state(false);
+	let printerList: Array<{ name: string; isDefault: boolean }> = $state([]);
+	let loadingPrinters = $state(false);
+	let defaultReceiptPrinter = $state('');
+	let defaultLabelPrinter = $state('');
+	let testPrintingReceipt = $state(false);
+	let testPrintingLabel = $state(false);
+
+	$effect(() => {
+		// @ts-ignore
+		isElectron = typeof window !== 'undefined' && !!window.electron?.getPrinters;
+		if (isElectron) {
+			defaultReceiptPrinter = localStorage.getItem('pos-default-receipt-printer') || '';
+			defaultLabelPrinter = localStorage.getItem('pos-default-label-printer') || '';
+			refreshPrinters();
+		}
+	});
+
+	async function refreshPrinters() {
+		loadingPrinters = true;
+		try {
+			// @ts-ignore
+			const printers = await window.electron.getPrinters();
+			printerList = printers.map((p: any) => ({ name: p.name, isDefault: p.isDefault }));
+		} catch (e) {
+			console.error('Failed to get printers:', e);
+			printerList = [];
+		}
+		loadingPrinters = false;
+	}
+
+	function saveReceiptPrinter(name: string) {
+		defaultReceiptPrinter = name;
+		if (name) {
+			localStorage.setItem('pos-default-receipt-printer', name);
+		} else {
+			localStorage.removeItem('pos-default-receipt-printer');
+		}
+		toast.success(name ? `Receipt printer set to "${name}"` : 'Receipt printer cleared');
+	}
+
+	function saveLabelPrinter(name: string) {
+		defaultLabelPrinter = name;
+		if (name) {
+			localStorage.setItem('pos-default-label-printer', name);
+		} else {
+			localStorage.removeItem('pos-default-label-printer');
+		}
+		toast.success(name ? `Label printer set to "${name}"` : 'Label printer cleared');
+	}
+
+	async function testReceiptPrint() {
+		testPrintingReceipt = true;
+		try {
+			const result = await printReceipt({
+				storeSettings: previewData,
+				orderId: '#TEST-RECEIPT',
+				date: formatDateTime(new Date()),
+				cashier: data.user?.name ?? 'Admin',
+				items: [
+					{ name: 'DUMMY PRODUCT', variant: 'Large / Black', qty: 1, total: 1200 },
+					{ name: 'SAMPLE ITEM', variant: 'Medium / Blue', qty: 2, total: 1600 }
+				],
+				total: 2800,
+				cashReceived: 3000,
+				changeGiven: 200
+			});
+			if (result && !result.success) {
+				toast.error(`Print failed: ${result.error}`);
+			} else if (result?.success) {
+				toast.success('Test receipt printed successfully');
+			}
+		} catch (e: any) {
+			toast.error(`Print error: ${e.message}`);
+		}
+		testPrintingReceipt = false;
+	}
+
+	async function testLabelPrint() {
+		testPrintingLabel = true;
+		const printerName = defaultLabelPrinter || '';
+		const html = `<!DOCTYPE html><html><head>
+<style>@page { size: 50.8mm 25.4mm; margin: 0; } body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: Arial, sans-serif; } .label { text-align: center; } .name { font-size: 10px; font-weight: bold; } .price { font-size: 14px; font-weight: bold; margin-top: 2mm; }</style>
+</head><body><div class="label"><div class="name">TEST LABEL</div><div class="price">$0.00</div></div></body></html>`;
+		try {
+			// @ts-ignore
+			const result = await window.electron.printToDevice(html, printerName, true);
+			if (result && !result.success) {
+				toast.error(`Label print failed: ${result.error}`);
+			} else if (result?.success) {
+				toast.success('Test label printed successfully');
+			}
+		} catch (e: any) {
+			toast.error(`Label print error: ${e.message}`);
+		}
+		testPrintingLabel = false;
+	}
 
 	// Local state for preview
 	let previewData = $state({
@@ -103,8 +203,8 @@
 		}
 	});
 
-	function printTestReceipt() {
-		printReceipt({
+	async function printTestReceipt() {
+		const result = await printReceipt({
 			storeSettings: previewData,
 			orderId: '#TEST-RECEIPT',
 			date: formatDateTime(new Date()),
@@ -117,6 +217,11 @@
 			cashReceived: 3000,
 			changeGiven: 200
 		});
+		if (result && !result.success) {
+			toast.error(`Print failed: ${result.error}`);
+		} else if (result?.success) {
+			toast.success('Test receipt sent to printer');
+		}
 	}
 </script>
 
@@ -471,7 +576,124 @@
 			</Card.Content>
 		</Card.Root>
 
-		<!-- ==================== RECEIPT POLICIES ==================== -->
+		<!-- ==================== PRINTER SETUP (Electron only) ==================== -->
+	{#if isElectron}
+		<Card.Root>
+			<Card.Header class="px-4 pb-4 sm:px-6">
+				<div class="flex items-center gap-2.5">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
+						<Printer class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+					</div>
+					<div class="flex-1">
+						<Card.Title class="text-sm sm:text-base">Printer Setup</Card.Title>
+						<Card.Description class="text-xs sm:text-sm">
+							Select default printers for receipts and labels.
+						</Card.Description>
+					</div>
+					<Button
+						variant="ghost"
+						size="sm"
+						class="cursor-pointer"
+						onclick={refreshPrinters}
+						disabled={loadingPrinters}
+					>
+						{#if loadingPrinters}
+							<Loader2 class="h-4 w-4 animate-spin" />
+						{:else}
+							Refresh
+						{/if}
+					</Button>
+				</div>
+			</Card.Header>
+			<Card.Content class="space-y-4 px-4 sm:px-6">
+				{#if printerList.length === 0 && !loadingPrinters}
+					<div class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+						No printers detected. Make sure your printer drivers are installed and the printer is connected.
+					</div>
+				{:else}
+					<div class="grid gap-4 sm:grid-cols-2">
+						<!-- Receipt Printer -->
+						<div class="space-y-2">
+							<Label>Default Receipt Printer</Label>
+							<Select.Root
+								type="single"
+								value={defaultReceiptPrinter || undefined}
+								onValueChange={(v) => saveReceiptPrinter(v ?? '')}
+							>
+								<Select.Trigger class="w-full cursor-pointer">
+									{defaultReceiptPrinter || 'System default (dialog)'}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="" label="System default (dialog)">System default (dialog)</Select.Item>
+									{#each printerList as printer}
+										<Select.Item value={printer.name} label={printer.name}>
+											{printer.name}{printer.isDefault ? ' (OS default)' : ''}
+										</Select.Item>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+							<div class="flex gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									class="cursor-pointer text-xs"
+									onclick={testReceiptPrint}
+									disabled={testPrintingReceipt}
+								>
+									{#if testPrintingReceipt}
+										<Loader2 class="mr-1 h-3 w-3 animate-spin" />
+									{:else}
+										<Printer class="mr-1 h-3 w-3" />
+									{/if}
+									Test Receipt
+								</Button>
+							</div>
+						</div>
+
+						<!-- Label Printer -->
+						<div class="space-y-2">
+							<Label>Default Label Printer</Label>
+							<Select.Root
+								type="single"
+								value={defaultLabelPrinter || undefined}
+								onValueChange={(v) => saveLabelPrinter(v ?? '')}
+							>
+								<Select.Trigger class="w-full cursor-pointer">
+									{defaultLabelPrinter || 'System default (dialog)'}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="" label="System default (dialog)">System default (dialog)</Select.Item>
+									{#each printerList as printer}
+										<Select.Item value={printer.name} label={printer.name}>
+											{printer.name}{printer.isDefault ? ' (OS default)' : ''}
+										</Select.Item>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+							<div class="flex gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									class="cursor-pointer text-xs"
+									onclick={testLabelPrint}
+									disabled={testPrintingLabel}
+								>
+									{#if testPrintingLabel}
+										<Loader2 class="mr-1 h-3 w-3 animate-spin" />
+									{:else}
+										<Printer class="mr-1 h-3 w-3" />
+									{/if}
+									Test Label
+								</Button>
+							</div>
+						</div>
+					</div>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+	{/if}
+
+	<!-- ==================== RECEIPT POLICIES ==================== -->
 		<Card.Root>
 			<Card.Header class="px-4 pb-4 sm:px-6">
 				<div class="flex items-center gap-2.5">

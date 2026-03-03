@@ -403,25 +403,67 @@ async function createWindow() {
     });
 }
 
-// IPC listener for native printing
+// IPC handler: list available printers
+ipcMain.handle('get-printers', async () => {
+    if (!mainWindow) return [];
+    try {
+        return await mainWindow.webContents.getPrintersAsync();
+    } catch (e) {
+        log.error('Failed to get printers:', e);
+        return [];
+    }
+});
+
+// IPC handler: print to a specific device (returns success/error)
+ipcMain.handle('print-to-device', async (event, html, deviceName, silent = true) => {
+    return new Promise((resolve) => {
+        let printWindow = new BrowserWindow({
+            show: false,
+            webPreferences: { offscreen: true }
+        });
+
+        printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+        printWindow.webContents.on('did-finish-load', () => {
+            const printOptions = {
+                silent,
+                printBackground: true,
+                margins: { marginType: 'none' }
+            };
+            if (deviceName) {
+                printOptions.deviceName = deviceName;
+            }
+
+            printWindow.webContents.print(printOptions, (success, failureReason) => {
+                printWindow.close();
+                if (!success) {
+                    const reason = failureReason || 'Unknown error';
+                    if (reason !== 'Cancelled') {
+                        log.error('Print failed:', reason);
+                    }
+                    resolve({ success: false, error: reason });
+                } else {
+                    resolve({ success: true });
+                }
+            });
+        });
+    });
+});
+
+// IPC listener for native printing (legacy — kept for backward compatibility)
 ipcMain.on('print-native', (event, html, preview = false) => {
     let printWindow = new BrowserWindow({
-        show: false, // Always hidden, the print dialog is what matters
-        webPreferences: {
-            offscreen: true
-        }
+        show: false,
+        webPreferences: { offscreen: true }
     });
 
     printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
     printWindow.webContents.on('did-finish-load', () => {
-        // Use silent: false to show the native system print dialog (with preview, Save as PDF, etc.)
         printWindow.webContents.print({
-            silent: !preview, 
+            silent: !preview,
             printBackground: true,
-            margins: {
-                marginType: 'none'
-            }
+            margins: { marginType: 'none' }
         }, (success, failureReason) => {
             if (!success && failureReason !== 'Cancelled') {
                 console.error('Print failed:', failureReason);

@@ -33,7 +33,7 @@ export type ReceiptData = {
 	isReprint?: boolean;
 };
 
-export function printReceipt(data: ReceiptData, preview = false) {
+export async function printReceipt(data: ReceiptData, preview = false): Promise<{ success: boolean; error?: string } | void> {
 	const s = data.storeSettings;
 	const symbol = getCurrencySymbol();
 
@@ -200,10 +200,21 @@ export function printReceipt(data: ReceiptData, preview = false) {
 
 	// --- Native Electron Printing ---
 	// @ts-ignore - window.electron is injected by preload script
-	if (typeof window !== 'undefined' && window.electron?.printNative) {
+	if (typeof window !== 'undefined' && window.electron?.printToDevice) {
+		const savedPrinter = localStorage.getItem('pos-default-receipt-printer');
+		try {
+			// @ts-ignore
+			const result = await window.electron.printToDevice(html, savedPrinter || '', !preview);
+			return result;
+		} catch (e) {
+			console.error('printToDevice failed, falling back:', e);
+			// fall through to web printing
+		}
+	// @ts-ignore
+	} else if (typeof window !== 'undefined' && window.electron?.printNative) {
 		// @ts-ignore
 		window.electron.printNative(html, preview);
-		return;
+		return { success: true };
 	}
 
 	// --- Standard Web Printing (Fallback) ---
