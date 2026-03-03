@@ -2,7 +2,7 @@ import adapterAuto from '@sveltejs/adapter-auto';
 import adapterNode from '@sveltejs/adapter-node';
 import { mdsvex } from 'mdsvex';
 
-const isNode = process.env.BUILD_TARGET === 'node' || process.env.NODE_ENV === 'production';
+const isNode = process.env.BUILD_TARGET === 'node' || process.env.BUILD_TARGET === 'electron' || process.env.NODE_ENV === 'production';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {

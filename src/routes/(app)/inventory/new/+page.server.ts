@@ -30,6 +30,7 @@ export const actions: Actions = {
 		const name = (data.get('name') as string)?.trim();
 		const category = (data.get('category') as string)?.trim();
 		const templatePrice = parseFloat(data.get('templatePrice') as string);
+		const costPrice = parseFloat(data.get('costPrice') as string) || 0;
 		const defaultDiscount = parseFloat(data.get('defaultDiscount') as string) || 0;
 		const description = (data.get('description') as string)?.trim() || null;
 		const sizes = data.getAll('sizes') as string[];
@@ -68,6 +69,7 @@ export const actions: Actions = {
 					description,
 					category: normalizedCategory,
 					templatePrice,
+					costPrice,
 					defaultDiscount
 				});
 

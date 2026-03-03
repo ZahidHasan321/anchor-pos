@@ -1,9 +1,10 @@
-import { redirect } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
+import { fail, redirect } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { products, productVariants, storeSettings } from '$lib/server/db/schema';
 import { eq, sql, desc, and } from 'drizzle-orm';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
+import { logAuditEvent } from '$lib/server/audit';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
@@ -32,6 +33,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	return {
 		filters: { category: categoryFilter, search, stockStatus },
 		isElectron,
+		user: locals.user,
 
 		// Streaming everything else
 		streamed: (async () => {
@@ -158,4 +160,38 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			};
 		})()
 	};
+};
+
+export const actions: Actions = {
+	deleteProduct: async ({ request, locals }) => {
+		if (!locals.user || locals.user.role !== 'admin') {
+			return fail(403, { error: 'Only admins can delete products' });
+		}
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
+
+		const data = await request.formData();
+		const productId = data.get('productId') as string;
+
+		if (!productId) {
+			return fail(400, { error: 'Product ID required' });
+		}
+
+		try {
+			await db.delete(products).where(eq(products.id, productId));
+
+			await logAuditEvent({
+				userId: locals.user.id,
+				userName: locals.user.name,
+				action: 'DELETE_PRODUCT',
+				entity: 'products',
+				entityId: productId,
+				details: `Deleted product from inventory list`
+			});
+		} catch (e) {
+			console.error('Failed to delete product:', e);
+			return fail(500, { error: 'Database error' });
+		}
+
+		return { deleteSuccess: true };
+	}
 };

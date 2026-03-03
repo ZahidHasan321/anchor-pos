@@ -49,6 +49,7 @@ export const products = pgTable(
 		description: text('description'),
 		category: text('category').notNull(),
 		templatePrice: doublePrecision('base_price').notNull(),
+		costPrice: doublePrecision('cost_price').default(0),
 		defaultDiscount: doublePrecision('default_discount').default(0),
 		imageUrl: text('image_url')
 	},

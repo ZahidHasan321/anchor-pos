@@ -13,7 +13,6 @@ export default defineConfig({
 			'jose',
 			'kysely',
 			'async-mutex',
-			'event-iterator',
 			'bson',
 			'jsbarcode',
 			/^@powersync\/.*/,

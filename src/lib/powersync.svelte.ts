@@ -1,6 +1,7 @@
-import { PowerSyncDatabase } from '@powersync/web';
 import { AppSchema } from './powersync-schema';
 import { browser } from '$app/environment';
+
+type PowerSyncDatabase = any;
 
 export class PowerSyncManager {
     db!: PowerSyncDatabase;
@@ -14,15 +15,6 @@ export class PowerSyncManager {
         this._readyPromise = new Promise((resolve) => {
             this._readyResolve = resolve;
         });
-
-        if (browser) {
-            this.db = new PowerSyncDatabase({
-                schema: AppSchema,
-                database: {
-                    dbFilename: 'powersync.db'
-                }
-            });
-        }
     }
 
     public static getInstance(): PowerSyncManager {
@@ -34,6 +26,14 @@ export class PowerSyncManager {
 
     async init() {
         if (!browser) return;
+
+        const { PowerSyncDatabase } = await import('@powersync/web');
+        this.db = new PowerSyncDatabase({
+            schema: AppSchema,
+            database: {
+                dbFilename: 'powersync.db'
+            }
+        });
 
         await this.db.init();
         console.log('PowerSync initialized');
@@ -111,7 +111,7 @@ export class PowerSyncManager {
     private async _waitForInitialSync() {
         try {
             // Check if we already have data (from a previous session's OPFS cache)
-            const count = await this.db.get<{ cnt: number }>('SELECT COUNT(*) as cnt FROM ps_oplog');
+            const count = await this.db.get('SELECT COUNT(*) as cnt FROM ps_oplog') as { cnt: number } | null;
             if (count && count.cnt > 0) {
                 this.ready = true;
                 this._readyResolve?.();
@@ -129,7 +129,7 @@ export class PowerSyncManager {
             // Poll for ready state
             const check = setInterval(async () => {
                 try {
-                    const count = await this.db.get<{ cnt: number }>('SELECT COUNT(*) as cnt FROM ps_oplog');
+                    const count = await this.db.get('SELECT COUNT(*) as cnt FROM ps_oplog') as { cnt: number } | null;
                     if (count && count.cnt > 0) {
                         this.ready = true;
                         this._readyResolve?.();

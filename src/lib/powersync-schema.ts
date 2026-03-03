@@ -8,6 +8,7 @@ export const AppSchema = new Schema([
       new Column({ name: 'description', type: ColumnType.TEXT }),
       new Column({ name: 'category', type: ColumnType.TEXT }),
       new Column({ name: 'base_price', type: ColumnType.REAL }),
+      new Column({ name: 'cost_price', type: ColumnType.REAL }),
       new Column({ name: 'default_discount', type: ColumnType.REAL }),
       new Column({ name: 'image_url', type: ColumnType.TEXT })
     ]

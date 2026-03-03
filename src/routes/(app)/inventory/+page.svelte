@@ -17,7 +17,8 @@
 		TrendingUp,
 		Eye,
 		X,
-		Printer
+		Printer,
+		Trash
 	} from '@lucide/svelte';
 	import { formatCurrency } from '$lib/format';
 	import { goto } from '$app/navigation';
@@ -25,10 +26,23 @@
 	import { createDebounced } from '$lib/debounce.svelte';
 	import { powersync } from '$lib/powersync.svelte';
 	import { browser } from '$app/environment';
+	import { enhance } from '$app/forms';
+	import { confirmState } from '$lib/confirm.svelte';
+	import { toast } from 'svelte-sonner';
 
-	let { data } = $props();
+	let { data, form } = $props();
 
 	const isNative = $derived(browser && !!(window as any).electron);
+	const isAdmin = $derived(data.user?.role === 'admin');
+
+	$effect(() => {
+		if (form?.deleteSuccess) {
+			toast.success('Product deleted successfully');
+		}
+		if (form?.error) {
+			toast.error(form.error);
+		}
+	});
 
 	let nativeData = $state<any>(null);
 
@@ -421,9 +435,37 @@
 								</Table.Cell>
 								<Table.Cell class="text-right"
 									><div class="flex justify-end gap-1">
-										<Button variant="ghost" size="icon" href="/inventory/${product.id}/labels"
+										<Button variant="ghost" size="icon" href="/inventory/{product.id}/labels"
+											onclick={(e: MouseEvent) => e.stopPropagation()}
 											><Printer class="h-4 w-4" /></Button
 										>
+										{#if isAdmin}
+											<form method="POST" action="?/deleteProduct" use:enhance={() => {
+												return async ({ update }) => { await update(); if (isNative) loadNativeInventory(); };
+											}}>
+												<input type="hidden" name="productId" value={product.id} />
+												<Button
+													variant="ghost"
+													size="icon"
+													type="button"
+													class="text-muted-foreground hover:text-destructive"
+													onclick={async (e: MouseEvent) => {
+														e.stopPropagation();
+														const formEl = (e.currentTarget as HTMLElement).closest('form');
+														if (await confirmState.confirm({
+															title: 'Delete Product',
+															message: `Delete "${product.name}" and all its variants? This cannot be undone.`,
+															confirmText: 'Delete',
+															variant: 'destructive'
+														})) {
+															formEl?.requestSubmit();
+														}
+													}}
+												>
+													<Trash class="h-4 w-4" />
+												</Button>
+											</form>
+										{/if}
 									</div></Table.Cell
 								>
 							</Table.Row>
@@ -495,9 +537,35 @@
 									</Table.Cell>
 									<Table.Cell class="text-right"
 										><div class="flex justify-end gap-1">
-											<Button variant="ghost" size="icon" href="/inventory/${product.id}/labels"
+											<Button variant="ghost" size="icon" href="/inventory/{product.id}/labels"
+												onclick={(e: MouseEvent) => e.stopPropagation()}
 												><Printer class="h-4 w-4" /></Button
 											>
+											{#if isAdmin}
+												<form method="POST" action="?/deleteProduct" use:enhance>
+													<input type="hidden" name="productId" value={product.id} />
+													<Button
+														variant="ghost"
+														size="icon"
+														type="button"
+														class="text-muted-foreground hover:text-destructive"
+														onclick={async (e: MouseEvent) => {
+															e.stopPropagation();
+															const formEl = (e.currentTarget as HTMLElement).closest('form');
+															if (await confirmState.confirm({
+																title: 'Delete Product',
+																message: `Delete "${product.name}" and all its variants? This cannot be undone.`,
+																confirmText: 'Delete',
+																variant: 'destructive'
+															})) {
+																formEl?.requestSubmit();
+															}
+														}}
+													>
+														<Trash class="h-4 w-4" />
+													</Button>
+												</form>
+											{/if}
 										</div></Table.Cell
 									>
 								</Table.Row>

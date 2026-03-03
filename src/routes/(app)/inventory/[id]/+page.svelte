@@ -8,7 +8,6 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
-	import { Checkbox } from '$lib/components/ui/checkbox';
 	import {
 		ArrowLeft,
 		Plus,
@@ -423,11 +422,26 @@
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div>
-							<p class="text-xs text-muted-foreground">Base Price</p>
+							<p class="text-xs text-muted-foreground">Selling Price</p>
 							<p class="text-xl font-bold break-words break-all">
 								{formatCurrency(data.product.templatePrice)}
 							</p>
 						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">Cost / Buying Price</p>
+							<p class="text-lg font-bold break-words break-all">
+								{formatCurrency(data.product.costPrice ?? 0)}
+							</p>
+						</div>
+						{#if data.product.costPrice && data.product.costPrice > 0}
+							<div>
+								<p class="text-xs text-muted-foreground">Profit Margin</p>
+								<p class="font-medium text-emerald-600 dark:text-emerald-400">
+									{formatCurrency(data.product.templatePrice - data.product.costPrice)}
+									({Math.round(((data.product.templatePrice - data.product.costPrice) / data.product.templatePrice) * 100)}%)
+								</p>
+							</div>
+						{/if}
 						<div>
 							<p class="text-xs text-muted-foreground">Default Discount</p>
 							<p class="font-medium">{data.product.defaultDiscount}%</p>
@@ -624,14 +638,13 @@
 				{#if availableSizes.length > 0}
 					<div class="flex flex-wrap gap-3">
 						{#each availableSizes as size}
-							<div class="flex items-center space-x-2">
-								<Checkbox
-									id="variant-size-{size}"
-									checked={variantSelectedSizes.includes(size)}
-									onCheckedChange={() => toggleVariantSize(size)}
-								/>
-								<Label for="variant-size-{size}" class="cursor-pointer text-sm">{size}</Label>
-							</div>
+							<button
+								type="button"
+								class="flex cursor-pointer items-center space-x-2 rounded-md border px-3 py-1.5 text-sm transition-colors {variantSelectedSizes.includes(size) ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border hover:bg-muted'}"
+								onclick={() => toggleVariantSize(size)}
+							>
+								{size}
+							</button>
 						{/each}
 					</div>
 				{:else}

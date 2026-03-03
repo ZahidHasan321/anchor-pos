@@ -7,7 +7,6 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import * as Card from '$lib/components/ui/card';
 	import * as Select from '$lib/components/ui/select';
-	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { ArrowLeft, Loader2, X, Plus } from '@lucide/svelte';
 	import { getCurrencySymbol } from '$lib/format';
 	import { toast } from 'svelte-sonner';
@@ -137,7 +136,7 @@
 
 						<div class="grid gap-4 sm:grid-cols-2">
 							<div class="space-y-2">
-								<Label for="templatePrice">Base Price ({getCurrencySymbol()})</Label>
+								<Label for="templatePrice">Selling Price ({getCurrencySymbol()})</Label>
 								<Input
 									id="templatePrice"
 									name="templatePrice"
@@ -152,17 +151,32 @@
 								{/if}
 							</div>
 							<div class="space-y-2">
-								<Label for="defaultDiscount">Default Discount (%)</Label>
+								<Label for="costPrice">Cost / Buying Price ({getCurrencySymbol()})</Label>
 								<Input
-									id="defaultDiscount"
-									name="defaultDiscount"
+									id="costPrice"
+									name="costPrice"
 									type="number"
 									step="0.01"
-									placeholder="0"
-									value={(form?.data?.defaultDiscount as string) ?? ''}
+									placeholder="0.00"
+									value={(form?.data?.costPrice as string) ?? ''}
 									class="h-11"
 								/>
+								{#if form?.errors?.costPrice}
+									<p class="text-sm text-destructive">{form.errors.costPrice}</p>
+								{/if}
 							</div>
+						</div>
+						<div class="space-y-2">
+							<Label for="defaultDiscount">Default Discount (%)</Label>
+							<Input
+								id="defaultDiscount"
+								name="defaultDiscount"
+								type="number"
+								step="0.01"
+								placeholder="0"
+								value={(form?.data?.defaultDiscount as string) ?? ''}
+								class="h-11"
+							/>
 						</div>
 					</div>
 				</div>
@@ -190,21 +204,15 @@
 						</div>
 					</div>
 
-					<div class="flex flex-wrap gap-x-6 gap-y-3">
+					<div class="flex flex-wrap gap-2">
 						{#each SIZE_TEMPLATES[selectedTemplate as keyof typeof SIZE_TEMPLATES] as size}
-							<div class="flex items-center space-x-2">
-								<Checkbox
-									id="size-{size}"
-									checked={size in sizeQuantities}
-									onCheckedChange={() => toggleSize(size)}
-								/>
-								<Label
-									for="size-{size}"
-									class="cursor-pointer text-sm leading-none font-semibold peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-								>
-									{size}
-								</Label>
-							</div>
+							<button
+								type="button"
+								class="cursor-pointer rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors {size in sizeQuantities ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'}"
+								onclick={() => toggleSize(size)}
+							>
+								{size}
+							</button>
 						{/each}
 					</div>
 

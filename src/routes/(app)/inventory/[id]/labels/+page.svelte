@@ -42,7 +42,7 @@
   .label:last-child { page-break-after: auto; }
   .product-name { font-size: 8px; font-weight: bold; text-align: center; margin-bottom: 1mm; }
   .variant-info { font-size: 7px; text-align: center; }
-  .price { font-size: 9px; font-weight: bold; margin-top: 1mm; }
+  .price { font-size: 11px; font-weight: bold; margin-top: 1mm; }
   svg { max-width: 44mm; }
   @media print { body { -webkit-print-color-adjust: exact; } }
 </style></head><body>${labelContainer.innerHTML}</body></html>`;
@@ -74,7 +74,7 @@
   }
   .product-name { font-size: 8px; font-weight: bold; text-align: center; margin-bottom: 1mm; }
   .variant-info { font-size: 7px; text-align: center; }
-  .price { font-size: 9px; font-weight: bold; margin-top: 1mm; }
+  .price { font-size: 11px; font-weight: bold; margin-top: 1mm; }
   svg { max-width: 44mm; }
   @media print { body { -webkit-print-color-adjust: exact; } }
 </style></head><body>${element.outerHTML}</body></html>`;
@@ -137,7 +137,7 @@
 				<div class="variant-info" style="font-size: 7px; text-align: center;">
 					Size: {variant.size}{variant.color ? ` | Color: ${variant.color}` : ''}
 				</div>
-				<div class="price" style="font-size: 9px; font-weight: bold; margin-top: 1mm;">
+				<div class="price" style="font-size: 11px; font-weight: bold; margin-top: 1mm;">
 					{formatCurrency(variant.price)}
 				</div>
 			</div>
