@@ -40,13 +40,15 @@ jobs:
 
       - name: Create Electron .env
         shell: bash
+        env:
+          PS_PUBLIC_KEY: ${{ secrets.POWERSYNC_PUBLIC_KEY }}
         run: |
-          cat > .env << 'EOF'
-          POWERSYNC_URL=https://powersync.anchorshop.cloud
-          POWERSYNC_API_URL=https://anchorshop.cloud
-          APP_SECRET_HEADER=auto-pos-secret-handshake-2026
-          POWERSYNC_PUBLIC_KEY=${{ secrets.POWERSYNC_PUBLIC_KEY }}
-          EOF
+          {
+            echo "POWERSYNC_URL=https://powersync.anchorshop.cloud"
+            echo "POWERSYNC_API_URL=https://anchorshop.cloud"
+            echo "APP_SECRET_HEADER=auto-pos-secret-handshake-2026"
+            printf 'POWERSYNC_PUBLIC_KEY=%s\n' "$PS_PUBLIC_KEY"
+          } > .env
 
       - name: Build and Package
         uses: nick-fields/retry@v3

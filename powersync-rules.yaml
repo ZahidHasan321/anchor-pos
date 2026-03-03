@@ -1,7 +1,7 @@
 bucket_definitions:
   global:
     data:
-      - SELECT id, name, description, category, base_price, default_discount, image_url
+      - SELECT id, name, description, category, base_price, cost_price, default_discount, image_url
           FROM products
 
       - SELECT id, product_id, size, color, barcode, stock_quantity, price, discount
@@ -25,7 +25,7 @@ bucket_definitions:
             payment_method, discount_amount, cash_received, change_given,
             created_at::text AS created_at FROM orders
 
-      - SELECT id, order_id, variant_id, quantity, price_at_sale, discount,
+      - SELECT id, order_id, variant_id, quantity, price_at_sale, cost_at_sale, discount,
             product_name, variant_label, status FROM order_items
 
       - SELECT id, variant_id, change_amount, reason, user_id,

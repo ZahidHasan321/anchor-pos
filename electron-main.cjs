@@ -2,8 +2,10 @@
 const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog, powerSaveBlocker, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
-// Disable hardware acceleration to prevent GPU crashes on Linux VMs/Wayland
-app.disableHardwareAcceleration();
+// Disable hardware acceleration on Linux to prevent GPU crashes on VMs/Wayland
+if (process.platform === 'linux') {
+    app.disableHardwareAcceleration();
+}
 
 // Custom User Agent to hide Electron and look like a standard browser
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
@@ -138,6 +140,7 @@ if (!process.env.POWERSYNC_API_URL) {
     process.env.POWERSYNC_API_URL = 'https://anchorshop.cloud';
 }
 process.env.BUILD_TARGET = 'electron';
+process.env.ELECTRON_USER_DATA = app.getPath('userData');
 
 let mainWindow;
 let splashWindow;

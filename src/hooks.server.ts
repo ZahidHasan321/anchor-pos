@@ -7,6 +7,7 @@ import { generateId } from '$lib/utils';
 import { eq } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { jwtVerify, importJWK } from 'jose';
+import { getLocalPublicKey } from '$lib/server/offline-auth';
 
 const IS_ELECTRON = process.env.BUILD_TARGET === 'electron';
 
@@ -80,38 +81,53 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.session = null;
 	} else if (IS_ELECTRON) {
 		// OFFLINE-SAFE JWT VALIDATION FOR ELECTRON
-		try {
-			const publicKey = await getPublicKey();
-			if (!publicKey) {
-				console.error('[hooks] No public key available for JWT validation');
-				event.locals.user = null;
-				event.locals.session = null;
-			} else {
-				const { payload } = await jwtVerify(token, publicKey, {
-					audience: 'pos-electron',
-				});
+		// Tries VPS public key first, then local offline key
+		let payload: any = null;
 
-				event.locals.user = {
-					id: payload.sub!,
-					username: payload.username as string,
-					role: payload.role as any,
-					name: payload.name as string,
-					email: payload.email as string || null,
-					phone: payload.phone as string || null,
-					imageUrl: payload.image_url as string || null,
-					theme: payload.theme as any || 'system'
-				};
-				event.locals.session = {
-					id: 'jwt-session',
-					userId: payload.sub!,
-					expiresAt: new Date((payload.exp || 0) * 1000)
-				};
+		// Try VPS-issued JWT
+		const vpsKey = await getPublicKey();
+		if (vpsKey) {
+			try {
+				const result = await jwtVerify(token, vpsKey, { audience: 'pos-electron' });
+				payload = result.payload;
+			} catch {
+				// VPS key didn't work — might be an offline-signed JWT
 			}
-		} catch (e) {
-			console.warn('[hooks] JWT validation failed:', e);
+		}
+
+		// Try locally-signed offline JWT
+		if (!payload) {
+			const localKey = await getLocalPublicKey();
+			if (localKey) {
+				try {
+					const result = await jwtVerify(token, localKey, { audience: 'pos-electron' });
+					payload = result.payload;
+				} catch {
+					// Neither key worked
+				}
+			}
+		}
+
+		if (payload) {
+			event.locals.user = {
+				id: payload.sub!,
+				username: payload.username as string,
+				role: payload.role as any,
+				name: payload.name as string,
+				email: payload.email as string || null,
+				phone: payload.phone as string || null,
+				imageUrl: payload.image_url as string || null,
+				theme: payload.theme as any || 'system'
+			};
+			event.locals.session = {
+				id: 'jwt-session',
+				userId: payload.sub!,
+				expiresAt: new Date((payload.exp || 0) * 1000)
+			};
+		} else {
+			console.warn('[hooks] JWT validation failed with both VPS and local keys');
 			event.locals.user = null;
 			event.locals.session = null;
-			// Clear invalid cookie
 			event.cookies.delete('session', { path: '/' });
 		}
 	} else {
@@ -182,8 +198,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 			"font-src 'self' data:; " +
 			"connect-src 'self' https://* wss://* http://localhost:* http://127.0.0.1:* ws://*; " +
 			"worker-src 'self' blob:; " +
-			"frame-ancestors 'none'; " +
-			'upgrade-insecure-requests;'
+			"frame-ancestors 'none';" +
+			(IS_ELECTRON ? '' : ' upgrade-insecure-requests;')
 	);
 
 	response.headers.set('X-Frame-Options', 'DENY');

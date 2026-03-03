@@ -11,6 +11,7 @@ import {
 } from '$lib/server/auth';
 import { logAuditEvent } from '$lib/server/audit';
 import { getDefaultRedirect } from '$lib/server/permissions';
+import { cacheCredentials, attemptOfflineLogin } from '$lib/server/offline-auth';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (locals.user) {
@@ -32,7 +33,7 @@ export const actions: Actions = {
 		const isElectron = process.env.BUILD_TARGET === 'electron';
 
 		if (isElectron) {
-			// In Electron: proxy auth to the VPS, get a JWT back
+			// In Electron: try VPS first, fall back to offline cached credentials
 			try {
 				const vpsUrl = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
 				const controller = new AbortController();
@@ -58,18 +59,40 @@ export const actions: Actions = {
 
 				const { token, expiresAt } = await res.json();
 
-				setSessionTokenCookie(event, token, new Date(expiresAt));
-
-				// We need to decode the token just to get the role for redirect
-				// This doesn't need signature verification here as we just got it from VPS
+				// Decode token to extract user payload for caching
 				const parts = token.split('.');
 				const payload = JSON.parse(atob(parts[1]));
+
+				// Cache credentials for offline login
+				cacheCredentials(username, password, {
+					sub: payload.sub,
+					username: payload.username,
+					role: payload.role,
+					name: payload.name,
+					email: payload.email || '',
+					phone: payload.phone || '',
+					image_url: payload.image_url || '',
+					is_active: true,
+					theme: payload.theme || 'system',
+				});
+
+				setSessionTokenCookie(event, token, new Date(expiresAt));
 
 				throw redirect(303, await getDefaultRedirect(payload.role));
 			} catch (e: any) {
 				if (e.status === 303) throw e;
-				console.error('[Login] Remote auth failed:', e);
-				return fail(500, { error: 'Connection to authentication server failed. Are you online?', username });
+				console.warn('[Login] VPS unreachable, trying offline login...', e.message);
+
+				// Fallback: offline login with cached credentials
+				const offlineResult = await attemptOfflineLogin(username, password);
+				if (offlineResult) {
+					setSessionTokenCookie(event, offlineResult.token, offlineResult.expiresAt);
+					const parts = offlineResult.token.split('.');
+					const payload = JSON.parse(atob(parts[1]));
+					throw redirect(303, await getDefaultRedirect(payload.role));
+				}
+
+				return fail(500, { error: 'No internet connection and no cached login found. Please connect to the internet for first-time login.', username });
 			}
 		}
 

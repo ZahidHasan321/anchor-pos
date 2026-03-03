@@ -433,6 +433,12 @@
 								{formatCurrency(data.product.costPrice ?? 0)}
 							</p>
 						</div>
+						<div>
+							<p class="text-xs text-muted-foreground">Total Stock Value (At Cost)</p>
+							<p class="text-lg font-bold break-words break-all text-indigo-600 dark:text-indigo-400">
+								{formatCurrency((data.product.costPrice ?? 0) * totalStock)}
+							</p>
+						</div>
 						{#if data.product.costPrice && data.product.costPrice > 0}
 							<div>
 								<p class="text-xs text-muted-foreground">Profit Margin</p>

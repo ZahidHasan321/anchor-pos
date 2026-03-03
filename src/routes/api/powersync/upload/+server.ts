@@ -5,12 +5,48 @@ import { eq, sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-    if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+    // Allow Electron clients to authenticate via app secret header (for proxied uploads)
+    let userId = locals.user?.id;
+    if (!userId) {
+        const appSecret = request.headers.get('x-app-secret');
+        const expectedSecret = process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026';
+        const headerUserId = request.headers.get('x-user-id');
+        if (appSecret === expectedSecret && headerUserId) {
+            userId = headerUserId;
+        } else {
+            return json({ error: 'Unauthorized' }, { status: 401 });
+        }
+    }
 
     const { mutations } = await request.json();
 
     if (!db) {
-        return json({ success: true, message: 'Offline mode: Changes kept locally' });
+        // In Electron mode: proxy upload to the VPS which has Postgres
+        const isElectron = process.env.BUILD_TARGET === 'electron';
+        if (isElectron) {
+            try {
+                const vpsUrl = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
+                const res = await fetch(`${vpsUrl}/api/powersync/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-app-secret': process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026',
+                        'x-user-id': userId!,
+                    },
+                    body: JSON.stringify({ mutations })
+                });
+                if (res.ok) {
+                    return json({ success: true });
+                }
+                // VPS unreachable or returned error — let PowerSync retry later
+                return json({ error: 'VPS upload failed' }, { status: 503 });
+            } catch {
+                // Network error — PowerSync will keep mutations in queue and retry
+                return json({ error: 'VPS unreachable' }, { status: 503 });
+            }
+        }
+        // No DB and not Electron — nothing we can do
+        return json({ error: 'No database connection' }, { status: 503 });
     }
 
     try {

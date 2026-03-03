@@ -61,7 +61,7 @@
 			SELECT COUNT(DISTINCT p.id) as totalProducts, COUNT(pv.id) as totalVariants,
 				SUM(CASE WHEN pv.stock_quantity > 0 AND pv.stock_quantity <= 5 THEN 1 ELSE 0 END) as lowStockVariants,
 				SUM(CASE WHEN pv.stock_quantity = 0 THEN 1 ELSE 0 END) as outOfStockVariants,
-				COALESCE(SUM(pv.price * pv.stock_quantity), 0) as totalInventoryValue
+				COALESCE(SUM(COALESCE(p.cost_price, 0) * pv.stock_quantity), 0) as totalInventoryValue
 			FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id
 		`);
 

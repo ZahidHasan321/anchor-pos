@@ -1,4 +1,4 @@
-import { Schema, Table, Column, ColumnType } from '@powersync/web';
+import { Schema, Table, Column, ColumnType } from '@powersync/common';
 
 export const AppSchema = new Schema([
   new Table({

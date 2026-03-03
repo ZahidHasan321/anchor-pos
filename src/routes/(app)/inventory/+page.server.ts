@@ -71,7 +71,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 						totalVariants: sql<number>`COUNT(${productVariants.id})`,
 						lowStockVariants: sql<number>`SUM(CASE WHEN ${productVariants.stockQuantity} > 0 AND ${productVariants.stockQuantity} <= ${threshold} THEN 1 ELSE 0 END)`,
 						outOfStockVariants: sql<number>`SUM(CASE WHEN ${productVariants.stockQuantity} = 0 THEN 1 ELSE 0 END)`,
-						totalInventoryValue: sql<number>`COALESCE(SUM(${productVariants.price} * ${productVariants.stockQuantity}), 0)`
+						totalInventoryValue: sql<number>`COALESCE(SUM(coalesce(${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`
 					})
 					.from(productVariants)
 					.innerJoin(products, eq(productVariants.productId, products.id)),
