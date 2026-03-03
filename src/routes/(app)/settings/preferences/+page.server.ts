@@ -30,19 +30,11 @@ export const actions: Actions = {
 
 		const data = await request.formData();
 		const keys = [
-			'store_name',
-			'store_address',
-			'store_phone',
-			'store_email',
-			'store_website',
-			'store_tax_id',
-			'receipt_footer',
-			'return_policy',
-			'exchange_policy',
-			'terms_conditions',
-			'store_facebook',
-			'store_instagram',
-			'store_bin'
+			'low_stock_threshold',
+			'tax_enabled',
+			'tax_rate',
+			'sd_enabled',
+			'sd_rate'
 		];
 
 		try {
@@ -59,12 +51,12 @@ export const actions: Actions = {
 			await logAuditEvent({
 				userId: locals.user!.id,
 				userName: locals.user!.name,
-				action: 'UPDATE_SETTINGS',
+				action: 'UPDATE_PREFERENCES',
 				entity: 'store_settings',
-				details: 'Updated store contact info and receipt settings'
+				details: 'Updated application preferences (stock threshold, tax settings)'
 			});
 		} catch (e) {
-			console.error('Failed to update settings:', e);
+			console.error('Failed to update preferences:', e);
 			return fail(500, { error: 'Database error' });
 		}
 

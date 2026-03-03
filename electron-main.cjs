@@ -16,6 +16,7 @@ const portfinder = require('portfinder');
 const dotenv = require('dotenv');
 const { pathToFileURL } = require('url');
 const log = require('electron-log');
+const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } = require('node-thermal-printer');
 
 // --- Power Management ---
 let powerBlockerId = null;
@@ -402,6 +403,177 @@ async function createWindow() {
         allowSleep();
     });
 }
+
+// Helper: resolve character set from config key
+function resolveCharacterSet(key) {
+    const map = {
+        'PC437_USA': CharacterSet.PC437_USA,
+        'PC850_MULTILINGUAL': CharacterSet.PC850_MULTILINGUAL,
+        'PC852_LATIN2': CharacterSet.PC852_LATIN2,
+        'PC858_EURO': CharacterSet.PC858_EURO,
+        'WPC1252': CharacterSet.WPC1252,
+    };
+    return map[key] || CharacterSet.PC437_USA;
+}
+
+// Helper: create a ThermalPrinter instance from config
+function createThermalPrinter(config) {
+    const width = config.paperWidth === '58' ? 32 : 48; // 58mm = 32 chars, 80mm = 48 chars
+    return new ThermalPrinter({
+        type: config.type === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON,
+        interface: config.interface,
+        characterSet: resolveCharacterSet(config.characterSet),
+        removeSpecialCharacters: false,
+        breakLine: BreakLine.WORD,
+        width: width,
+        options: {
+            timeout: 5000
+        }
+    });
+}
+
+// IPC handler: test thermal printer connection
+ipcMain.handle('test-thermal-print', async (event, config) => {
+    try {
+        const printer = createThermalPrinter(config);
+
+        const isConnected = await printer.isPrinterConnected();
+        if (!isConnected) {
+            return { success: false, error: 'Printer is not connected or reachable at ' + config.interface };
+        }
+
+        printer.alignCenter();
+        printer.bold(true);
+        printer.println('=== THERMAL TEST ===');
+        printer.bold(false);
+        printer.setTextNormal();
+        printer.println('Connection: OK');
+        printer.println('Interface: ' + config.interface);
+        printer.println('Paper: ' + (config.paperWidth === '58' ? '58mm' : '80mm'));
+        printer.println('Type: ' + (config.type === 'star' ? 'Star' : 'ESC/POS'));
+        printer.drawLine();
+        printer.println('ABCDabcd1234!@#$');
+        printer.println('Thermal test passed.');
+        printer.drawLine();
+        printer.cut();
+
+        await printer.execute();
+        return { success: true };
+    } catch (e) {
+        log.error('Thermal test print failed:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// IPC handler: print raw thermal receipt via node-thermal-printer
+ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
+    try {
+        const printer = createThermalPrinter(config);
+
+        const isConnected = await printer.isPrinterConnected();
+        if (!isConnected) {
+            return { success: false, error: 'Printer is not connected or reachable at ' + config.interface };
+        }
+
+        const s = data.storeSettings || {};
+        const storeName = s.store_name || 'STORE NAME';
+
+        printer.alignCenter();
+        printer.setTextSize(1, 1);
+        printer.bold(true);
+        printer.println(storeName.toUpperCase());
+        printer.setTextNormal();
+        printer.bold(false);
+
+        if (s.store_address) printer.println(s.store_address);
+        if (s.store_phone) printer.println('Phone: ' + s.store_phone);
+        if (s.store_email) printer.println(s.store_email);
+        if (s.store_website) printer.println(s.store_website);
+        if (s.store_tax_id) printer.println('VAT: ' + s.store_tax_id);
+        if (s.store_bin) printer.println('BIN: ' + s.store_bin);
+
+        printer.drawLine();
+        printer.alignLeft();
+        printer.println('Order: ' + data.orderId + (data.isReprint ? ' (REPRINT)' : ''));
+        printer.println('Date: ' + data.date);
+        printer.println('Cashier: ' + data.cashier);
+
+        printer.drawLine();
+
+        // Items Table
+        printer.tableCustom([
+            { text: "Item", align: "LEFT", width: 0.5 },
+            { text: "Qty", align: "CENTER", width: 0.15 },
+            { text: "Price", align: "RIGHT", width: 0.35 }
+        ]);
+
+        for (const item of data.items) {
+            printer.tableCustom([
+                { text: item.name, align: "LEFT", width: 0.5 },
+                { text: item.qty.toString(), align: "CENTER", width: 0.15 },
+                { text: item.total.toFixed(2), align: "RIGHT", width: 0.35 }
+            ]);
+            if (item.variant) {
+                printer.println('  Size: ' + item.variant);
+            }
+        }
+
+        printer.drawLine();
+
+        printer.tableCustom([
+            { text: "TOTAL", align: "LEFT", width: 0.5, bold: true },
+            { text: data.total.toFixed(2), align: "RIGHT", width: 0.5, bold: true }
+        ]);
+
+        if (data.cashReceived) {
+            printer.tableCustom([
+                { text: "Cash Received", align: "LEFT", width: 0.5 },
+                { text: data.cashReceived.toFixed(2), align: "RIGHT", width: 0.5 }
+            ]);
+            printer.tableCustom([
+                { text: "Change", align: "LEFT", width: 0.5 },
+                { text: data.changeGiven.toFixed(2), align: "RIGHT", width: 0.5 }
+            ]);
+        }
+
+        if (s.store_facebook || s.store_instagram) {
+            printer.println('');
+            printer.alignCenter();
+            if (s.store_facebook) printer.println('FB: ' + s.store_facebook);
+            if (s.store_instagram) printer.println('IG: ' + s.store_instagram);
+        }
+
+        if (s.return_policy || s.exchange_policy || s.terms_conditions) {
+            printer.drawLine();
+            printer.alignLeft();
+            if (s.return_policy) printer.println('Return: ' + s.return_policy);
+            if (s.exchange_policy) printer.println('Exchange: ' + s.exchange_policy);
+            if (s.terms_conditions) printer.println('T&C: ' + s.terms_conditions);
+        }
+
+        printer.println('');
+        printer.alignCenter();
+        if (s.receipt_footer) {
+            printer.println(s.receipt_footer);
+        } else {
+            printer.println('Thank you!');
+        }
+        printer.println('*** End of Receipt ***');
+
+        printer.cut();
+
+        // Open Cash Drawer if configured
+        if (config.openCashDrawer) {
+            printer.openCashDrawer();
+        }
+
+        await printer.execute();
+        return { success: true };
+    } catch (e) {
+        log.error('Thermal print failed:', e);
+        return { success: false, error: e.message };
+    }
+});
 
 // IPC handler: list available printers
 ipcMain.handle('get-printers', async () => {

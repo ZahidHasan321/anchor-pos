@@ -151,6 +151,7 @@
 		"jsbarcode": "^3.12.3",
 		"jsonwebtoken": "^9.0.3",
 		"kysely": "^0.28.11",
+		"node-thermal-printer": "^4.6.0",
 		"portfinder": "^1.0.38",
 		"postgres": "^3.4.8"
 	}

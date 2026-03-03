@@ -26,6 +26,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		todaySales: { count: 0, total: 0 },
 		monthlySales: { count: 0, total: 0 },
 		todayExpenses: { total: 0 },
+		todayProfit: 0,
 		inventoryValue: 0
 	};
 
@@ -38,7 +39,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			if (isElectron) return emptyStats;
 			if (!db) return emptyStats;
 
-			const [todaySales, monthlySales, todayExpenses, inventoryValue] = await Promise.all([
+			const [todaySales, monthlySales, todayExpenses, todayCogs, inventoryValue] = await Promise.all([
 				db
 					.select({
 						count: sql<number>`count(*)`,
@@ -59,15 +60,24 @@ export const load: PageServerLoad = async ({ locals }) => {
 					.where(and(eq(cashbook.type, 'out'), gte(cashbook.createdAt, today))),
 				db
 					.select({
-						total: sql<number>`coalesce(sum(${productVariants.price} * ${productVariants.stockQuantity}), 0)`
+						total: sql<number>`coalesce(sum(${orderItems.costAtSale} * ${orderItems.quantity}), 0)`
+					})
+					.from(orderItems)
+					.innerJoin(orders, eq(orderItems.orderId, orders.id))
+					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, today))),
+				db
+					.select({
+						total: sql<number>`coalesce(sum(coalesce(${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`
 					})
 					.from(productVariants)
+					.innerJoin(products, eq(productVariants.productId, products.id))
 			]);
 
 			return {
 				todaySales: todaySales[0],
 				monthlySales: monthlySales[0],
 				todayExpenses: todayExpenses[0],
+				todayProfit: (todaySales[0]?.total ?? 0) - (todayCogs[0]?.total ?? 0),
 				inventoryValue: inventoryValue[0]?.total ?? 0
 			};
 		})(),

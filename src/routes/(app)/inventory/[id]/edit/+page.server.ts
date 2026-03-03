@@ -45,6 +45,7 @@ export const actions: Actions = {
 				const normalizedCategory =
 					existingCategories.find((c: string) => c.toLowerCase() === category?.toLowerCase()) || category;
 
+		const costPrice = parseFloat(data.get('costPrice') as string) || 0;
 		const defaultDiscount = parseFloat(data.get('defaultDiscount') as string) || 0;
 		const description = (data.get('description') as string)?.trim() || null;
 
@@ -66,6 +67,7 @@ export const actions: Actions = {
 					description,
 					category: normalizedCategory,
 					templatePrice,
+					costPrice,
 					defaultDiscount
 				})
 				.where(eq(products.id, params.id));

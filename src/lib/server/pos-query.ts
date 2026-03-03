@@ -34,6 +34,7 @@ export async function queryVariants(search: string, category: string, limit = 50
 			barcode: productVariants.barcode,
 			category: products.category,
 			price: productVariants.price,
+			costPrice: products.costPrice,
 			discount: productVariants.discount,
 			stockQuantity: productVariants.stockQuantity
 		})

@@ -8,6 +8,7 @@ type CartItem = {
 	color: string | null;
 	barcode: string;
 	price: number;
+	costPrice: number;
 	discount: number | null;
 	quantity: number;
 	maxStock: number;

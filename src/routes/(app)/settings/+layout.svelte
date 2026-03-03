@@ -4,7 +4,8 @@
 		Store,
 		Users,
 		ClipboardList,
-		ShieldAlert
+		ShieldAlert,
+		Settings as SettingsIcon
 	} from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { fade } from 'svelte/transition';
@@ -12,7 +13,8 @@
 	let { children } = $props();
 
 	const navItems = [
-		{ label: 'Store Settings', href: '/settings', icon: Store },
+		{ label: 'Store Profile', href: '/settings', icon: Store },
+		{ label: 'Preferences', href: '/settings/preferences', icon: SettingsIcon },
 		{ label: 'User Management', href: '/settings/users', icon: Users },
 		{ label: 'Role Permissions', href: '/settings/permissions', icon: ShieldAlert },
 		{ label: 'Audit Log', href: '/settings/audit', icon: ClipboardList }

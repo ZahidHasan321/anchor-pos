@@ -16,6 +16,7 @@
 		Calendar,
 		ArrowUpCircle,
 		ArrowDownCircle,
+		TrendingUp,
 		Wallet,
 		Loader2,
 		ChevronLeft,
@@ -59,16 +60,32 @@
 			powersync.db.getAll(`
 				SELECT type, sum(amount) as total FROM cashbook
 				WHERE created_at >= ? AND created_at < ? GROUP BY type
+			`, [dateStart, dateEnd]),
+			powersync.db.get(`
+				SELECT coalesce(sum(oi.cost_at_sale * oi.quantity), 0) as total
+				FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id
+				WHERE o.status = 'completed' AND o.created_at >= ? AND o.created_at < ?
 			`, [dateStart, dateEnd])
-		]).then(([entries, totals]) => {
+		]).then(([entries, totals, cogs]) => {
 			const totalIn = (totals as any[]).find(t => t.type === 'in')?.total || 0;
 			const totalOut = (totals as any[]).find(t => t.type === 'out')?.total || 0;
-			nativeDailyData = { entries, summary: { totalIn, totalOut, net: totalIn - totalOut } };
+			const totalCogs = (cogs as any)?.total || 0;
+			const grossProfit = totalIn - totalCogs;
+			nativeDailyData = {
+				entries,
+				summary: {
+					totalIn,
+					totalOut,
+					net: totalIn - totalOut,
+					grossProfit,
+					netProfit: grossProfit - totalOut
+				}
+			};
 		});
 
 		// Expense descriptions
 		powersync.db.getAll("SELECT DISTINCT description FROM cashbook WHERE type = 'out'")
-			.then(rows => nativeExpenseDescriptions = (rows as any[]).map(r => r.description));
+			.then((rows: any) => nativeExpenseDescriptions = (rows as any[]).map(r => r.description));
 
 		// Transactions (if view is 'all')
 		if (data.view === 'all') {
@@ -270,10 +287,10 @@
 				{#if !isAllView}
 					<div class="space-y-6">
 						<!-- Summary Cards -->
-						<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
+						<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
 							{#if isNative}
 								{#if nativeDailyData === null}
-									{#each Array(3) as _}
+									{#each Array(4) as _}
 										<Card.Root class="space-y-2 p-4"
 											><Skeleton class="h-4 w-20" /><Skeleton class="h-8 w-full" /></Card.Root
 										>
@@ -297,7 +314,7 @@
 
 									<Card.Root class="border-l-4 border-l-red-500">
 										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Cash Out</Card.Title>
+											<Card.Title class="text-sm font-medium">Expenses</Card.Title>
 											<div class="rounded-full bg-red-100 p-2 dark:bg-red-500/20">
 												<ArrowDownCircle class="h-4 w-4 text-red-600 dark:text-red-400" />
 											</div>
@@ -311,21 +328,35 @@
 
 									<Card.Root class="border-l-4 border-l-blue-500">
 										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Net Cash</Card.Title>
+											<Card.Title class="text-sm font-medium">Gross Profit</Card.Title>
 											<div class="rounded-full bg-blue-100 p-2 dark:bg-blue-500/20">
 												<Wallet class="h-4 w-4 text-blue-600 dark:text-blue-400" />
 											</div>
 										</Card.Header>
 										<Card.Content>
 											<div class="text-2xl font-bold break-all text-blue-600 dark:text-blue-400">
-												{formatCurrency(nativeDailyData.summary.net)}
+												{formatCurrency(nativeDailyData.summary.grossProfit)}
+											</div>
+										</Card.Content>
+									</Card.Root>
+
+									<Card.Root class="border-l-4 border-l-indigo-500">
+										<Card.Header class="flex flex-row items-center justify-between pb-2">
+											<Card.Title class="text-sm font-medium">Net Profit</Card.Title>
+											<div class="rounded-full bg-indigo-100 p-2 dark:bg-indigo-500/20">
+												<TrendingUp class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+											</div>
+										</Card.Header>
+										<Card.Content>
+											<div class="text-2xl font-bold break-all text-indigo-600 dark:text-indigo-400">
+												{formatCurrency(nativeDailyData.summary.netProfit)}
 											</div>
 										</Card.Content>
 									</Card.Root>
 								{/if}
 							{:else}
 								{#await data.dailyData}
-									{#each Array(3) as _}
+									{#each Array(4) as _}
 										<Card.Root class="space-y-2 p-4"
 											><Skeleton class="h-4 w-20" /><Skeleton class="h-8 w-full" /></Card.Root
 										>
@@ -349,7 +380,7 @@
 
 									<Card.Root class="border-l-4 border-l-red-500">
 										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Cash Out</Card.Title>
+											<Card.Title class="text-sm font-medium">Expenses</Card.Title>
 											<div class="rounded-full bg-red-100 p-2 dark:bg-red-500/20">
 												<ArrowDownCircle class="h-4 w-4 text-red-600 dark:text-red-400" />
 											</div>
@@ -363,14 +394,28 @@
 
 									<Card.Root class="border-l-4 border-l-blue-500">
 										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Net Cash</Card.Title>
+											<Card.Title class="text-sm font-medium">Gross Profit</Card.Title>
 											<div class="rounded-full bg-blue-100 p-2 dark:bg-blue-500/20">
 												<Wallet class="h-4 w-4 text-blue-600 dark:text-blue-400" />
 											</div>
 										</Card.Header>
 										<Card.Content>
 											<div class="text-2xl font-bold break-all text-blue-600 dark:text-blue-400">
-												{formatCurrency(daily.summary.net)}
+												{formatCurrency(daily.summary.grossProfit)}
+											</div>
+										</Card.Content>
+									</Card.Root>
+
+									<Card.Root class="border-l-4 border-l-indigo-500">
+										<Card.Header class="flex flex-row items-center justify-between pb-2">
+											<Card.Title class="text-sm font-medium">Net Profit</Card.Title>
+											<div class="rounded-full bg-indigo-100 p-2 dark:bg-indigo-500/20">
+												<TrendingUp class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+											</div>
+										</Card.Header>
+										<Card.Content>
+											<div class="text-2xl font-bold break-all text-indigo-600 dark:text-indigo-400">
+												{formatCurrency(daily.summary.netProfit)}
 											</div>
 										</Card.Content>
 									</Card.Root>

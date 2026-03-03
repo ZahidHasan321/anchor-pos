@@ -56,6 +56,7 @@ export const AppSchema = new Schema([
       new Column({ name: 'variant_id', type: ColumnType.TEXT }),
       new Column({ name: 'quantity', type: ColumnType.INTEGER }),
       new Column({ name: 'price_at_sale', type: ColumnType.REAL }),
+      new Column({ name: 'cost_at_sale', type: ColumnType.REAL }),
       new Column({ name: 'discount', type: ColumnType.REAL }),
       new Column({ name: 'product_name', type: ColumnType.TEXT }),
       new Column({ name: 'variant_label', type: ColumnType.TEXT }),

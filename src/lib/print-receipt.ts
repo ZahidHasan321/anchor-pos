@@ -200,6 +200,33 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 
 	// --- Native Electron Printing ---
 	// @ts-ignore - window.electron is injected by preload script
+	if (typeof window !== 'undefined' && window.electron?.printThermalReceipt) {
+		const useThermal = localStorage.getItem('pos-use-thermal-printer') === 'true';
+		const thermalInterface = localStorage.getItem('pos-thermal-printer-interface') || '';
+		const thermalType = localStorage.getItem('pos-thermal-printer-type') || 'epson';
+		const openCashDrawer = localStorage.getItem('pos-thermal-printer-drawer') === 'true';
+		const paperWidth = localStorage.getItem('pos-thermal-printer-width') || '80';
+		const characterSet = localStorage.getItem('pos-thermal-printer-charset') || 'PC437_USA';
+
+		if (useThermal && thermalInterface && !preview) {
+			try {
+				// @ts-ignore
+				const result = await window.electron.printThermalReceipt(data, {
+					interface: thermalInterface,
+					type: thermalType,
+					openCashDrawer,
+					paperWidth,
+					characterSet
+				});
+				return result;
+			} catch (e) {
+				console.error('printThermalReceipt failed, falling back:', e);
+				// fall through to other methods
+			}
+		}
+	}
+
+	// @ts-ignore - window.electron is injected by preload script
 	if (typeof window !== 'undefined' && window.electron?.printToDevice) {
 		const savedPrinter = localStorage.getItem('pos-default-receipt-printer');
 		try {

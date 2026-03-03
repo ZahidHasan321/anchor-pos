@@ -5,7 +5,6 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Badge } from '$lib/components/ui/badge';
-	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -15,8 +14,6 @@
 		Phone,
 		MessageSquare,
 		Loader2,
-		Users,
-		ClipboardList,
 		Globe,
 		Mail,
 		FileText,
@@ -24,124 +21,20 @@
 		Printer,
 		Eye,
 		Pencil,
-		ShieldAlert,
 		Facebook,
 		Instagram,
-		Percent,
-		Package,
-		Receipt,
-		CircleDollarSign
+		Receipt
 	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { confirmState } from '$lib/confirm.svelte';
 	import { printReceipt } from '$lib/print-receipt';
 	import { formatCurrency, formatDateTime } from '$lib/format';
 	import { untrack } from 'svelte';
-	import * as Select from '$lib/components/ui/select';
 
 	let { data, form } = $props();
 	let loading = $state(false);
 	let isEditing = $state(false);
 	let showReceiptPreview = $state(false);
-
-	// --- Printer Settings (Electron only) ---
-	let isElectron = $state(false);
-	let printerList: Array<{ name: string; isDefault: boolean }> = $state([]);
-	let loadingPrinters = $state(false);
-	let defaultReceiptPrinter = $state('');
-	let defaultLabelPrinter = $state('');
-	let testPrintingReceipt = $state(false);
-	let testPrintingLabel = $state(false);
-
-	$effect(() => {
-		// @ts-ignore
-		isElectron = typeof window !== 'undefined' && !!window.electron?.getPrinters;
-		if (isElectron) {
-			defaultReceiptPrinter = localStorage.getItem('pos-default-receipt-printer') || '';
-			defaultLabelPrinter = localStorage.getItem('pos-default-label-printer') || '';
-			refreshPrinters();
-		}
-	});
-
-	async function refreshPrinters() {
-		loadingPrinters = true;
-		try {
-			// @ts-ignore
-			const printers = await window.electron.getPrinters();
-			printerList = printers.map((p: any) => ({ name: p.name, isDefault: p.isDefault }));
-		} catch (e) {
-			console.error('Failed to get printers:', e);
-			printerList = [];
-		}
-		loadingPrinters = false;
-	}
-
-	function saveReceiptPrinter(name: string) {
-		defaultReceiptPrinter = name;
-		if (name) {
-			localStorage.setItem('pos-default-receipt-printer', name);
-		} else {
-			localStorage.removeItem('pos-default-receipt-printer');
-		}
-		toast.success(name ? `Receipt printer set to "${name}"` : 'Receipt printer cleared');
-	}
-
-	function saveLabelPrinter(name: string) {
-		defaultLabelPrinter = name;
-		if (name) {
-			localStorage.setItem('pos-default-label-printer', name);
-		} else {
-			localStorage.removeItem('pos-default-label-printer');
-		}
-		toast.success(name ? `Label printer set to "${name}"` : 'Label printer cleared');
-	}
-
-	async function testReceiptPrint() {
-		testPrintingReceipt = true;
-		try {
-			const result = await printReceipt({
-				storeSettings: previewData,
-				orderId: '#TEST-RECEIPT',
-				date: formatDateTime(new Date()),
-				cashier: data.user?.name ?? 'Admin',
-				items: [
-					{ name: 'DUMMY PRODUCT', variant: 'Large / Black', qty: 1, total: 1200 },
-					{ name: 'SAMPLE ITEM', variant: 'Medium / Blue', qty: 2, total: 1600 }
-				],
-				total: 2800,
-				cashReceived: 3000,
-				changeGiven: 200
-			});
-			if (result && !result.success) {
-				toast.error(`Print failed: ${result.error}`);
-			} else if (result?.success) {
-				toast.success('Test receipt printed successfully');
-			}
-		} catch (e: any) {
-			toast.error(`Print error: ${e.message}`);
-		}
-		testPrintingReceipt = false;
-	}
-
-	async function testLabelPrint() {
-		testPrintingLabel = true;
-		const printerName = defaultLabelPrinter || '';
-		const html = `<!DOCTYPE html><html><head>
-<style>@page { size: 50.8mm 25.4mm; margin: 0; } body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: Arial, sans-serif; } .label { text-align: center; } .name { font-size: 10px; font-weight: bold; } .price { font-size: 14px; font-weight: bold; margin-top: 2mm; }</style>
-</head><body><div class="label"><div class="name">TEST LABEL</div><div class="price">$0.00</div></div></body></html>`;
-		try {
-			// @ts-ignore
-			const result = await window.electron.printToDevice(html, printerName, true);
-			if (result && !result.success) {
-				toast.error(`Label print failed: ${result.error}`);
-			} else if (result?.success) {
-				toast.success('Test label printed successfully');
-			}
-		} catch (e: any) {
-			toast.error(`Label print error: ${e.message}`);
-		}
-		testPrintingLabel = false;
-	}
 
 	// Local state for preview
 	let previewData = $state({
@@ -155,14 +48,9 @@
 		return_policy: '',
 		exchange_policy: '',
 		terms_conditions: '',
-		tax_enabled: 'false',
-		tax_rate: '0',
-		sd_enabled: 'false',
-		sd_rate: '0',
 		store_facebook: '',
 		store_instagram: '',
-		store_bin: '',
-		low_stock_threshold: '5'
+		store_bin: ''
 	});
 
 	$effect(() => {
@@ -179,17 +67,11 @@
 				return_policy: settings.return_policy || '',
 				exchange_policy: settings.exchange_policy || '',
 				terms_conditions: settings.terms_conditions || '',
-				tax_enabled: settings.tax_enabled || 'false',
-				tax_rate: settings.tax_rate || '0',
-				sd_enabled: settings.sd_enabled || 'false',
-				sd_rate: settings.sd_rate || '0',
 				store_facebook: settings.store_facebook || '',
 				store_instagram: settings.store_instagram || '',
-				store_bin: settings.store_bin || '',
-				low_stock_threshold: settings.low_stock_threshold || '5'
+				store_bin: settings.store_bin || ''
 			};
 
-			// Auto-enable editing if store name is empty
 			if (!previewData.store_name) {
 				isEditing = true;
 			}
@@ -198,14 +80,14 @@
 
 	$effect(() => {
 		if (form?.success) {
-			toast.success('Settings updated successfully');
+			toast.success('Store profile updated successfully');
 			isEditing = false;
 		}
 	});
 
 	async function printTestReceipt() {
 		const result = await printReceipt({
-			storeSettings: previewData,
+			storeSettings: { ...data.settings, ...previewData },
 			orderId: '#TEST-RECEIPT',
 			date: formatDateTime(new Date()),
 			cashier: data.user?.name ?? 'Admin',
@@ -262,562 +144,326 @@
 	}}
 	class="space-y-5"
 >
-		<!-- ==================== STORE IDENTITY ==================== -->
-		<Card.Root>
-			<Card.Header class="px-4 pb-4 sm:px-6">
-				<div class="flex items-center gap-2.5">
-					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-						<Store class="h-4 w-4 text-primary" />
-					</div>
-					<div>
-						<Card.Title class="text-sm sm:text-base">Store Identity</Card.Title>
-						<Card.Description class="text-xs sm:text-sm">
-							Your store name, address, and contact details.
-						</Card.Description>
-					</div>
+	<!-- ==================== STORE IDENTITY ==================== -->
+	<Card.Root>
+		<Card.Header class="px-4 pb-4 sm:px-6">
+			<div class="flex items-center gap-2.5">
+				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+					<Store class="h-4 w-4 text-primary" />
 				</div>
-			</Card.Header>
-			<Card.Content class="space-y-4 px-4 sm:px-6">
-				<div class="grid gap-4 sm:grid-cols-2">
-					<div class="space-y-2">
-						<Label for="store_name">Store Name <span class="text-red-500">*</span></Label>
-						<div class="relative">
-							<Store
-								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-							/>
-							<Input
-								id="store_name"
-								name="store_name"
-								class="pl-10"
-								placeholder="Your Store Name"
-								bind:value={previewData.store_name}
-								readonly={!isEditing}
-								required
-							/>
-						</div>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="store_phone">Phone Number</Label>
-						<div class="relative">
-							<Phone
-								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-							/>
-							<Input
-								id="store_phone"
-								name="store_phone"
-								class="pl-10"
-								placeholder="01XXXXXXXXX"
-								bind:value={previewData.store_phone}
-								readonly={!isEditing}
-							/>
-						</div>
-					</div>
+				<div>
+					<Card.Title class="text-sm sm:text-base">Store Identity</Card.Title>
+					<Card.Description class="text-xs sm:text-sm">
+						Your store name, address, and contact details.
+					</Card.Description>
 				</div>
-
+			</div>
+		</Card.Header>
+		<Card.Content class="space-y-4 px-4 sm:px-6">
+			<div class="grid gap-4 sm:grid-cols-2">
 				<div class="space-y-2">
-					<Label for="store_address">Physical Address</Label>
+					<Label for="store_name">Store Name <span class="text-red-500">*</span></Label>
 					<div class="relative">
-						<MapPin class="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
-						<Textarea
-							id="store_address"
-							name="store_address"
-							class="min-h-[72px] pl-10"
-							placeholder="123 Store Address, City, Country"
-							bind:value={previewData.store_address}
-							readonly={!isEditing}
-						/>
-					</div>
-				</div>
-
-				<div class="grid gap-4 sm:grid-cols-2">
-					<div class="space-y-2">
-						<Label for="store_email">Email Address</Label>
-						<div class="relative">
-							<Mail
-								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-							/>
-							<Input
-								id="store_email"
-								name="store_email"
-								type="email"
-								class="pl-10"
-								placeholder="store@example.com"
-								bind:value={previewData.store_email}
-								readonly={!isEditing}
-							/>
-						</div>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="store_website">Website URL</Label>
-						<div class="relative">
-							<Globe
-								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-							/>
-							<Input
-								id="store_website"
-								name="store_website"
-								class="pl-10"
-								placeholder="www.yourstore.com"
-								bind:value={previewData.store_website}
-								readonly={!isEditing}
-							/>
-						</div>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="store_facebook">Facebook Page</Label>
-						<div class="relative">
-							<Facebook
-								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-							/>
-							<Input
-								id="store_facebook"
-								name="store_facebook"
-								class="pl-10"
-								placeholder="facebook.com/yourstore"
-								bind:value={previewData.store_facebook}
-								readonly={!isEditing}
-							/>
-						</div>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="store_instagram">Instagram Profile</Label>
-						<div class="relative">
-							<Instagram
-								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-							/>
-							<Input
-								id="store_instagram"
-								name="store_instagram"
-								class="pl-10"
-								placeholder="@yourstore"
-								bind:value={previewData.store_instagram}
-								readonly={!isEditing}
-							/>
-						</div>
-					</div>
-				</div>
-			</Card.Content>
-		</Card.Root>
-
-		<!-- ==================== TAX & COMPLIANCE ==================== -->
-		<Card.Root>
-			<Card.Header class="px-4 pb-4 sm:px-6">
-				<div class="flex items-center gap-2.5">
-					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10">
-						<CircleDollarSign class="h-4 w-4 text-orange-600 dark:text-orange-400" />
-					</div>
-					<div>
-						<Card.Title class="text-sm sm:text-base">Tax & Compliance</Card.Title>
-						<Card.Description class="text-xs sm:text-sm">
-							VAT, supplementary duty, tax IDs, and BIN numbers.
-						</Card.Description>
-					</div>
-				</div>
-			</Card.Header>
-			<Card.Content class="space-y-4 px-4 sm:px-6">
-				<div class="grid gap-4 sm:grid-cols-2">
-					<div class="space-y-2">
-						<Label for="store_tax_id">VAT / Tax ID</Label>
-						<div class="relative">
-							<FileText
-								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-							/>
-							<Input
-								id="store_tax_id"
-								name="store_tax_id"
-								class="pl-10"
-								placeholder="Your VAT/Tax ID"
-								bind:value={previewData.store_tax_id}
-								readonly={!isEditing}
-							/>
-						</div>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="store_bin">BIN Number / Mushak</Label>
-						<div class="relative">
-							<Scale
-								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-							/>
-							<Input
-								id="store_bin"
-								name="store_bin"
-								class="pl-10"
-								placeholder="e.g. 00XXXXXXXX-XXXX"
-								bind:value={previewData.store_bin}
-								readonly={!isEditing}
-							/>
-						</div>
-					</div>
-				</div>
-
-				<Separator />
-
-				<div class="rounded-lg border bg-muted/20 p-4">
-					<div class="space-y-4">
-						<div class="flex items-center justify-between gap-4">
-							<div class="min-w-0 space-y-0.5">
-								<Label>Enable VAT/Tax</Label>
-								<p class="text-xs text-muted-foreground">Apply tax to all sales automatically</p>
-							</div>
-							<Switch
-								disabled={!isEditing}
-								checked={previewData.tax_enabled === 'true'}
-								onCheckedChange={(v) => (previewData.tax_enabled = v ? 'true' : 'false')}
-							/>
-							<input type="hidden" name="tax_enabled" value={previewData.tax_enabled} />
-						</div>
-
-						{#if previewData.tax_enabled === 'true'}
-							<div class="animate-in duration-200 fade-in slide-in-from-top-1">
-								<div class="space-y-2">
-									<Label for="tax_rate">VAT/Tax Rate (%)</Label>
-									<div class="relative max-w-xs">
-										<Percent
-											class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-										/>
-										<Input
-											id="tax_rate"
-											name="tax_rate"
-											type="number"
-											step="0.01"
-											class="pl-10"
-											placeholder="0"
-											bind:value={previewData.tax_rate}
-											readonly={!isEditing}
-										/>
-									</div>
-								</div>
-							</div>
-						{/if}
-
-						<Separator />
-
-						<div class="flex items-center justify-between gap-4">
-							<div class="min-w-0 space-y-0.5">
-								<Label>Enable Supplementary Duty (SD)</Label>
-								<p class="text-xs text-muted-foreground">Apply SD before Tax calculation</p>
-							</div>
-							<Switch
-								disabled={!isEditing}
-								checked={previewData.sd_enabled === 'true'}
-								onCheckedChange={(v) => (previewData.sd_enabled = v ? 'true' : 'false')}
-							/>
-							<input type="hidden" name="sd_enabled" value={previewData.sd_enabled} />
-						</div>
-
-						{#if previewData.sd_enabled === 'true'}
-							<div class="animate-in duration-200 fade-in slide-in-from-top-1">
-								<div class="space-y-2">
-									<Label for="sd_rate">SD Rate (%)</Label>
-									<div class="relative max-w-xs">
-										<Percent
-											class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-										/>
-										<Input
-											id="sd_rate"
-											name="sd_rate"
-											type="number"
-											step="0.01"
-											class="pl-10"
-											placeholder="0"
-											bind:value={previewData.sd_rate}
-											readonly={!isEditing}
-										/>
-									</div>
-								</div>
-							</div>
-						{/if}
-					</div>
-				</div>
-			</Card.Content>
-		</Card.Root>
-
-		<!-- ==================== INVENTORY ==================== -->
-		<Card.Root>
-			<Card.Header class="px-4 pb-4 sm:px-6">
-				<div class="flex items-center gap-2.5">
-					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
-						<Package class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-					</div>
-					<div>
-						<Card.Title class="text-sm sm:text-base">Inventory</Card.Title>
-						<Card.Description class="text-xs sm:text-sm">
-							Stock alert thresholds and inventory behaviour.
-						</Card.Description>
-					</div>
-				</div>
-			</Card.Header>
-			<Card.Content class="px-4 sm:px-6">
-				<div class="max-w-xs space-y-2">
-					<Label for="low_stock_threshold">Low Stock Threshold</Label>
-					<div class="relative">
-						<Package
+						<Store
 							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
 						/>
 						<Input
-							id="low_stock_threshold"
-							name="low_stock_threshold"
-							type="number"
-							min="1"
+							id="store_name"
+							name="store_name"
 							class="pl-10"
-							bind:value={previewData.low_stock_threshold}
+							placeholder="Your Store Name"
+							bind:value={previewData.store_name}
+							readonly={!isEditing}
+							required
+						/>
+					</div>
+				</div>
+
+				<div class="space-y-2">
+					<Label for="store_phone">Phone Number</Label>
+					<div class="relative">
+						<Phone
+							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							id="store_phone"
+							name="store_phone"
+							class="pl-10"
+							placeholder="01XXXXXXXXX"
+							bind:value={previewData.store_phone}
 							readonly={!isEditing}
 						/>
 					</div>
-					<p class="text-xs text-muted-foreground">
-						Alerts will show when any variant's stock is at or below this number.
-					</p>
 				</div>
-			</Card.Content>
-		</Card.Root>
+			</div>
 
-		<!-- ==================== PRINTER SETUP (Electron only) ==================== -->
-	{#if isElectron}
-		<Card.Root>
-			<Card.Header class="px-4 pb-4 sm:px-6">
-				<div class="flex items-center gap-2.5">
-					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
-						<Printer class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-					</div>
-					<div class="flex-1">
-						<Card.Title class="text-sm sm:text-base">Printer Setup</Card.Title>
-						<Card.Description class="text-xs sm:text-sm">
-							Select default printers for receipts and labels.
-						</Card.Description>
-					</div>
-					<Button
-						variant="ghost"
-						size="sm"
-						class="cursor-pointer"
-						onclick={refreshPrinters}
-						disabled={loadingPrinters}
-					>
-						{#if loadingPrinters}
-							<Loader2 class="h-4 w-4 animate-spin" />
-						{:else}
-							Refresh
-						{/if}
-					</Button>
+			<div class="space-y-2">
+				<Label for="store_address">Physical Address</Label>
+				<div class="relative">
+					<MapPin class="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
+					<Textarea
+						id="store_address"
+						name="store_address"
+						class="min-h-[72px] pl-10"
+						placeholder="123 Store Address, City, Country"
+						bind:value={previewData.store_address}
+						readonly={!isEditing}
+					/>
 				</div>
-			</Card.Header>
-			<Card.Content class="space-y-4 px-4 sm:px-6">
-				{#if printerList.length === 0 && !loadingPrinters}
-					<div class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-						No printers detected. Make sure your printer drivers are installed and the printer is connected.
-					</div>
-				{:else}
-					<div class="grid gap-4 sm:grid-cols-2">
-						<!-- Receipt Printer -->
-						<div class="space-y-2">
-							<Label>Default Receipt Printer</Label>
-							<Select.Root
-								type="single"
-								value={defaultReceiptPrinter || undefined}
-								onValueChange={(v) => saveReceiptPrinter(v ?? '')}
-							>
-								<Select.Trigger class="w-full cursor-pointer">
-									{defaultReceiptPrinter || 'System default (dialog)'}
-								</Select.Trigger>
-								<Select.Content>
-									<Select.Item value="" label="System default (dialog)">System default (dialog)</Select.Item>
-									{#each printerList as printer}
-										<Select.Item value={printer.name} label={printer.name}>
-											{printer.name}{printer.isDefault ? ' (OS default)' : ''}
-										</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Root>
-							<div class="flex gap-2">
-								<Button
-									variant="outline"
-									size="sm"
-									class="cursor-pointer text-xs"
-									onclick={testReceiptPrint}
-									disabled={testPrintingReceipt}
-								>
-									{#if testPrintingReceipt}
-										<Loader2 class="mr-1 h-3 w-3 animate-spin" />
-									{:else}
-										<Printer class="mr-1 h-3 w-3" />
-									{/if}
-									Test Receipt
-								</Button>
-							</div>
-						</div>
+			</div>
 
-						<!-- Label Printer -->
-						<div class="space-y-2">
-							<Label>Default Label Printer</Label>
-							<Select.Root
-								type="single"
-								value={defaultLabelPrinter || undefined}
-								onValueChange={(v) => saveLabelPrinter(v ?? '')}
-							>
-								<Select.Trigger class="w-full cursor-pointer">
-									{defaultLabelPrinter || 'System default (dialog)'}
-								</Select.Trigger>
-								<Select.Content>
-									<Select.Item value="" label="System default (dialog)">System default (dialog)</Select.Item>
-									{#each printerList as printer}
-										<Select.Item value={printer.name} label={printer.name}>
-											{printer.name}{printer.isDefault ? ' (OS default)' : ''}
-										</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Root>
-							<div class="flex gap-2">
-								<Button
-									variant="outline"
-									size="sm"
-									class="cursor-pointer text-xs"
-									onclick={testLabelPrint}
-									disabled={testPrintingLabel}
-								>
-									{#if testPrintingLabel}
-										<Loader2 class="mr-1 h-3 w-3 animate-spin" />
-									{:else}
-										<Printer class="mr-1 h-3 w-3" />
-									{/if}
-									Test Label
-								</Button>
-							</div>
-						</div>
-					</div>
-				{/if}
-			</Card.Content>
-		</Card.Root>
-	{/if}
-
-	<!-- ==================== RECEIPT POLICIES ==================== -->
-		<Card.Root>
-			<Card.Header class="px-4 pb-4 sm:px-6">
-				<div class="flex items-center gap-2.5">
-					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10">
-						<Receipt class="h-4 w-4 text-violet-600 dark:text-violet-400" />
-					</div>
-					<div>
-						<Card.Title class="text-sm sm:text-base">Receipt Policies & Footer</Card.Title>
-						<Card.Description class="text-xs sm:text-sm">
-							Policies and messages printed on customer receipts.
-						</Card.Description>
-					</div>
-				</div>
-			</Card.Header>
-			<Card.Content class="space-y-4 px-4 sm:px-6">
-				<div class="grid gap-4 sm:grid-cols-2">
-					<div class="space-y-2">
-						<Label for="return_policy">Return Policy</Label>
-						<Textarea
-							id="return_policy"
-							name="return_policy"
-							placeholder="e.g. Items can be returned within 7 days with original receipt..."
-							class="min-h-[90px]"
-							bind:value={previewData.return_policy}
-							readonly={!isEditing}
+			<div class="grid gap-4 sm:grid-cols-2">
+				<div class="space-y-2">
+					<Label for="store_email">Email Address</Label>
+					<div class="relative">
+						<Mail
+							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
 						/>
-					</div>
-
-					<div class="space-y-2">
-						<Label for="exchange_policy">Exchange Policy</Label>
-						<Textarea
-							id="exchange_policy"
-							name="exchange_policy"
-							placeholder="e.g. Exchanges accepted within 14 days with original tag..."
-							class="min-h-[90px]"
-							bind:value={previewData.exchange_policy}
+						<Input
+							id="store_email"
+							name="store_email"
+							type="email"
+							class="pl-10"
+							placeholder="store@example.com"
+							bind:value={previewData.store_email}
 							readonly={!isEditing}
 						/>
 					</div>
 				</div>
 
 				<div class="space-y-2">
-					<Label for="terms_conditions">Terms & Conditions</Label>
+					<Label for="store_website">Website URL</Label>
+					<div class="relative">
+						<Globe
+							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							id="store_website"
+							name="store_website"
+							class="pl-10"
+							placeholder="www.yourstore.com"
+							bind:value={previewData.store_website}
+							readonly={!isEditing}
+						/>
+					</div>
+				</div>
+
+				<div class="space-y-2">
+					<Label for="store_facebook">Facebook Page</Label>
+					<div class="relative">
+						<Facebook
+							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							id="store_facebook"
+							name="store_facebook"
+							class="pl-10"
+							placeholder="facebook.com/yourstore"
+							bind:value={previewData.store_facebook}
+							readonly={!isEditing}
+						/>
+					</div>
+				</div>
+
+				<div class="space-y-2">
+					<Label for="store_instagram">Instagram Profile</Label>
+					<div class="relative">
+						<Instagram
+							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							id="store_instagram"
+							name="store_instagram"
+							class="pl-10"
+							placeholder="@yourstore"
+							bind:value={previewData.store_instagram}
+							readonly={!isEditing}
+						/>
+					</div>
+				</div>
+			</div>
+		</Card.Content>
+	</Card.Root>
+
+	<!-- ==================== REGISTRATION ==================== -->
+	<Card.Root>
+		<Card.Header class="px-4 pb-4 sm:px-6">
+			<div class="flex items-center gap-2.5">
+				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10">
+					<FileText class="h-4 w-4 text-orange-600 dark:text-orange-400" />
+				</div>
+				<div>
+					<Card.Title class="text-sm sm:text-base">Business Registration</Card.Title>
+					<Card.Description class="text-xs sm:text-sm">
+						Tax IDs and BIN numbers for compliance.
+					</Card.Description>
+				</div>
+			</div>
+		</Card.Header>
+		<Card.Content class="space-y-4 px-4 sm:px-6">
+			<div class="grid gap-4 sm:grid-cols-2">
+				<div class="space-y-2">
+					<Label for="store_tax_id">VAT / Tax ID</Label>
+					<div class="relative">
+						<FileText
+							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							id="store_tax_id"
+							name="store_tax_id"
+							class="pl-10"
+							placeholder="Your VAT/Tax ID"
+							bind:value={previewData.store_tax_id}
+							readonly={!isEditing}
+						/>
+					</div>
+				</div>
+
+				<div class="space-y-2">
+					<Label for="store_bin">BIN Number / Mushak</Label>
+					<div class="relative">
+						<Scale
+							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							id="store_bin"
+							name="store_bin"
+							class="pl-10"
+							placeholder="e.g. 00XXXXXXXX-XXXX"
+							bind:value={previewData.store_bin}
+							readonly={!isEditing}
+						/>
+					</div>
+				</div>
+			</div>
+		</Card.Content>
+	</Card.Root>
+
+	<!-- ==================== RECEIPT POLICIES ==================== -->
+	<Card.Root>
+		<Card.Header class="px-4 pb-4 sm:px-6">
+			<div class="flex items-center gap-2.5">
+				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10">
+					<Receipt class="h-4 w-4 text-violet-600 dark:text-violet-400" />
+				</div>
+				<div>
+					<Card.Title class="text-sm sm:text-base">Receipt Policies & Footer</Card.Title>
+					<Card.Description class="text-xs sm:text-sm">
+						Policies and messages printed on customer receipts.
+					</Card.Description>
+				</div>
+			</div>
+		</Card.Header>
+		<Card.Content class="space-y-4 px-4 sm:px-6">
+			<div class="grid gap-4 sm:grid-cols-2">
+				<div class="space-y-2">
+					<Label for="return_policy">Return Policy</Label>
 					<Textarea
-						id="terms_conditions"
-						name="terms_conditions"
-						placeholder="Any terms and conditions to print on receipts..."
-						class="min-h-[80px]"
-						bind:value={previewData.terms_conditions}
+						id="return_policy"
+						name="return_policy"
+						placeholder="e.g. Items can be returned within 7 days with original receipt..."
+						class="min-h-[90px]"
+						bind:value={previewData.return_policy}
 						readonly={!isEditing}
 					/>
 				</div>
 
 				<div class="space-y-2">
-					<Label for="receipt_footer">Footer Message</Label>
-					<div class="relative">
-						<MessageSquare class="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
-						<Textarea
-							id="receipt_footer"
-							name="receipt_footer"
-							class="min-h-[80px] pl-10"
-							placeholder="Thank you for shopping with us!"
-							bind:value={previewData.receipt_footer}
-							readonly={!isEditing}
-						/>
-					</div>
-				</div>
-			</Card.Content>
-		</Card.Root>
-
-		<!-- ==================== STICKY ACTION BAR ==================== -->
-		<div
-			class="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:border-t-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none"
-		>
-			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-				<div class="flex items-center gap-2">
-					{#if !isEditing}
-						<Button
-							type="button"
-							class="w-full cursor-pointer sm:w-auto"
-							onclick={() => (isEditing = true)}
-						>
-							<Pencil class="mr-2 h-4 w-4" />
-							Edit Settings
-						</Button>
-					{:else}
-						<Button
-							variant="ghost"
-							type="button"
-							class="cursor-pointer"
-							onclick={() => (isEditing = false)}
-						>
-							Cancel
-						</Button>
-						<Button
-							type="button"
-							class="w-full cursor-pointer sm:w-auto"
-							disabled={loading}
-							onclick={async (e) => {
-								const formElement = e.currentTarget.closest('form');
-								if (
-									await confirmState.confirm({
-										title: 'Save Settings',
-										message: 'Are you sure you want to update the store settings?',
-										confirmText: 'Save Changes',
-										variant: 'default'
-									})
-								) {
-									formElement?.requestSubmit();
-								}
-							}}
-						>
-							{#if loading}
-								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-								Saving...
-							{:else}
-								Save All Settings
-							{/if}
-						</Button>
-					{/if}
+					<Label for="exchange_policy">Exchange Policy</Label>
+					<Textarea
+						id="exchange_policy"
+						name="exchange_policy"
+						placeholder="e.g. Exchanges accepted within 14 days with original tag..."
+						class="min-h-[90px]"
+						bind:value={previewData.exchange_policy}
+						readonly={!isEditing}
+					/>
 				</div>
 			</div>
+
+			<div class="space-y-2">
+				<Label for="terms_conditions">Terms & Conditions</Label>
+				<Textarea
+					id="terms_conditions"
+					name="terms_conditions"
+					placeholder="Any terms and conditions to print on receipts..."
+					class="min-h-[80px]"
+					bind:value={previewData.terms_conditions}
+					readonly={!isEditing}
+				/>
+			</div>
+
+			<div class="space-y-2">
+				<Label for="receipt_footer">Footer Message</Label>
+				<div class="relative">
+					<MessageSquare class="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
+					<Textarea
+						id="receipt_footer"
+						name="receipt_footer"
+						class="min-h-[80px] pl-10"
+						placeholder="Thank you for shopping with us!"
+						bind:value={previewData.receipt_footer}
+						readonly={!isEditing}
+					/>
+				</div>
+			</div>
+		</Card.Content>
+	</Card.Root>
+
+	<!-- ==================== STICKY ACTION BAR ==================== -->
+	<div
+		class="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:border-t-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none"
+	>
+		<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+			<div class="flex items-center gap-2">
+				{#if !isEditing}
+					<Button
+						type="button"
+						class="w-full cursor-pointer sm:w-auto"
+						onclick={() => (isEditing = true)}
+					>
+						<Pencil class="mr-2 h-4 w-4" />
+						Edit Profile
+					</Button>
+				{:else}
+					<Button
+						variant="ghost"
+						type="button"
+						class="cursor-pointer"
+						onclick={() => (isEditing = false)}
+					>
+						Cancel
+					</Button>
+					<Button
+						type="button"
+						class="w-full cursor-pointer sm:w-auto"
+						disabled={loading}
+						onclick={async (e) => {
+							const formElement = e.currentTarget.closest('form');
+							if (
+								await confirmState.confirm({
+									title: 'Save Profile',
+									message: 'Update your store profile details?',
+									confirmText: 'Save',
+									variant: 'default'
+								})
+							) {
+								formElement?.requestSubmit();
+							}
+						}}
+					>
+						{#if loading}
+							<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+							Saving...
+						{:else}
+							Save Profile
+						{/if}
+					</Button>
+				{/if}
+			</div>
 		</div>
-	</form>
+	</div>
+</form>
 
 <!-- Receipt Preview Dialog -->
 <Dialog.Root bind:open={showReceiptPreview}>

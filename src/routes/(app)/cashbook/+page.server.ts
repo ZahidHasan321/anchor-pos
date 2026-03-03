@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { cashbook, users } from '$lib/server/db/schema';
+import { cashbook, users, orderItems, orders } from '$lib/server/db/schema';
 import { eq, sql, gte, lt, and, desc } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
@@ -24,44 +24,24 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 	// Parse date in the store's timezone
 	date = new Date(`${targetDateStr}T00:00:00`);
 	
-	// If the browser/server environment is not in Asia/Dhaka, we need to ensure 
-	// the Date object represents midnight in Asia/Dhaka.
-	// However, simple parsing like above might still be relative to local time.
-	// A more robust way using Intl to get the offset or just calculating the UTC range:
-	
 	const getZonedDateRange = (dateStr: string, timeZone: string) => {
-		// Create a UTC date at midnight of the target date
 		const targetMidnight = new Date(`${dateStr}T00:00:00Z`);
-		
-		// Use Intl to find what time it is in the target timezone when UTC is at that midnight
 		const formatter = new Intl.DateTimeFormat('en-CA', {
 			timeZone,
 			year: 'numeric', month: '2-digit', day: '2-digit',
 			hour: '2-digit', minute: '2-digit', second: '2-digit',
 			hour12: false
 		});
-		
-		// This string will be like "2026-02-26 06:00:00" if TZ is UTC+6
 		const zonedStr = formatter.format(targetMidnight).replace(',', '');
-		const [zDate, zTime] = zonedStr.split(' ');
-		const [zh, zm, zs] = zTime.split(':').map(Number);
-		
-		// The offset in milliseconds is (zoned_hours * 3600 + zoned_minutes * 60 + zoned_seconds) * 1000
-		// But wait, the date might have shifted too. 
-		// Simpler: 
 		const actualZonedTime = new Date(zonedStr.replace(' ', 'T') + 'Z').getTime();
 		const offset = actualZonedTime - targetMidnight.getTime();
-		
-		// To get UTC start, we subtract the offset from the UTC target midnight
 		const startUtc = new Date(targetMidnight.getTime() - offset);
 		const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60 * 1000);
-		
 		return { startUtc, endUtc };
 	};
 
 	const { startUtc: dateRangeStart, endUtc: dateRangeEnd } = getZonedDateRange(targetDateStr, storeTimezone);
 
-	// Basic page data (needed immediately)
 	return {
 		view,
 		date: targetDateStr,
@@ -69,14 +49,13 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 		dateRangeStart: dateRangeStart.toISOString(),
 		dateRangeEnd: dateRangeEnd.toISOString(),
 
-		// Deferred data for streaming
 		dailyData: (async () => {
 			if (isElectron) {
-				return { entries: [], summary: { totalIn: 0, totalOut: 0, net: 0 } };
+				return { entries: [], summary: { totalIn: 0, totalOut: 0, net: 0, grossProfit: 0, netProfit: 0 } };
 			}
 
-			if (!db) return { entries: [], summary: { totalIn: 0, totalOut: 0, net: 0 } };
-			const [entries, totals] = await Promise.all([
+			if (!db) return { entries: [], summary: { totalIn: 0, totalOut: 0, net: 0, grossProfit: 0, netProfit: 0 } };
+			const [entries, totals, cogs] = await Promise.all([
 				db
 					.select({
 						id: cashbook.id,
@@ -94,15 +73,28 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 					.select({ type: cashbook.type, total: sql<number>`sum(${cashbook.amount})` })
 					.from(cashbook)
 					.where(and(gte(cashbook.createdAt, dateRangeStart), lt(cashbook.createdAt, dateRangeEnd)))
-					.groupBy(cashbook.type)
+					.groupBy(cashbook.type),
+				db
+					.select({ total: sql<number>`coalesce(sum(${orderItems.costAtSale} * ${orderItems.quantity}), 0)` })
+					.from(orderItems)
+					.innerJoin(orders, eq(orderItems.orderId, orders.id))
+					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, dateRangeStart), lt(orders.createdAt, dateRangeEnd)))
 			]);
 
 			const totalIn = totals.find((t: { type: string; total: number }) => t.type === 'in')?.total || 0;
 			const totalOut = totals.find((t: { type: string; total: number }) => t.type === 'out')?.total || 0;
+			const totalCogs = cogs[0]?.total || 0;
+			const grossProfit = totalIn - totalCogs;
 
 			return {
 				entries,
-				summary: { totalIn, totalOut, net: totalIn - totalOut }
+				summary: {
+					totalIn,
+					totalOut,
+					net: totalIn - totalOut,
+					grossProfit,
+					netProfit: grossProfit - totalOut
+				}
 			};
 		})(),
 
@@ -124,9 +116,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 			const txOffset = (txPage - 1) * txLimit;
 
 			if (view !== 'all') return null;
-
 			if (isElectron) return null;
-
 			if (!db) return null;
 
 			const txConditions: any[] = [];

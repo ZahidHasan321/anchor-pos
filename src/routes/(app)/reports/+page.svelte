@@ -334,7 +334,36 @@
 						{formatCurrency(summaries.grossProfit)}
 					</div>
 					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
-						Revenue - Expenses
+						Revenue - COGS
+					</p>
+				</div>
+
+				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Net Profit</span
+						>
+						<div
+							class="hidden rounded-md p-1.5 sm:block {(summaries.netProfit ?? 0) >= 0
+								? 'bg-emerald-500/10'
+								: 'bg-red-500/10'}"
+						>
+							{#if (summaries.netProfit ?? 0) >= 0}
+								<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
+							{:else}
+								<TrendingDown class="h-3.5 w-3.5 text-red-600" />
+							{/if}
+						</div>
+					</div>
+					<div
+						class="mt-1.5 text-lg font-bold sm:mt-2 sm:text-2xl {(summaries.netProfit ?? 0) >= 0
+							? 'text-emerald-600'
+							: 'text-red-600'}"
+					>
+						{formatCurrency(summaries.netProfit ?? 0)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						Gross Profit - Expenses
 					</p>
 				</div>
 
@@ -733,6 +762,9 @@
 				<tr><td>Items Sold</td><td class="right">{summaries.itemsSold}</td></tr>
 				<tr class="print-row-bold"
 					><td>Gross Profit</td><td class="right">{formatCurrency(summaries.grossProfit)}</td></tr
+				>
+				<tr class="print-row-bold"
+					><td>Net Profit</td><td class="right">{formatCurrency(summaries.netProfit ?? 0)}</td></tr
 				>
 			</tbody>
 		</table>

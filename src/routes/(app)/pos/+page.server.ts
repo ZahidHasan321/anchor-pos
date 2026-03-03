@@ -99,6 +99,7 @@ interface CartItem {
 interface DBVariant {
 	id: string;
 	price: number;
+	costPrice: number;
 	productName: string;
 	size: string;
 	color: string | null;
@@ -149,6 +150,7 @@ export const actions: Actions = {
 					.select({
 						id: productVariants.id,
 						price: productVariants.price,
+						costPrice: products.costPrice,
 						productName: products.name,
 						size: productVariants.size,
 						color: productVariants.color,
@@ -207,12 +209,14 @@ export const actions: Actions = {
 
 				// 4. Record items & Adjust stock
 				for (const item of cartItems) {
+					const dbVariant = dbVariantsMap.get(item.variantId) as DBVariant;
 					await tx.insert(orderItems).values({
 						id: generateId(),
 						orderId,
 						variantId: item.variantId,
 						quantity: item.quantity,
 						priceAtSale: item.price,
+						costAtSale: dbVariant?.costPrice || 0,
 						discount: item.discount,
 						productName: item.productName,
 						variantLabel: `${item.size}${item.color ? ' / ' + item.color : ''}`

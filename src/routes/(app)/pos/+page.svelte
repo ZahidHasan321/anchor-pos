@@ -101,6 +101,7 @@
 			color: variant.color,
 			barcode: variant.barcode,
 			price: variant.price,
+			costPrice: variant.costPrice || 0,
 			discount: variant.discount || 0,
 			maxStock: variant.stockQuantity
 		});
@@ -123,7 +124,7 @@
 		if (isNative) {
 			// Local search in SQLite for Native App
 			powersync.db.execute('SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ?', [`%${query}%`, `%${query}%`])
-				.then(res => searchedCustomers = res.rows?._array || []);
+				.then((res: any) => searchedCustomers = res.rows?._array || []);
 		} else {
 			// Server API search for Web App
 			clearTimeout(custSearchTimeout);
@@ -154,9 +155,9 @@
 			for (const item of cart.items) {
 				const orderItemId = crypto.randomUUID();
 				await powersync.db.execute(`
-					INSERT INTO order_items (id, order_id, variant_id, quantity, price_at_sale, discount, product_name, variant_label, status)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`, [orderItemId, orderId, item.variantId, item.quantity, item.price, item.discount || 0, item.productName, `${item.size}${item.color ? ' / ' + item.color : ''}`, 'completed']);
+					INSERT INTO order_items (id, order_id, variant_id, quantity, price_at_sale, cost_at_sale, discount, product_name, variant_label, status)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, [orderItemId, orderId, item.variantId, item.quantity, item.price, item.costPrice || 0, item.discount || 0, item.productName, `${item.size}${item.color ? ' / ' + item.color : ''}`, 'completed']);
 				
 				await powersync.db.execute('UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.variantId]);
 

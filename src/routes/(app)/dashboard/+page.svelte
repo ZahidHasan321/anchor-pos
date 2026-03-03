@@ -42,12 +42,14 @@
 			powersync.db.get(`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ?`, [todayIso]),
 			powersync.db.get(`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ?`, [monthIso]),
 			powersync.db.get(`SELECT coalesce(sum(amount), 0) as total FROM cashbook WHERE type = 'out' AND created_at >= ?`, [todayIso]),
-			powersync.db.get(`SELECT coalesce(sum(price * stock_quantity), 0) as total FROM product_variants`)
-		]).then(([todaySales, monthlySales, todayExpenses, inventoryValue]) => {
+			powersync.db.get(`SELECT coalesce(sum(oi.cost_at_sale * oi.quantity), 0) as total FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id WHERE o.status = 'completed' AND o.created_at >= ?`, [todayIso]),
+			powersync.db.get(`SELECT coalesce(sum(coalesce(p.cost_price, 0) * pv.stock_quantity), 0) as total FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id`)
+		]).then(([todaySales, monthlySales, todayExpenses, todayCogs, inventoryValue]) => {
 			nativeStats = {
 				todaySales: todaySales || { count: 0, total: 0 },
 				monthlySales: monthlySales || { count: 0, total: 0 },
 				todayExpenses: todayExpenses || { total: 0 },
+				todayProfit: ((todaySales as any)?.total ?? 0) - ((todayCogs as any)?.total ?? 0),
 				inventoryValue: (inventoryValue as any)?.total ?? 0
 			};
 		});
@@ -62,7 +64,7 @@
 
 		// Recent orders
 		powersync.db.getAll('SELECT * FROM orders ORDER BY created_at DESC LIMIT 10')
-			.then(orders => nativeRecentOrders = orders as any[]);
+			.then((orders: any) => nativeRecentOrders = orders as any[]);
 
 		// Top products
 		powersync.db.getAll(`
@@ -71,7 +73,7 @@
 			FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id
 			WHERE o.status = 'completed' AND o.created_at >= ?
 			GROUP BY product_name, variant_label ORDER BY totalQty DESC LIMIT 10
-		`, [monthIso]).then(products => nativeTopProducts = (products as any[]).map(p => ({
+		`, [monthIso]).then((products: any) => nativeTopProducts = (products as any[]).map(p => ({
 			...p, totalQty: p.totalQty, totalRevenue: p.totalRevenue
 		})));
 	});
@@ -172,6 +174,27 @@
 				</div>
 
 				<div
+					class="min-w-[150px] flex-1 animate-in delay-175 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+				>
+					<Card.Root class="h-full border-l-4 border-l-emerald-500">
+						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+							<Card.Title class="text-sm font-medium">Today's Profit</Card.Title>
+							<div class="shrink-0 rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
+								<TrendingUp class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+							</div>
+						</Card.Header>
+						<Card.Content>
+							<div
+								class="text-2xl font-bold break-words break-all {nativeStats.todayProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}"
+							>
+								{formatCurrency(nativeStats.todayProfit ?? 0)}
+							</div>
+							<p class="text-xs text-muted-foreground">Revenue - Cost of Goods</p>
+						</Card.Content>
+					</Card.Root>
+				</div>
+
+				<div
 					class="min-w-[150px] flex-1 animate-in delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
 				>
 					<Card.Root class="h-full border-l-4 border-l-indigo-500">
@@ -187,7 +210,7 @@
 							>
 								{formatCurrency(nativeStats.inventoryValue)}
 							</div>
-							<p class="text-xs text-muted-foreground">Total stock worth</p>
+							<p class="text-xs text-muted-foreground">At cost</p>
 						</Card.Content>
 					</Card.Root>
 				</div>
@@ -268,6 +291,27 @@
 				</div>
 
 				<div
+					class="min-w-[150px] flex-1 animate-in delay-175 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+				>
+					<Card.Root class="h-full border-l-4 border-l-emerald-500">
+						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+							<Card.Title class="text-sm font-medium">Today's Profit</Card.Title>
+							<div class="shrink-0 rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
+								<TrendingUp class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+							</div>
+						</Card.Header>
+						<Card.Content>
+							<div
+								class="text-2xl font-bold break-words break-all {stats.todayProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}"
+							>
+								{formatCurrency(stats.todayProfit ?? 0)}
+							</div>
+							<p class="text-xs text-muted-foreground">Revenue - Cost of Goods</p>
+						</Card.Content>
+					</Card.Root>
+				</div>
+
+				<div
 					class="min-w-[150px] flex-1 animate-in delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
 				>
 					<Card.Root class="h-full border-l-4 border-l-indigo-500">
@@ -283,7 +327,7 @@
 							>
 								{formatCurrency(stats.inventoryValue)}
 							</div>
-							<p class="text-xs text-muted-foreground">Total stock worth</p>
+							<p class="text-xs text-muted-foreground">At cost</p>
 						</Card.Content>
 					</Card.Root>
 				</div>

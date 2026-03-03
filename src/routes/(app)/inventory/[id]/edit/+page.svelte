@@ -87,7 +87,7 @@
 
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div class="space-y-2">
-						<Label for="templatePrice">Base Price ({getCurrencySymbol()})</Label>
+						<Label for="templatePrice">Selling Price ({getCurrencySymbol()})</Label>
 						<Input
 							id="templatePrice"
 							name="templatePrice"
@@ -101,16 +101,28 @@
 						{/if}
 					</div>
 					<div class="space-y-2">
-						<Label for="defaultDiscount">Default Discount (%)</Label>
+						<Label for="costPrice">Cost / Buying Price ({getCurrencySymbol()})</Label>
 						<Input
-							id="defaultDiscount"
-							name="defaultDiscount"
+							id="costPrice"
+							name="costPrice"
 							type="number"
 							step="0.01"
-							placeholder="0"
-							value={(form?.data?.defaultDiscount as string) ?? (initialData.defaultDiscount || '')}
+							placeholder="0.00"
+							value={(form?.data?.costPrice as string) ?? (initialData.costPrice || '')}
 						/>
 					</div>
+				</div>
+
+				<div class="space-y-2">
+					<Label for="defaultDiscount">Default Discount (%)</Label>
+					<Input
+						id="defaultDiscount"
+						name="defaultDiscount"
+						type="number"
+						step="0.01"
+						placeholder="0"
+						value={(form?.data?.defaultDiscount as string) ?? (initialData.defaultDiscount || '')}
+					/>
 				</div>
 
 				<Button

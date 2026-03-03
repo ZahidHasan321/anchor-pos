@@ -30,6 +30,7 @@ export const productsStore = watchQuery(`
         pv.barcode,
         p.category,
         pv.price,
+        p.cost_price as costPrice,
         pv.discount,
         pv.stock_quantity as stockQuantity
     FROM product_variants pv

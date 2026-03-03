@@ -260,7 +260,7 @@ export function queryInventoryStats() {
 			COUNT(pv.id) as totalVariants,
 			SUM(CASE WHEN pv.stock_quantity > 0 AND pv.stock_quantity <= 5 THEN 1 ELSE 0 END) as lowStockVariants,
 			SUM(CASE WHEN pv.stock_quantity = 0 THEN 1 ELSE 0 END) as outOfStockVariants,
-			COALESCE(SUM(pv.price * pv.stock_quantity), 0) as totalInventoryValue
+			COALESCE(SUM(p.cost_price * pv.stock_quantity), 0) as totalInventoryValue
 		FROM product_variants pv
 		INNER JOIN products p ON pv.product_id = p.id
 	`);
@@ -301,7 +301,7 @@ export function queryDashboardStats() {
 			[todayIso]
 		),
 		inventoryValue: createWatchQuery(
-			`SELECT coalesce(sum(price * stock_quantity), 0) as total FROM product_variants`
+			`SELECT coalesce(sum(p.cost_price * pv.stock_quantity), 0) as total FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id`
 		)
 	};
 }
@@ -361,14 +361,14 @@ export async function checkoutTransaction(
 	const now = new Date().toISOString();
 	const globalDiscount = Math.min(100, Math.max(0, cart.globalDiscount || 0));
 
-	await powersync.db.writeTransaction(async (tx) => {
+	await powersync.db.writeTransaction(async (tx: any) => {
 		// Validate stock and compute totals
 		let subtotal = 0;
 		let totalDiscount = 0;
 		const variantIds = cart.items.map(i => i.variantId);
 		const placeholders = variantIds.map(() => '?').join(',');
 		const dbVariants = await tx.getAll(`
-			SELECT pv.id, pv.price, p.name as productName, pv.size, pv.color, pv.stock_quantity as stockQuantity
+			SELECT pv.id, pv.price, p.cost_price as costPrice, p.name as productName, pv.size, pv.color, pv.stock_quantity as stockQuantity
 			FROM product_variants pv
 			INNER JOIN products p ON pv.product_id = p.id
 			WHERE pv.id IN (${placeholders})
@@ -401,9 +401,9 @@ export async function checkoutTransaction(
 		for (const item of cart.items) {
 			const dbv = variantMap.get(item.variantId) as any;
 			await tx.execute(`
-				INSERT INTO order_items (id, order_id, variant_id, quantity, price_at_sale, discount, product_name, variant_label, status)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`, [generateId(), orderId, item.variantId, item.quantity, dbv.price, item.discount || 0, dbv.productName, `${dbv.size}${dbv.color ? ' / ' + dbv.color : ''}`, 'completed']);
+				INSERT INTO order_items (id, order_id, variant_id, quantity, price_at_sale, cost_at_sale, discount, product_name, variant_label, status)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, [generateId(), orderId, item.variantId, item.quantity, dbv.price, dbv.costPrice || 0, item.discount || 0, dbv.productName, `${dbv.size}${dbv.color ? ' / ' + dbv.color : ''}`, 'completed']);
 
 			await tx.execute('UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.variantId]);
 

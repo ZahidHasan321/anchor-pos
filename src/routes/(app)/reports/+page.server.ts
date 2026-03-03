@@ -135,7 +135,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				}).from(cashbook).where(and(eq(cashbook.type, 'out'), gte(cashbook.createdAt, startDate), lt(cashbook.createdAt, endDate))),
 
 				db.select({
-					totalQty: sql<number>`coalesce(sum(${orderItems.quantity}), 0)`
+					totalQty: sql<number>`coalesce(sum(${orderItems.quantity}), 0)`,
+					totalCost: sql<number>`coalesce(sum(${orderItems.costAtSale} * ${orderItems.quantity}), 0)`
 				}).from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id)).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate)))
 			]);
 
@@ -143,11 +144,14 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			const e = expenses[0];
 			const i = items[0];
 
+			const grossProfit = (s?.total ?? 0) - (i?.totalCost ?? 0);
+
 			return {
 				salesSummary: s ?? { count: 0, total: 0, avgOrder: 0, totalDiscount: 0 },
 				expenseSummary: e ?? { total: 0 },
 				itemsSold: i?.totalQty ?? 0,
-				grossProfit: (s?.total ?? 0) - (e?.total ?? 0)
+				grossProfit: grossProfit,
+				netProfit: grossProfit - (e?.total ?? 0)
 			};
 		})(),
 

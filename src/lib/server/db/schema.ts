@@ -135,6 +135,7 @@ export const orderItems = pgTable(
 		variantId: text('variant_id').references(() => productVariants.id),
 		quantity: integer('quantity').notNull(),
 		priceAtSale: doublePrecision('price_at_sale').notNull(), // Price at the moment of sale
+		costAtSale: doublePrecision('cost_at_sale').default(0), // Cost price at the moment of sale
 		discount: doublePrecision('discount').default(0),
 		productName: text('product_name').notNull(),
 		variantLabel: text('variant_label').notNull(), // e.g., "M / Black"
