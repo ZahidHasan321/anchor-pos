@@ -12,7 +12,7 @@ WORKDIR /app
 RUN npm install -g pnpm
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-lock.yaml ./
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --prod --frozen-lockfile && pnpm add drizzle-kit typescript
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
