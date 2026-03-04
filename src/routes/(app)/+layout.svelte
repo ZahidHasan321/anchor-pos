@@ -32,6 +32,8 @@
 	import { fade } from 'svelte/transition';
 	import { untrack } from 'svelte';
 	import { APP_NAME } from '$lib/constants';
+	import { powersync } from '$lib/powersync.svelte';
+	import { Wifi, WifiOff, RefreshCw } from '@lucide/svelte';
 
 	let { data, children } = $props();
 	let isMobileMenuOpen = $state(false);
@@ -186,6 +188,44 @@
 
 		<!-- Bottom Section -->
 		<div class="mt-auto space-y-2 border-t p-3">
+			<!-- Connection Status -->
+			{#if collapsed}
+				<Tooltip.Root delayDuration={0}>
+					<Tooltip.Trigger class="w-full">
+						{#snippet child({ props })}
+							<div
+								{...props}
+								class="flex items-center justify-center rounded-md p-2"
+							>
+								{#if powersync.connectionStatus === 'syncing'}
+									<RefreshCw class="h-4 w-4 animate-spin text-blue-500" />
+								{:else if powersync.connectionStatus === 'online'}
+									<Wifi class="h-4 w-4 text-green-500" />
+								{:else}
+									<WifiOff class="h-4 w-4 text-amber-500" />
+								{/if}
+							</div>
+						{/snippet}
+					</Tooltip.Trigger>
+					<Tooltip.Content side="right" class="font-medium">
+						{powersync.connectionStatus === 'syncing' ? 'Syncing...' : powersync.connectionStatus === 'online' ? 'Online' : 'Offline'}
+					</Tooltip.Content>
+				</Tooltip.Root>
+			{:else}
+				<div class="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground">
+					{#if powersync.connectionStatus === 'syncing'}
+						<RefreshCw class="h-3.5 w-3.5 animate-spin text-blue-500" />
+						<span class="text-blue-500">Syncing...</span>
+					{:else if powersync.connectionStatus === 'online'}
+						<span class="h-2 w-2 rounded-full bg-green-500"></span>
+						<span class="text-green-500">Online</span>
+					{:else}
+						<span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+						<span class="text-amber-500">Offline</span>
+					{/if}
+				</div>
+			{/if}
+
 			<!-- User Dropdown -->
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger class="w-full">
@@ -350,6 +390,18 @@
 		<span class="ml-3 text-sm font-black tracking-tighter text-primary uppercase italic"
 			>{APP_NAME}</span
 		>
+		<div class="ml-auto flex items-center gap-1.5 text-xs font-medium">
+			{#if powersync.connectionStatus === 'syncing'}
+				<RefreshCw class="h-3.5 w-3.5 animate-spin text-blue-500" />
+				<span class="text-blue-500">Syncing</span>
+			{:else if powersync.connectionStatus === 'online'}
+				<span class="h-2 w-2 rounded-full bg-green-500"></span>
+				<span class="text-green-500">Online</span>
+			{:else}
+				<span class="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+				<span class="text-amber-500">Offline</span>
+			{/if}
+		</div>
 	</div>
 
 	<!-- Main Content Area -->

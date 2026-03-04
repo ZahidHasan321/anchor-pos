@@ -22,14 +22,12 @@
 		}
 	});
 
+	// Initialize PowerSync once in Electron mode
+	let powersyncInitialized = false;
 	$effect(() => {
-		if (browser && (window as any).electron) {
-			powersync.init().then(() => {
-				if (data.user) {
-					powersync.connect();
-				}
-			});
-		}
+		if (!browser || !(window as any).electron || powersyncInitialized) return;
+		powersyncInitialized = true;
+		powersync.init().then(() => powersync.connect());
 	});
 
 	// In Electron mode, load store settings from PowerSync once ready

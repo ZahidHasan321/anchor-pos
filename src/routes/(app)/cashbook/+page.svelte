@@ -288,138 +288,144 @@
 				{#if !isAllView}
 					<div class="space-y-6">
 						<!-- Summary Cards -->
-						<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+						<div class="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-4">
 							{#if isNative}
 								{#if nativeDailyData === null}
 									{#each Array(4) as _}
-										<Card.Root class="space-y-2 p-4"
-											><Skeleton class="h-4 w-20" /><Skeleton class="h-8 w-full" /></Card.Root
-										>
+										<div class="space-y-3 rounded-lg border bg-card p-3 sm:p-4">
+											<Skeleton class="h-4 w-20" />
+											<Skeleton class="h-8 w-full" />
+										</div>
 									{/each}
 								{:else}
-									<Card.Root class="border-l-4 border-l-emerald-500">
-										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Cash In</Card.Title>
-											<div class="rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
-												<ArrowUpCircle class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-											</div>
-										</Card.Header>
-										<Card.Content>
-											<div
-												class="text-2xl font-bold break-all text-emerald-600 dark:text-emerald-400"
+									<div class="rounded-lg border bg-card p-3 sm:p-4">
+										<div class="flex items-center justify-between">
+											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+												>Cash In</span
 											>
-												{formatCurrency(nativeDailyData.summary.totalIn)}
+											<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
+												<ArrowUpCircle class="h-3.5 w-3.5 text-emerald-600" />
 											</div>
-										</Card.Content>
-									</Card.Root>
+										</div>
+										<div
+											class="mt-1.5 text-lg font-bold break-all text-emerald-600 sm:mt-2 sm:text-2xl"
+										>
+											{formatCurrency(nativeDailyData.summary.totalIn)}
+										</div>
+									</div>
 
-									<Card.Root class="border-l-4 border-l-red-500">
-										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Expenses</Card.Title>
-											<div class="rounded-full bg-red-100 p-2 dark:bg-red-500/20">
-												<ArrowDownCircle class="h-4 w-4 text-red-600 dark:text-red-400" />
+									<div class="rounded-lg border bg-card p-3 sm:p-4">
+										<div class="flex items-center justify-between">
+											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+												>Expenses</span
+											>
+											<div class="hidden rounded-md bg-red-500/10 p-1.5 sm:block">
+												<ArrowDownCircle class="h-3.5 w-3.5 text-red-600" />
 											</div>
-										</Card.Header>
-										<Card.Content>
-											<div class="text-2xl font-bold break-all text-red-600 dark:text-red-400">
-												{formatCurrency(nativeDailyData.summary.totalOut)}
-											</div>
-										</Card.Content>
-									</Card.Root>
+										</div>
+										<div class="mt-1.5 text-lg font-bold break-all text-red-600 sm:mt-2 sm:text-2xl">
+											{formatCurrency(nativeDailyData.summary.totalOut)}
+										</div>
+									</div>
 
-									<Card.Root class="border-l-4 border-l-blue-500">
-										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Gross Profit</Card.Title>
-											<div class="rounded-full bg-blue-100 p-2 dark:bg-blue-500/20">
-												<Wallet class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+									<div class="rounded-lg border bg-card p-3 sm:p-4">
+										<div class="flex items-center justify-between">
+											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+												>Gross Profit</span
+											>
+											<div class="hidden rounded-md bg-blue-500/10 p-1.5 sm:block">
+												<Wallet class="h-3.5 w-3.5 text-blue-600" />
 											</div>
-										</Card.Header>
-										<Card.Content>
-											<div class="text-2xl font-bold break-all text-blue-600 dark:text-blue-400">
-												{formatCurrency(nativeDailyData.summary.grossProfit)}
-											</div>
-										</Card.Content>
-									</Card.Root>
+										</div>
+										<div class="mt-1.5 text-lg font-bold break-all text-blue-600 sm:mt-2 sm:text-2xl">
+											{formatCurrency(nativeDailyData.summary.grossProfit)}
+										</div>
+									</div>
 
-									<Card.Root class="border-l-4 border-l-indigo-500">
-										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Net Profit</Card.Title>
-											<div class="rounded-full bg-indigo-100 p-2 dark:bg-indigo-500/20">
-												<TrendingUp class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+									<div class="rounded-lg border bg-card p-3 sm:p-4">
+										<div class="flex items-center justify-between">
+											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+												>Net Profit</span
+											>
+											<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
+												<TrendingUp class="h-3.5 w-3.5 text-indigo-600" />
 											</div>
-										</Card.Header>
-										<Card.Content>
-											<div class="text-2xl font-bold break-all text-indigo-600 dark:text-indigo-400">
-												{formatCurrency(nativeDailyData.summary.netProfit)}
-											</div>
-										</Card.Content>
-									</Card.Root>
+										</div>
+										<div
+											class="mt-1.5 text-lg font-bold break-all text-indigo-600 sm:mt-2 sm:text-2xl"
+										>
+											{formatCurrency(nativeDailyData.summary.netProfit)}
+										</div>
+									</div>
 								{/if}
 							{:else}
 								{#await data.dailyData}
 									{#each Array(4) as _}
-										<Card.Root class="space-y-2 p-4"
-											><Skeleton class="h-4 w-20" /><Skeleton class="h-8 w-full" /></Card.Root
-										>
+										<div class="space-y-3 rounded-lg border bg-card p-3 sm:p-4">
+											<Skeleton class="h-4 w-20" />
+											<Skeleton class="h-8 w-full" />
+										</div>
 									{/each}
 								{:then daily}
-									<Card.Root class="border-l-4 border-l-emerald-500">
-										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Cash In</Card.Title>
-											<div class="rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
-												<ArrowUpCircle class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-											</div>
-										</Card.Header>
-										<Card.Content>
-											<div
-												class="text-2xl font-bold break-all text-emerald-600 dark:text-emerald-400"
+									<div class="rounded-lg border bg-card p-3 sm:p-4">
+										<div class="flex items-center justify-between">
+											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+												>Cash In</span
 											>
-												{formatCurrency(daily.summary.totalIn)}
+											<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
+												<ArrowUpCircle class="h-3.5 w-3.5 text-emerald-600" />
 											</div>
-										</Card.Content>
-									</Card.Root>
+										</div>
+										<div
+											class="mt-1.5 text-lg font-bold break-all text-emerald-600 sm:mt-2 sm:text-2xl"
+										>
+											{formatCurrency(daily.summary.totalIn)}
+										</div>
+									</div>
 
-									<Card.Root class="border-l-4 border-l-red-500">
-										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Expenses</Card.Title>
-											<div class="rounded-full bg-red-100 p-2 dark:bg-red-500/20">
-												<ArrowDownCircle class="h-4 w-4 text-red-600 dark:text-red-400" />
+									<div class="rounded-lg border bg-card p-3 sm:p-4">
+										<div class="flex items-center justify-between">
+											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+												>Expenses</span
+											>
+											<div class="hidden rounded-md bg-red-500/10 p-1.5 sm:block">
+												<ArrowDownCircle class="h-3.5 w-3.5 text-red-600" />
 											</div>
-										</Card.Header>
-										<Card.Content>
-											<div class="text-2xl font-bold break-all text-red-600 dark:text-red-400">
-												{formatCurrency(daily.summary.totalOut)}
-											</div>
-										</Card.Content>
-									</Card.Root>
+										</div>
+										<div class="mt-1.5 text-lg font-bold break-all text-red-600 sm:mt-2 sm:text-2xl">
+											{formatCurrency(daily.summary.totalOut)}
+										</div>
+									</div>
 
-									<Card.Root class="border-l-4 border-l-blue-500">
-										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Gross Profit</Card.Title>
-											<div class="rounded-full bg-blue-100 p-2 dark:bg-blue-500/20">
-												<Wallet class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+									<div class="rounded-lg border bg-card p-3 sm:p-4">
+										<div class="flex items-center justify-between">
+											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+												>Gross Profit</span
+											>
+											<div class="hidden rounded-md bg-blue-500/10 p-1.5 sm:block">
+												<Wallet class="h-3.5 w-3.5 text-blue-600" />
 											</div>
-										</Card.Header>
-										<Card.Content>
-											<div class="text-2xl font-bold break-all text-blue-600 dark:text-blue-400">
-												{formatCurrency(daily.summary.grossProfit)}
-											</div>
-										</Card.Content>
-									</Card.Root>
+										</div>
+										<div class="mt-1.5 text-lg font-bold break-all text-blue-600 sm:mt-2 sm:text-2xl">
+											{formatCurrency(daily.summary.grossProfit)}
+										</div>
+									</div>
 
-									<Card.Root class="border-l-4 border-l-indigo-500">
-										<Card.Header class="flex flex-row items-center justify-between pb-2">
-											<Card.Title class="text-sm font-medium">Net Profit</Card.Title>
-											<div class="rounded-full bg-indigo-100 p-2 dark:bg-indigo-500/20">
-												<TrendingUp class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+									<div class="rounded-lg border bg-card p-3 sm:p-4">
+										<div class="flex items-center justify-between">
+											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+												>Net Profit</span
+											>
+											<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
+												<TrendingUp class="h-3.5 w-3.5 text-indigo-600" />
 											</div>
-										</Card.Header>
-										<Card.Content>
-											<div class="text-2xl font-bold break-all text-indigo-600 dark:text-indigo-400">
-												{formatCurrency(daily.summary.netProfit)}
-											</div>
-										</Card.Content>
-									</Card.Root>
+										</div>
+										<div
+											class="mt-1.5 text-lg font-bold break-all text-indigo-600 sm:mt-2 sm:text-2xl"
+										>
+											{formatCurrency(daily.summary.netProfit)}
+										</div>
+									</div>
 								{/await}
 							{/if}
 						</div>

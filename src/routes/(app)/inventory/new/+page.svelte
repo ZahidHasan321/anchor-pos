@@ -188,18 +188,21 @@
 								Select the sizes you want to create and set pricing & stock.
 							</p>
 						</div>
-						<div class="w-[200px]">
-							<Select.Root type="single" bind:value={selectedTemplate}>
-								<Select.Trigger class="h-10 bg-background">
-									{selectedTemplate === 'alpha' ? 'Alpha (S, M, L...)' : 'Numeric (28, 30...)'}
-								</Select.Trigger>
-								<Select.Content>
-									<Select.Item value="alpha" class="cursor-pointer">Alpha (S, M, L...)</Select.Item>
-									<Select.Item value="numeric" class="cursor-pointer"
-										>Numeric (28, 30...)</Select.Item
-									>
-								</Select.Content>
-							</Select.Root>
+						<div class="flex items-center rounded-lg border bg-muted p-1">
+							<button
+								type="button"
+								class="h-8 px-3 text-xs font-medium transition-all rounded-md {selectedTemplate === 'alpha' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted-foreground/10'}"
+								onclick={() => (selectedTemplate = 'alpha')}
+							>
+								Alpha (S, M, L...)
+							</button>
+							<button
+								type="button"
+								class="h-8 px-3 text-xs font-medium transition-all rounded-md {selectedTemplate === 'numeric' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted-foreground/10'}"
+								onclick={() => (selectedTemplate = 'numeric')}
+							>
+								Numeric (28, 30...)
+							</button>
 						</div>
 					</div>
 

@@ -1,5 +1,6 @@
 import { AppSchema } from './powersync-schema';
 import { browser } from '$app/environment';
+import { toast } from 'svelte-sonner';
 
 type PowerSyncDatabase = any;
 
@@ -10,8 +11,11 @@ export class PowerSyncManager {
     isConnected = $state(false);
     /** Increments each time a sync completes — use as a dependency in $effect to re-query */
     dataVersion = $state(0);
+    connectionStatus = $state<'online' | 'offline' | 'syncing'>('offline');
     private _readyResolve: (() => void) | null = null;
     private _readyPromise: Promise<void>;
+    private _lastToastTime = 0;
+    private _lastToastType = '';
 
     constructor() {
         this._readyPromise = new Promise((resolve) => {
@@ -26,8 +30,11 @@ export class PowerSyncManager {
         return PowerSyncManager.instance;
     }
 
+    private _initialized = false;
+
     async init() {
-        if (!browser) return;
+        if (!browser || this._initialized) return;
+        this._initialized = true;
 
         const { PowerSyncDatabase } = await import('@powersync/web');
         this.db = new PowerSyncDatabase({
@@ -64,31 +71,46 @@ export class PowerSyncManager {
         }
     }
 
+    private _connecting = false;
+
     async connect() {
-        if (!browser) return;
+        if (!browser || this._connecting) return;
+        this._connecting = true;
 
         try {
-            const powersyncUrl = import.meta.env.VITE_POWERSYNC_URL || 'https://powersync.anchorshop.cloud';
+            const powersyncUrl = import.meta.env.VITE_POWERSYNC_URL || import.meta.env.POWERSYNC_URL || 'https://powersync.anchorshop.cloud';
 
             const connector: any = {
                 fetchCredentials: async () => {
-                    try {
-                        const res = await fetch(`/api/powersync/token`, {
-                            credentials: 'include'
-                        });
-                        if (!res.ok) {
-                            console.warn('PowerSync token fetch failed:', res.status);
-                            return null;
+                    const maxAttempts = 3;
+                    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                        try {
+                            const res = await fetch(`/api/powersync/token`, {
+                                credentials: 'include'
+                            });
+                            if (!res.ok) {
+                                console.error(`PowerSync token fetch failed (attempt ${attempt}/${maxAttempts}):`, res.status);
+                                if (attempt < maxAttempts) {
+                                    await new Promise(r => setTimeout(r, 1000 * attempt));
+                                    continue;
+                                }
+                                throw new Error(`Token fetch failed: ${res.status}`);
+                            }
+                            const { token } = await res.json();
+                            return {
+                                endpoint: powersyncUrl,
+                                token: token
+                            };
+                        } catch (e) {
+                            console.error(`PowerSync credential fetch error (attempt ${attempt}/${maxAttempts}):`, e);
+                            if (attempt < maxAttempts) {
+                                await new Promise(r => setTimeout(r, 1000 * attempt));
+                                continue;
+                            }
+                            throw e;
                         }
-                        const { token } = await res.json();
-                        return {
-                            endpoint: powersyncUrl,
-                            token: token
-                        };
-                    } catch (e) {
-                        console.warn('PowerSync credential fetch error:', e);
-                        return null;
                     }
+                    throw new Error('PowerSync token fetch exhausted retries');
                 },
                 uploadData: async (database: any) => {
                     const transaction = await database.getNextCrudTransaction();
@@ -141,22 +163,87 @@ export class PowerSyncManager {
         }
     }
 
+    private _fireToast(type: string, fn: () => void) {
+        const now = Date.now();
+        if (type === this._lastToastType && now - this._lastToastTime < 3000) return;
+        this._lastToastType = type;
+        this._lastToastTime = now;
+        fn();
+    }
+
     private _listenForSyncChanges() {
         let lastConnected = false;
+        let lastDownloading = false;
+        let lastUploading = false;
+        let initialSync = true;
+
+        // Also listen for browser online/offline events
+        if (browser) {
+            window.addEventListener('offline', () => {
+                this.connectionStatus = 'offline';
+                this._fireToast('offline', () =>
+                    toast.warning('You are offline. Changes will sync when reconnected.')
+                );
+            });
+            window.addEventListener('online', () => {
+                // PowerSync will reconnect automatically; mark syncing
+                if (this.connectionStatus === 'offline') {
+                    this.connectionStatus = 'syncing';
+                }
+            });
+        }
 
         this.db.registerListener({
             statusChanged: (status: any) => {
-                // Detect when downloading completes (transition from downloading to idle)
-                const downloading = status?.dataFlowStatus?.downloading;
-                const connected = status?.connected;
+                const downloading = !!status?.dataFlowStatus?.downloading;
+                const uploading = !!status?.dataFlowStatus?.uploading;
+                const connected = !!status?.connected;
+                const isSyncing = connected && (downloading || uploading);
 
+                // Update connection status
+                if (!connected) {
+                    this.connectionStatus = 'offline';
+                } else if (isSyncing) {
+                    this.connectionStatus = 'syncing';
+                } else {
+                    this.connectionStatus = 'online';
+                }
+
+                // Toast: went offline
+                if (!connected && lastConnected) {
+                    this._fireToast('offline', () =>
+                        toast.warning('You are offline. Changes will sync when reconnected.')
+                    );
+                }
+
+                // Toast: came back online
+                if (connected && !lastConnected && !initialSync) {
+                    this._fireToast('reconnect', () =>
+                        toast.info('Back online. Syncing...')
+                    );
+                }
+
+                // Toast: sync completed (downloading or uploading finished)
+                if (connected && !initialSync) {
+                    const downloadFinished = !downloading && lastDownloading;
+                    const uploadFinished = !uploading && lastUploading;
+                    if ((downloadFinished || uploadFinished) && !isSyncing) {
+                        this._fireToast('synced', () =>
+                            toast.success('Data synced successfully')
+                        );
+                    }
+                }
+
+                // Detect when downloading completes (transition from downloading to idle)
                 if (connected && downloading === false && lastConnected) {
-                    // Sync just finished downloading — bump version so pages re-query
                     this.dataVersion++;
                     console.log('PowerSync: sync completed, dataVersion =', this.dataVersion);
                 }
 
-                lastConnected = !!connected;
+                lastConnected = connected;
+                lastDownloading = downloading;
+                lastUploading = uploading;
+                initialSync = false;
             }
         });
     }

@@ -98,239 +98,219 @@
 	</div>
 
 	<!-- Summary Cards -->
-	<div class="flex flex-wrap gap-4">
+	<div class="flex flex-wrap gap-2.5 sm:gap-4">
 		{#if isNative}
 			{#if nativeStats === null}
 				{#each Array(4) as _}
-					<div class="min-w-[150px] flex-1">
-						<Card.Root class="h-full space-y-2 p-4">
-							<Skeleton class="h-4 w-24" />
-							<Skeleton class="h-8 w-full" />
-							<Skeleton class="h-3 w-16" />
-						</Card.Root>
+					<div class="min-w-[150px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
+						<Skeleton class="h-4 w-24" />
+						<Skeleton class="h-8 w-full" />
+						<Skeleton class="h-3 w-16" />
 					</div>
 				{/each}
 			{:else}
 				<div
-					class="min-w-[150px] flex-1 animate-in duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
-					<Card.Root class="h-full border-l-4 border-l-emerald-500">
-						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-							<Card.Title class="text-sm font-medium">Today's Sales</Card.Title>
-							<div class="shrink-0 rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
-								<ShoppingBag class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div
-								class="text-2xl font-bold break-words break-all text-emerald-600 dark:text-emerald-400"
-							>
-								{formatCurrency(nativeStats.todaySales?.total ?? 0)}
-							</div>
-							<p class="text-xs text-muted-foreground">
-								{nativeStats.todaySales?.count ?? 0} orders today
-							</p>
-						</Card.Content>
-					</Card.Root>
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Today's Sales</span
+						>
+						<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
+							<ShoppingBag class="h-3.5 w-3.5 text-emerald-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-lg font-bold break-all text-emerald-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(nativeStats.todaySales?.total ?? 0)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						{nativeStats.todaySales?.count ?? 0} orders today
+					</p>
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in delay-75 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-75 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
-					<Card.Root class="h-full border-l-4 border-l-blue-500">
-						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-							<Card.Title class="text-sm font-medium">Monthly Sales</Card.Title>
-							<div class="shrink-0 rounded-full bg-blue-100 p-2 dark:bg-blue-500/20">
-								<TrendingUp class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div class="text-2xl font-bold break-words break-all text-blue-600 dark:text-blue-400">
-								{formatCurrency(nativeStats.monthlySales?.total ?? 0)}
-							</div>
-							<p class="text-xs text-muted-foreground">
-								{nativeStats.monthlySales?.count ?? 0} orders this month
-							</p>
-						</Card.Content>
-					</Card.Root>
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Monthly Sales</span
+						>
+						<div class="hidden rounded-md bg-blue-500/10 p-1.5 sm:block">
+							<TrendingUp class="h-3.5 w-3.5 text-blue-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-lg font-bold break-all text-blue-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(nativeStats.monthlySales?.total ?? 0)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						{nativeStats.monthlySales?.count ?? 0} orders this month
+					</p>
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in delay-150 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-150 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
-					<Card.Root class="h-full border-l-4 border-l-red-500">
-						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-							<Card.Title class="text-sm font-medium">Today's Expenses</Card.Title>
-							<div class="shrink-0 rounded-full bg-red-100 p-2 dark:bg-red-500/20">
-								<Receipt class="h-4 w-4 text-red-600 dark:text-red-400" />
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div class="text-2xl font-bold break-words break-all text-red-600 dark:text-red-400">
-								{formatCurrency(nativeStats.todayExpenses?.total ?? 0)}
-							</div>
-							<p class="text-xs text-muted-foreground">Recorded in cashbook</p>
-						</Card.Content>
-					</Card.Root>
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Today's Expenses</span
+						>
+						<div class="hidden rounded-md bg-red-500/10 p-1.5 sm:block">
+							<Receipt class="h-3.5 w-3.5 text-red-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-lg font-bold break-all text-red-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(nativeStats.todayExpenses?.total ?? 0)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						Recorded in cashbook
+					</p>
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in delay-175 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-175 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
-					<Card.Root class="h-full border-l-4 border-l-emerald-500">
-						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-							<Card.Title class="text-sm font-medium">Today's Profit</Card.Title>
-							<div class="shrink-0 rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
-								<TrendingUp class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div
-								class="text-2xl font-bold break-words break-all {nativeStats.todayProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}"
-							>
-								{formatCurrency(nativeStats.todayProfit ?? 0)}
-							</div>
-							<p class="text-xs text-muted-foreground">Revenue - Cost of Goods</p>
-						</Card.Content>
-					</Card.Root>
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Today's Profit</span
+						>
+						<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
+							<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
+						</div>
+					</div>
+					<div
+						class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl {nativeStats.todayProfit >= 0
+							? 'text-emerald-600'
+							: 'text-red-600'}"
+					>
+						{formatCurrency(nativeStats.todayProfit ?? 0)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						Revenue - COGS
+					</p>
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
-					<Card.Root class="h-full border-l-4 border-l-indigo-500">
-						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-							<Card.Title class="text-sm font-medium">Inventory Value</Card.Title>
-							<div class="shrink-0 rounded-full bg-indigo-100 p-2 dark:bg-indigo-500/20">
-								<Package class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div
-								class="text-2xl font-bold break-words break-all text-indigo-600 dark:text-indigo-400"
-							>
-								{formatCurrency(nativeStats.inventoryValue)}
-							</div>
-							<p class="text-xs text-muted-foreground">At cost</p>
-						</Card.Content>
-					</Card.Root>
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Inventory Value</span
+						>
+						<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
+							<Package class="h-3.5 w-3.5 text-indigo-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-lg font-bold break-all text-indigo-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(nativeStats.inventoryValue)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">At cost</p>
 				</div>
 			{/if}
 		{:else}
 			{#await data.stats}
 				{#each Array(4) as _}
-					<div class="min-w-[150px] flex-1">
-						<Card.Root class="h-full space-y-2 p-4">
-							<Skeleton class="h-4 w-24" />
-							<Skeleton class="h-8 w-full" />
-							<Skeleton class="h-3 w-16" />
-						</Card.Root>
+					<div class="min-w-[150px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
+						<Skeleton class="h-4 w-24" />
+						<Skeleton class="h-8 w-full" />
+						<Skeleton class="h-3 w-16" />
 					</div>
 				{/each}
 			{:then stats}
 				<div
-					class="min-w-[150px] flex-1 animate-in duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
-					<Card.Root class="h-full border-l-4 border-l-emerald-500">
-						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-							<Card.Title class="text-sm font-medium">Today's Sales</Card.Title>
-							<div class="shrink-0 rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
-								<ShoppingBag class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div
-								class="text-2xl font-bold break-words break-all text-emerald-600 dark:text-emerald-400"
-							>
-								{formatCurrency(stats.todaySales?.total ?? 0)}
-							</div>
-							<p class="text-xs text-muted-foreground">
-								{stats.todaySales?.count ?? 0} orders today
-							</p>
-						</Card.Content>
-					</Card.Root>
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Today's Sales</span
+						>
+						<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
+							<ShoppingBag class="h-3.5 w-3.5 text-emerald-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-lg font-bold break-all text-emerald-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(stats.todaySales?.total ?? 0)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						{stats.todaySales?.count ?? 0} orders today
+					</p>
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in delay-75 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-75 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
-					<Card.Root class="h-full border-l-4 border-l-blue-500">
-						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-							<Card.Title class="text-sm font-medium">Monthly Sales</Card.Title>
-							<div class="shrink-0 rounded-full bg-blue-100 p-2 dark:bg-blue-500/20">
-								<TrendingUp class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div class="text-2xl font-bold break-words break-all text-blue-600 dark:text-blue-400">
-								{formatCurrency(stats.monthlySales?.total ?? 0)}
-							</div>
-							<p class="text-xs text-muted-foreground">
-								{stats.monthlySales?.count ?? 0} orders this month
-							</p>
-						</Card.Content>
-					</Card.Root>
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Monthly Sales</span
+						>
+						<div class="hidden rounded-md bg-blue-500/10 p-1.5 sm:block">
+							<TrendingUp class="h-3.5 w-3.5 text-blue-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-lg font-bold break-all text-blue-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(stats.monthlySales?.total ?? 0)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						{stats.monthlySales?.count ?? 0} orders this month
+					</p>
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in delay-150 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-150 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
-					<Card.Root class="h-full border-l-4 border-l-red-500">
-						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-							<Card.Title class="text-sm font-medium">Today's Expenses</Card.Title>
-							<div class="shrink-0 rounded-full bg-red-100 p-2 dark:bg-red-500/20">
-								<Receipt class="h-4 w-4 text-red-600 dark:text-red-400" />
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div class="text-2xl font-bold break-words break-all text-red-600 dark:text-red-400">
-								{formatCurrency(stats.todayExpenses?.total ?? 0)}
-							</div>
-							<p class="text-xs text-muted-foreground">Recorded in cashbook</p>
-						</Card.Content>
-					</Card.Root>
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Today's Expenses</span
+						>
+						<div class="hidden rounded-md bg-red-500/10 p-1.5 sm:block">
+							<Receipt class="h-3.5 w-3.5 text-red-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-lg font-bold break-all text-red-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(stats.todayExpenses?.total ?? 0)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						Recorded in cashbook
+					</p>
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in delay-175 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-175 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
-					<Card.Root class="h-full border-l-4 border-l-emerald-500">
-						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-							<Card.Title class="text-sm font-medium">Today's Profit</Card.Title>
-							<div class="shrink-0 rounded-full bg-emerald-100 p-2 dark:bg-emerald-500/20">
-								<TrendingUp class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div
-								class="text-2xl font-bold break-words break-all {stats.todayProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}"
-							>
-								{formatCurrency(stats.todayProfit ?? 0)}
-							</div>
-							<p class="text-xs text-muted-foreground">Revenue - Cost of Goods</p>
-						</Card.Content>
-					</Card.Root>
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Today's Profit</span
+						>
+						<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
+							<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
+						</div>
+					</div>
+					<div
+						class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl {stats.todayProfit >= 0
+							? 'text-emerald-600'
+							: 'text-red-600'}"
+					>
+						{formatCurrency(stats.todayProfit ?? 0)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						Revenue - COGS
+					</p>
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
-					<Card.Root class="h-full border-l-4 border-l-indigo-500">
-						<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-							<Card.Title class="text-sm font-medium">Inventory Value</Card.Title>
-							<div class="shrink-0 rounded-full bg-indigo-100 p-2 dark:bg-indigo-500/20">
-								<Package class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div
-								class="text-2xl font-bold break-words break-all text-indigo-600 dark:text-indigo-400"
-							>
-								{formatCurrency(stats.inventoryValue)}
-							</div>
-							<p class="text-xs text-muted-foreground">At cost</p>
-						</Card.Content>
-					</Card.Root>
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Inventory Value</span
+						>
+						<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
+							<Package class="h-3.5 w-3.5 text-indigo-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-lg font-bold break-all text-indigo-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(stats.inventoryValue)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">At cost</p>
 				</div>
 			{/await}
 		{/if}
@@ -340,62 +320,58 @@
 		>
 			{#if isNative}
 				{#if nativeStockAlerts === null}
-					<Card.Root class="h-full space-y-2 p-4">
+					<div class="min-w-[150px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
 						<Skeleton class="h-8 w-full" />
 						<Skeleton class="h-3 w-16" />
-					</Card.Root>
+					</div>
 				{:else}
 					<a
 						href="/inventory?stock=low"
-						class="block h-full transition-transform hover:scale-[1.02] active:scale-[0.98]"
+						class="block h-full rounded-lg border bg-card p-3 transition-transform hover:scale-[1.02] active:scale-[0.98] sm:p-4"
 					>
-						<Card.Root class="h-full border-l-4 border-l-amber-500">
-							<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-								<Card.Title class="text-sm font-medium">Low Stock Alerts</Card.Title>
-								<div class="shrink-0 rounded-full bg-amber-100 p-2 dark:bg-amber-500/20">
-									<AlertTriangle class="h-4 w-4 text-amber-600 dark:text-amber-400" />
-								</div>
-							</Card.Header>
-							<Card.Content>
-								<div
-									class="text-2xl font-bold break-words break-all text-amber-600 dark:text-amber-400"
-								>
-									{nativeStockAlerts.lowStockCount}
-								</div>
-								<p class="text-xs text-muted-foreground">Items with low stock</p>
-							</Card.Content>
-						</Card.Root>
+						<div class="flex items-center justify-between">
+							<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+								>Low Stock Alerts</span
+							>
+							<div class="hidden rounded-md bg-amber-500/10 p-1.5 sm:block">
+								<AlertTriangle class="h-3.5 w-3.5 text-amber-600" />
+							</div>
+						</div>
+						<div class="mt-1.5 text-lg font-bold break-all text-amber-600 sm:mt-2 sm:text-2xl">
+							{nativeStockAlerts.lowStockCount}
+						</div>
+						<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+							Items with low stock
+						</p>
 					</a>
 				{/if}
 			{:else}
 				{#await data.stockAlerts}
-					<Card.Root class="h-full space-y-2 p-4">
+					<div class="min-w-[150px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
 						<Skeleton class="h-8 w-full" />
 						<Skeleton class="h-3 w-16" />
-					</Card.Root>
+					</div>
 				{:then alerts}
 					<a
 						href="/inventory?stock=low"
-						class="block h-full transition-transform hover:scale-[1.02] active:scale-[0.98]"
+						class="block h-full rounded-lg border bg-card p-3 transition-transform hover:scale-[1.02] active:scale-[0.98] sm:p-4"
 					>
-						<Card.Root class="h-full border-l-4 border-l-amber-500">
-							<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-								<Card.Title class="text-sm font-medium">Low Stock Alerts</Card.Title>
-								<div class="shrink-0 rounded-full bg-amber-100 p-2 dark:bg-amber-500/20">
-									<AlertTriangle class="h-4 w-4 text-amber-600 dark:text-amber-400" />
-								</div>
-							</Card.Header>
-							<Card.Content>
-								<div
-									class="text-2xl font-bold break-words break-all text-amber-600 dark:text-amber-400"
-								>
-									{alerts.lowStockCount}
-								</div>
-								<p class="text-xs text-muted-foreground">Items with low stock</p>
-							</Card.Content>
-						</Card.Root>
+						<div class="flex items-center justify-between">
+							<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+								>Low Stock Alerts</span
+							>
+							<div class="hidden rounded-md bg-amber-500/10 p-1.5 sm:block">
+								<AlertTriangle class="h-3.5 w-3.5 text-amber-600" />
+							</div>
+						</div>
+						<div class="mt-1.5 text-lg font-bold break-all text-amber-600 sm:mt-2 sm:text-2xl">
+							{alerts.lowStockCount}
+						</div>
+						<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+							Items with low stock
+						</p>
 					</a>
 				{/await}
 			{/if}
