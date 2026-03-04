@@ -10,7 +10,8 @@ const isElectron = env.BUILD_TARGET === 'electron' ||
                   (typeof process !== 'undefined' && process.env?.BUILD_TARGET === 'electron');
 
 // Force DATABASE_URL to null in Electron to prevent any unintended Postgres connections
-const connectionString = isElectron ? null : env.DATABASE_URL;
+// However, allow it in development mode for testing and migrations
+const connectionString = (isElectron && !dev) ? null : env.DATABASE_URL;
 
 if (!connectionString && !building && !isElectron) {
     throw new Error('DATABASE_URL is not set');

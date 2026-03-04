@@ -82,6 +82,7 @@ export class PowerSyncManager {
 
             const connector: any = {
                 fetchCredentials: async () => {
+                    console.log('[PowerSync] Fetching credentials...');
                     const maxAttempts = 3;
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                         try {
@@ -89,7 +90,8 @@ export class PowerSyncManager {
                                 credentials: 'include'
                             });
                             if (!res.ok) {
-                                console.error(`PowerSync token fetch failed (attempt ${attempt}/${maxAttempts}):`, res.status);
+                                const body = await res.text().catch(() => '');
+                                console.error(`[PowerSync] Token fetch failed (attempt ${attempt}/${maxAttempts}): ${res.status} ${body}`);
                                 if (attempt < maxAttempts) {
                                     await new Promise(r => setTimeout(r, 1000 * attempt));
                                     continue;
@@ -97,12 +99,13 @@ export class PowerSyncManager {
                                 throw new Error(`Token fetch failed: ${res.status}`);
                             }
                             const { token } = await res.json();
+                            console.log('[PowerSync] Token obtained successfully');
                             return {
                                 endpoint: powersyncUrl,
                                 token: token
                             };
                         } catch (e) {
-                            console.error(`PowerSync credential fetch error (attempt ${attempt}/${maxAttempts}):`, e);
+                            console.error(`[PowerSync] Credential fetch error (attempt ${attempt}/${maxAttempts}):`, e);
                             if (attempt < maxAttempts) {
                                 await new Promise(r => setTimeout(r, 1000 * attempt));
                                 continue;
@@ -116,30 +119,32 @@ export class PowerSyncManager {
                     const transaction = await database.getNextCrudTransaction();
                     if (!transaction) return;
 
-                    let retries = 0;
-                    const maxRetries = 3;
-                    while (retries <= maxRetries) {
-                        try {
-                            const res = await fetch(`/api/powersync/upload`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                credentials: 'include',
-                                body: JSON.stringify({ mutations: transaction.crud })
-                            });
+                    const mutationCount = transaction.crud?.length ?? 0;
+                    const tables = [...new Set((transaction.crud || []).map((m: any) => m.table))];
+                    console.log(`[PowerSync] Uploading ${mutationCount} mutations for tables: ${tables.join(', ')}`);
 
-                            if (res.ok) {
-                                await transaction.complete();
-                                return;
-                            }
-                            throw new Error(`Upload failed: ${res.status}`);
-                        } catch (e) {
-                            retries++;
-                            if (retries > maxRetries) {
-                                console.error('Data upload failed after retries:', e);
-                                throw e;
-                            }
-                            await new Promise(r => setTimeout(r, 1000 * retries));
+                    try {
+                        const res = await fetch(`/api/powersync/upload`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ mutations: transaction.crud })
+                        });
+
+                        if (res.ok) {
+                            await transaction.complete();
+                            console.log(`[PowerSync] Upload successful (${mutationCount} mutations)`);
+                            return;
                         }
+
+                        const body = await res.text().catch(() => '');
+                        throw new Error(`Upload failed: ${res.status} ${body}`);
+                    } catch (e) {
+                        // Throw so PowerSync uses its own exponential backoff.
+                        // No internal retry loop — that kept the uploading status
+                        // active continuously, making the UI stuck on "syncing".
+                        console.error('[PowerSync] Upload failed (will retry with backoff):', e);
+                        throw e;
                     }
                 }
             };

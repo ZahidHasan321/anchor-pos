@@ -47,7 +47,7 @@
 			powersync.db.get(`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ?`, [monthIso]),
 			powersync.db.get(`SELECT coalesce(sum(amount), 0) as total FROM cashbook WHERE type = 'out' AND created_at >= ?`, [todayIso]),
 			powersync.db.get(`SELECT coalesce(sum(oi.cost_at_sale * oi.quantity), 0) as total FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id WHERE o.status = 'completed' AND o.created_at >= ?`, [todayIso]),
-			powersync.db.get(`SELECT coalesce(sum(coalesce(p.cost_price, 0) * pv.stock_quantity), 0) as total FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id`)
+			powersync.db.get(`SELECT coalesce(sum(coalesce(pv.cost_price, p.cost_price, 0) * pv.stock_quantity), 0) as total FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id`)
 		]).then(([todaySales, monthlySales, todayExpenses, todayCogs, inventoryValue]) => {
 			nativeStats = {
 				todaySales: todaySales || { count: 0, total: 0 },

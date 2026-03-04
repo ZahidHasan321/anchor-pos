@@ -67,7 +67,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, today))),
 				db
 					.select({
-						total: sql<number>`coalesce(sum(coalesce(${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`
+						total: sql<number>`coalesce(sum(coalesce(${productVariants.costPrice}, ${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`
 					})
 					.from(productVariants)
 					.innerJoin(products, eq(productVariants.productId, products.id))
