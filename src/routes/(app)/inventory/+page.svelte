@@ -185,207 +185,189 @@
 	<title>Inventory — Clothing POS</title>
 </svelte:head>
 
-<div class="space-y-6 p-3 pb-24 sm:p-6 md:pb-6">
+<div class="space-y-4 p-3 sm:p-6 pb-24 md:pb-6">
 	<!-- Header -->
-	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+	<div class="flex items-center justify-between">
 		<div>
 			<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Inventory</h1>
-			<p class="text-sm text-muted-foreground sm:text-base">Manage products and stock levels.</p>
+			<p class="hidden text-xs text-muted-foreground sm:block sm:text-sm">Manage products and stock levels.</p>
 		</div>
-		<Button href="/inventory/new" class="hidden md:flex"
-			><Plus class="mr-2 h-4 w-4" /> New Product</Button
-		>
 	</div>
 
 	<!-- Summary Cards -->
-	<div class="flex flex-wrap gap-3">
+	<div class="flex flex-wrap gap-2.5 sm:gap-4">
 		{#if isNative && nativeData}
-			<div
-				class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 shadow-sm"
-			>
-				<div
-					class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600"
-				>
-					<Package class="h-5 w-5" />
+			<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+				<div class="flex items-center justify-between">
+					<span class="text-[10px] font-bold text-muted-foreground uppercase">Products</span>
+					<div class="rounded-md bg-blue-500/10 p-1.5">
+						<Package class="h-3.5 w-3.5 text-blue-600" />
+					</div>
 				</div>
-				<div>
-					<p class="text-[10px] font-bold text-muted-foreground uppercase">Products</p>
-					<p class="mt-1 text-xl font-black">{nativeData.stats.totalProducts}</p>
+				<div class="mt-1.5 text-xl font-black sm:mt-2 sm:text-2xl">
+					{nativeData.stats.totalProducts}
 				</div>
 			</div>
-			<div
-				class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 shadow-sm"
-			>
-				<div
-					class="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600"
-				>
-					<TrendingUp class="h-5 w-5" />
+
+			<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+				<div class="flex items-center justify-between">
+					<span class="text-[10px] font-bold text-muted-foreground uppercase">Value</span>
+					<div class="rounded-md bg-indigo-500/10 p-1.5">
+						<TrendingUp class="h-3.5 w-3.5 text-indigo-600" />
+					</div>
 				</div>
-				<div>
-					<p class="text-[10px] font-bold text-muted-foreground uppercase">Value</p>
-					<p class="mt-1 text-xl font-black">
-						{formatCurrency(nativeData.stats.totalInventoryValue)}
-					</p>
+				<div class="mt-1.5 text-xl font-black text-indigo-600 sm:mt-2 sm:text-2xl">
+					{formatCurrency(nativeData.stats.totalInventoryValue)}
 				</div>
 			</div>
+
 			<button
-				class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm {selectedStock ===
-				'low'
-					? 'ring-2 ring-amber-500'
-					: ''}"
+				class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:bg-muted/50 sm:p-4 {selectedStock === 'low' ? 'ring-2 ring-amber-500' : ''}"
 				onclick={() => setStockFilter(selectedStock === 'low' ? '' : 'low')}
 			>
-				<div
-					class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"
-				>
-					<AlertTriangle class="h-5 w-5" />
+				<div class="flex items-center justify-between">
+					<span class="text-[10px] font-bold text-muted-foreground uppercase">Low Stock</span>
+					<div class="rounded-md bg-amber-500/10 p-1.5">
+						<AlertTriangle class="h-3.5 w-3.5 text-amber-600" />
+					</div>
 				</div>
-				<div>
-					<p class="text-[10px] font-bold text-muted-foreground uppercase">Low Stock</p>
-					<p class="mt-1 text-xl font-black">{nativeData.stats.lowStockVariants}</p>
+				<div class="mt-1.5 text-xl font-black text-amber-600 sm:mt-2 sm:text-2xl">
+					{nativeData.stats.lowStockVariants}
 				</div>
 			</button>
+
 			<button
-				class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm {selectedStock ===
-				'out'
-					? 'ring-2 ring-red-500'
-					: ''}"
+				class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:bg-muted/50 sm:p-4 {selectedStock === 'out' ? 'ring-2 ring-red-500' : ''}"
 				onclick={() => setStockFilter(selectedStock === 'out' ? '' : 'out')}
 			>
-				<div
-					class="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10 text-red-600"
-				>
-					<PackageX class="h-5 w-5" />
+				<div class="flex items-center justify-between">
+					<span class="text-[10px] font-bold text-muted-foreground uppercase">Out of Stock</span>
+					<div class="rounded-md bg-red-500/10 p-1.5">
+						<PackageX class="h-3.5 w-3.5 text-red-600" />
+					</div>
 				</div>
-				<div>
-					<p class="text-[10px] font-bold text-muted-foreground uppercase">Out of Stock</p>
-					<p class="mt-1 text-xl font-black">{nativeData.stats.outOfStockVariants}</p>
+				<div class="mt-1.5 text-xl font-black text-red-600 sm:mt-2 sm:text-2xl">
+					{nativeData.stats.outOfStockVariants}
 				</div>
 			</button>
 		{:else if isNative}
-			{#each Array(4) as _}<Skeleton class="h-20 min-w-[200px] flex-1" />{/each}
+			{#each Array(4) as _}<Skeleton class="h-20 min-w-[140px] flex-1 rounded-lg" />{/each}
 		{:else}
 			{#await data.streamed}
-				{#each Array(4) as _}<Skeleton class="h-20 min-w-[200px] flex-1" />{/each}
+				{#each Array(4) as _}<Skeleton class="h-20 min-w-[140px] flex-1 rounded-lg" />{/each}
 			{:then streamed}
-				<div
-					class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 shadow-sm"
-				>
-					<div
-						class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600"
-					>
-						<Package class="h-5 w-5" />
+				<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+					<div class="flex items-center justify-between">
+						<span class="text-[10px] font-bold text-muted-foreground uppercase">Products</span>
+						<div class="rounded-md bg-blue-500/10 p-1.5">
+							<Package class="h-3.5 w-3.5 text-blue-600" />
+						</div>
 					</div>
-					<div>
-						<p class="text-[10px] font-bold text-muted-foreground uppercase">Products</p>
-						<p class="mt-1 text-xl font-black">{streamed.stats.totalProducts}</p>
+					<div class="mt-1.5 text-xl font-black sm:mt-2 sm:text-2xl">
+						{streamed.stats.totalProducts}
 					</div>
 				</div>
-				<div
-					class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 shadow-sm"
-				>
-					<div
-						class="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600"
-					>
-						<TrendingUp class="h-5 w-5" />
+
+				<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+					<div class="flex items-center justify-between">
+						<span class="text-[10px] font-bold text-muted-foreground uppercase">Value</span>
+						<div class="rounded-md bg-indigo-500/10 p-1.5">
+							<TrendingUp class="h-3.5 w-3.5 text-indigo-600" />
+						</div>
 					</div>
-					<div>
-						<p class="text-[10px] font-bold text-muted-foreground uppercase">Value</p>
-						<p class="mt-1 text-xl font-black">
-							{formatCurrency(streamed.stats.totalInventoryValue)}
-						</p>
+					<div class="mt-1.5 text-xl font-black text-indigo-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(streamed.stats.totalInventoryValue)}
 					</div>
 				</div>
+
 				<button
-					class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm {selectedStock ===
-					'low'
-						? 'ring-2 ring-amber-500'
-						: ''}"
+					class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:bg-muted/50 sm:p-4 {selectedStock === 'low' ? 'ring-2 ring-amber-500' : ''}"
 					onclick={() => setStockFilter(selectedStock === 'low' ? '' : 'low')}
 				>
-					<div
-						class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"
-					>
-						<AlertTriangle class="h-5 w-5" />
+					<div class="flex items-center justify-between">
+						<span class="text-[10px] font-bold text-muted-foreground uppercase">Low Stock</span>
+						<div class="rounded-md bg-amber-500/10 p-1.5">
+							<AlertTriangle class="h-3.5 w-3.5 text-amber-600" />
+						</div>
 					</div>
-					<div>
-						<p class="text-[10px] font-bold text-muted-foreground uppercase">Low Stock</p>
-						<p class="mt-1 text-xl font-black">{streamed.stats.lowStockVariants}</p>
+					<div class="mt-1.5 text-xl font-black text-amber-600 sm:mt-2 sm:text-2xl">
+						{streamed.stats.lowStockVariants}
 					</div>
 				</button>
+
 				<button
-					class="flex min-w-[200px] flex-1 items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm {selectedStock ===
-					'out'
-						? 'ring-2 ring-red-500'
-						: ''}"
+					class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:bg-muted/50 sm:p-4 {selectedStock === 'out' ? 'ring-2 ring-red-500' : ''}"
 					onclick={() => setStockFilter(selectedStock === 'out' ? '' : 'out')}
 				>
-					<div
-						class="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10 text-red-600"
-					>
-						<PackageX class="h-5 w-5" />
+					<div class="flex items-center justify-between">
+						<span class="text-[10px] font-bold text-muted-foreground uppercase">Out of Stock</span>
+						<div class="rounded-md bg-red-500/10 p-1.5">
+							<PackageX class="h-3.5 w-3.5 text-red-600" />
+						</div>
 					</div>
-					<div>
-						<p class="text-[10px] font-bold text-muted-foreground uppercase">Out of Stock</p>
-						<p class="mt-1 text-xl font-black">{streamed.stats.outOfStockVariants}</p>
+					<div class="mt-1.5 text-xl font-black text-red-600 sm:mt-2 sm:text-2xl">
+						{streamed.stats.outOfStockVariants}
 					</div>
 				</button>
 			{/await}
 		{/if}
 	</div>
 
-	<!-- Filters -->
-	<Card.Root>
-		<Card.Content class="p-3 sm:p-4">
-			<div class="flex flex-col gap-4 lg:flex-row lg:items-center">
-				<div class="relative w-full max-w-md">
-					<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-					<Input placeholder="Search..." class="h-10 pl-10" bind:value={searchQuery} />
-					{#if searchQuery}<button
-							onclick={() => (searchQuery = '')}
-							class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
-							><X class="h-4 w-4" /></button
-						>{/if}
-				</div>
-				<div class="flex flex-wrap items-center gap-3">
-					<div class="flex items-center gap-2">
-						<span class="text-xs font-bold text-muted-foreground">CATEGORY:</span>
-						{#if isNative && nativeData}
-							<Select.Root type="single" bind:value={selectedCategory} onValueChange={applyFilters}>
-								<Select.Trigger class="h-9 w-[160px] text-xs"
-									>{selectedCategory || 'All'}</Select.Trigger
-								>
-								<Select.Content>
-									<Select.Item value="" class="text-xs">All Categories</Select.Item>
-									{#each nativeData.categories as cat}<Select.Item value={cat} class="text-xs"
-											>{cat}</Select.Item
-										>{/each}
-								</Select.Content>
-							</Select.Root>
-						{:else if isNative}
-							<Skeleton class="h-9 w-[160px]" />
-						{:else}
-							{#await data.streamed}
-								<Skeleton class="h-9 w-[160px]" />
-							{:then streamed}
-								<Select.Root type="single" bind:value={selectedCategory} onValueChange={applyFilters}>
-									<Select.Trigger class="h-9 w-[160px] text-xs"
-										>{selectedCategory || 'All'}</Select.Trigger
-									>
-									<Select.Content>
-										<Select.Item value="" class="text-xs">All Categories</Select.Item>
-										{#each streamed.categories as cat}<Select.Item value={cat} class="text-xs"
-												>{cat}</Select.Item
-											>{/each}
-									</Select.Content>
-								</Select.Root>
-							{/await}
-						{/if}
-					</div>
-				</div>
+	<!-- Action Bar -->
+	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+		<div class="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+			<div class="relative w-full max-w-md">
+				<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+				<Input placeholder="Search products, categories, barcodes..." class="h-9 pl-9" bind:value={searchQuery} />
+				{#if searchQuery}
+					<button
+						onclick={() => (searchQuery = '')}
+						class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+					>
+						<X class="h-4 w-4" />
+					</button>
+				{/if}
 			</div>
-		</Card.Content>
-	</Card.Root>
+
+			<div class="flex items-center gap-2">
+				<span class="text-[10px] font-bold text-muted-foreground uppercase">Category:</span>
+				{#if isNative && nativeData}
+					<Select.Root type="single" bind:value={selectedCategory} onValueChange={applyFilters}>
+						<Select.Trigger class="h-9 w-[160px] text-xs">
+							{selectedCategory || 'All Categories'}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="" class="text-xs">All Categories</Select.Item>
+							{#each nativeData.categories as cat}
+								<Select.Item value={cat} class="text-xs">{cat}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				{:else if isNative}
+					<Skeleton class="h-9 w-[160px]" />
+				{:else}
+					{#await data.streamed}
+						<Skeleton class="h-9 w-[160px]" />
+					{:then streamed}
+						<Select.Root type="single" bind:value={selectedCategory} onValueChange={applyFilters}>
+							<Select.Trigger class="h-9 w-[160px] text-xs">
+								{selectedCategory || 'All Categories'}
+							</Select.Trigger>
+							<Select.Content>
+								<Select.Item value="" class="text-xs">All Categories</Select.Item>
+								{#each streamed.categories as cat}
+									<Select.Item value={cat} class="text-xs">{cat}</Select.Item>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					{/await}
+				{/if}
+			</div>
+		</div>
+		<Button href="/inventory/new" class="hidden md:flex">
+			<Plus class="mr-2 h-4 w-4" /> New Product
+		</Button>
+	</div>
 
 	<!-- Product Table -->
 	<Card.Root>
