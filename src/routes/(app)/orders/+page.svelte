@@ -30,8 +30,8 @@
 		let where = 'WHERE 1=1';
 		const params: any[] = [];
 
-		if (dateFrom) { where += ' AND o.created_at >= ?'; params.push(dateFrom + 'T00:00:00'); }
-		if (dateTo) { where += ' AND o.created_at <= ?'; params.push(dateTo + 'T23:59:59.999'); }
+		if (dateFrom) { where += ' AND o.created_at >= ?'; params.push(dateFrom + ' 00:00:00'); }
+		if (dateTo) { where += ' AND o.created_at <= ?'; params.push(dateTo + ' 23:59:59'); }
 		if (statusFilter) { where += ' AND o.status = ?'; params.push(statusFilter); }
 		if (searchQuery) {
 			where += ' AND (o.id LIKE ? OR CAST(o.order_number AS TEXT) LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)';

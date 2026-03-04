@@ -284,8 +284,10 @@ export function queryDashboardStats() {
 	const today = new Date();
 	today.setHours(0, 0, 0, 0);
 	const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-	const todayIso = today.toISOString();
-	const monthIso = firstDayOfMonth.toISOString();
+	// PowerSync stores created_at as PostgreSQL ::text cast (e.g. "2026-03-04 00:00:00+00")
+	const toDbDate = (d: Date) => d.toISOString().replace('T', ' ').replace('.000Z', '+00');
+	const todayIso = toDbDate(today);
+	const monthIso = toDbDate(firstDayOfMonth);
 
 	return {
 		todaySales: createWatchQuery(
@@ -333,6 +335,7 @@ export function queryTopProducts() {
 	const firstDayOfMonth = new Date();
 	firstDayOfMonth.setDate(1);
 	firstDayOfMonth.setHours(0, 0, 0, 0);
+	const toDbDate = (d: Date) => d.toISOString().replace('T', ' ').replace('.000Z', '+00');
 
 	return createWatchQuery(`
 		SELECT product_name as name, variant_label as variantLabel,
@@ -343,7 +346,7 @@ export function queryTopProducts() {
 		GROUP BY product_name, variant_label
 		ORDER BY totalQty DESC
 		LIMIT 10
-	`, [firstDayOfMonth.toISOString()]);
+	`, [toDbDate(firstDayOfMonth)]);
 }
 
 // --- Store Settings ---
@@ -358,7 +361,7 @@ export async function checkoutTransaction(
 ) {
 	const round2 = (val: number) => Math.round((val + Number.EPSILON) * 100) / 100;
 	const orderId = generateId();
-	const now = new Date().toISOString();
+	const now = new Date().toISOString().replace('T', ' ').replace('.000Z', '+00');
 	const globalDiscount = Math.min(100, Math.max(0, cart.globalDiscount || 0));
 
 	await powersync.db.writeTransaction(async (tx: any) => {
@@ -438,6 +441,6 @@ export async function addExpenseLocal(description: string, amount: number, userI
 	await powersync.db.execute(`
 		INSERT INTO cashbook (id, amount, type, description, user_id, created_at)
 		VALUES (?, ?, ?, ?, ?, ?)
-	`, [id, amount, 'out', description, userId, new Date().toISOString()]);
+	`, [id, amount, 'out', description, userId, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
 	return { id };
 }

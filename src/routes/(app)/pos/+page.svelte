@@ -150,7 +150,7 @@
 			await powersync.db.execute(`
 				INSERT INTO orders (id, customer_id, user_id, total_amount, payment_method, discount_amount, cash_received, change_given, status, created_at)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`, [orderId, cart.customer?.id || null, data.user?.id, cart.subtotal, cart.paymentMethod, 0, cart.cashReceived, cart.changeAmount, 'completed', new Date().toISOString()]);
+			`, [orderId, cart.customer?.id || null, data.user?.id, cart.subtotal, cart.paymentMethod, 0, cart.cashReceived, cart.changeAmount, 'completed', new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
 
 			for (const item of cart.items) {
 				const orderItemId = crypto.randomUUID();
@@ -165,14 +165,14 @@
 				await powersync.db.execute(`
 					INSERT INTO stock_logs (id, variant_id, change_amount, reason, user_id, created_at)
 					VALUES (?, ?, ?, ?, ?, ?)
-				`, [crypto.randomUUID(), item.variantId, -item.quantity, 'sale', data.user?.id, new Date().toISOString()]);
+				`, [crypto.randomUUID(), item.variantId, -item.quantity, 'sale', data.user?.id, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
 			}
 
 			// Add to cashbook locally
 			await powersync.db.execute(`
 				INSERT INTO cashbook (id, amount, type, description, user_id, created_at)
 				VALUES (?, ?, ?, ?, ?, ?)
-			`, [crypto.randomUUID(), cart.subtotal, 'in', `Sale ${orderId.slice(0, 8).toUpperCase()}`, data.user?.id, new Date().toISOString()]);
+			`, [crypto.randomUUID(), cart.subtotal, 'in', `Sale ${orderId.slice(0, 8).toUpperCase()}`, data.user?.id, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
 
 			completedOrder = {
 				orderId,

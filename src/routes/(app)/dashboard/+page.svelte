@@ -35,8 +35,11 @@
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
 		const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-		const todayIso = today.toISOString();
-		const monthIso = firstDayOfMonth.toISOString();
+		// PowerSync stores created_at as PostgreSQL ::text cast (e.g. "2026-03-04 00:00:00+00")
+		// which uses space separator, not "T". Use matching format for lexicographic comparison.
+		const toDbDate = (d: Date) => d.toISOString().replace('T', ' ').replace('.000Z', '+00');
+		const todayIso = toDbDate(today);
+		const monthIso = toDbDate(firstDayOfMonth);
 
 		// Stats
 		Promise.all([
