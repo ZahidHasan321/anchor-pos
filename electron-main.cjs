@@ -337,9 +337,12 @@ async function createWindow() {
                 }, 500);
             });
             
-            // Allow opening DevTools in production with F12
+            // Allow opening DevTools in production with F12 or Ctrl+Shift+I
             mainWindow.webContents.on('before-input-event', (event, input) => {
-                if (input.key === 'F12' && input.type === 'keyDown') {
+                const isDevTools = (input.key === 'F12' && input.type === 'keyDown') || 
+                                  (input.control && input.shift && input.key.toLowerCase() === 'i' && input.type === 'keyDown');
+                
+                if (isDevTools) {
                     mainWindow.webContents.toggleDevTools();
                 }
                 

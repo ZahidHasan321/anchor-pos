@@ -25,14 +25,16 @@
 	// Initialize PowerSync once in Electron mode
 	let powersyncInitialized = false;
 	$effect(() => {
-		if (!browser || !(window as any).electron || powersyncInitialized) return;
+		const isElectron = import.meta.env.BUILD_TARGET === 'electron' || (browser && (window as any).electron);
+		if (!browser || !isElectron || powersyncInitialized) return;
 		powersyncInitialized = true;
 		powersync.init().then(() => powersync.connect());
 	});
 
 	// In Electron mode, load store settings from PowerSync once ready
 	$effect(() => {
-		if (browser && (window as any).electron && powersync.ready) {
+		const isElectron = import.meta.env.BUILD_TARGET === 'electron' || (browser && (window as any).electron);
+		if (browser && isElectron && powersync.ready) {
 			powersync.db.getAll('SELECT * FROM store_settings').then((rows: any[]) => {
 				const settings: Record<string, string> = {};
 				for (const row of rows) {
