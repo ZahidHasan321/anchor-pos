@@ -110,6 +110,7 @@ export const actions: Actions = {
 		const sizes = data.getAll('sizes') as string[];
 		const priceStr = (data.get('price') as string)?.trim();
 		const discountStr = (data.get('discount') as string)?.trim();
+		const costPriceStr = (data.get('costPrice') as string)?.trim();
 		const initialStock = parseInt(data.get('initialStock') as string) || 0;
 
 		if (sizes.length === 0) {
@@ -124,6 +125,7 @@ export const actions: Actions = {
 
 		const price = priceStr ? parseFloat(priceStr) : product.templatePrice;
 		const discount = discountStr ? parseFloat(discountStr) : product.defaultDiscount || 0;
+		const costPrice = costPriceStr ? parseFloat(costPriceStr) : product.costPrice || 0;
 
 		const shortId = params.id.substring(0, 4).toUpperCase();
 		const catPrefix = product.category.substring(0, 3).toUpperCase();
@@ -150,6 +152,7 @@ export const actions: Actions = {
 						barcode,
 						stockQuantity: initialStock,
 						price: price,
+						costPrice: costPrice,
 						discount: discount
 					});
 
@@ -193,12 +196,14 @@ export const actions: Actions = {
 		const priceStr = (data.get('price') as string)?.trim();
 		const price = priceStr ? parseFloat(priceStr) : 0;
 		const discountStr = (data.get('discount') as string)?.trim();
+		const costPriceStr = (data.get('costPrice') as string)?.trim();
 		const discount = discountStr ? parseFloat(discountStr) : 0;
+		const costPrice = costPriceStr ? parseFloat(costPriceStr) : 0;
 
 		try {
 			await db
 				.update(productVariants)
-				.set({ price, discount })
+				.set({ price, costPrice, discount })
 				.where(eq(productVariants.id, variantId));
 		} catch (e) {
 			console.error('Failed to edit variant:', e);

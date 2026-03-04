@@ -4,7 +4,7 @@ bucket_definitions:
       - SELECT id, name, description, category, base_price, cost_price, default_discount, image_url
           FROM products
 
-      - SELECT id, product_id, size, color, barcode, stock_quantity, price, discount
+      - SELECT id, product_id, size, color, barcode, stock_quantity, price, cost_price, discount
           FROM product_variants
 
       # store_settings has `key` as PK, not `id` — expose key as id for PowerSync

@@ -35,6 +35,8 @@ export const actions: Actions = {
 		const description = (data.get('description') as string)?.trim() || null;
 		const sizes = data.getAll('sizes') as string[];
 		const quantities = data.getAll('quantities').map((q) => parseInt(q as string) || 0);
+		const sellingPrices = data.getAll('sellingPrices') as string[];
+		const costPrices = data.getAll('costPrices') as string[];
 		const stockReason = (data.get('stockReason') as string)?.trim() || 'Initial Stock';
 
 		// Validation
@@ -76,6 +78,8 @@ export const actions: Actions = {
 				for (let i = 0; i < sizes.length; i++) {
 					const size = sizes[i];
 					const quantity = quantities[i] ?? 0;
+					const variantSellingPrice = sellingPrices[i]?.trim() ? parseFloat(sellingPrices[i]) : templatePrice;
+					const variantCostPrice = costPrices[i]?.trim() ? parseFloat(costPrices[i]) : costPrice;
 					const variantId = generateId();
 					// Format: {CATEGORY_PREFIX}-{PRODUCT_ID_SHORT}-{SIZE}
 					const barcode = `${catPrefix}-${shortId}-${size}`;
@@ -86,7 +90,8 @@ export const actions: Actions = {
 						size,
 						barcode,
 						stockQuantity: quantity,
-						price: templatePrice,
+						price: variantSellingPrice,
+						costPrice: variantCostPrice,
 						discount: defaultDiscount
 					});
 

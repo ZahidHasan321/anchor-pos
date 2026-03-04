@@ -71,6 +71,7 @@ export const productVariants = pgTable(
 		barcode: text('barcode').notNull().unique(),
 		stockQuantity: integer('stock_quantity').notNull().default(0),
 		price: doublePrecision('price').notNull().default(0),
+		costPrice: doublePrecision('cost_price').default(0),
 		discount: doublePrecision('discount').default(0)
 	},
 	(table) => ({

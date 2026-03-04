@@ -36,6 +36,7 @@
 	let newStockQuantity = $state(0);
 	let adjustReason = $state('');
 	let newVariantPrice = $state('');
+	let newVariantCostPrice = $state('');
 	let newVariantDiscount = $state('');
 	let newVariantInitialStock = $state('');
 	let loading = $state(false);
@@ -44,6 +45,7 @@
 	// Variant editing state
 	let editingVariant = $state<any>(null);
 	let editVariantPrice = $state('');
+	let editVariantCostPrice = $state('');
 	let editVariantDiscount = $state('');
 
 	function openStockDialog(variant: any) {
@@ -101,6 +103,7 @@
 	function openEditVariant(variant: any) {
 		editingVariant = variant;
 		editVariantPrice = variant.price?.toString() ?? '';
+		editVariantCostPrice = variant.costPrice?.toString() ?? '0';
 		editVariantDiscount = variant.discount?.toString() ?? '0';
 		editVariantDialogOpen = true;
 	}
@@ -120,6 +123,7 @@
 			variantSelectedSizes = [];
 			customVariantSizeInput = '';
 			newVariantPrice = '';
+			newVariantCostPrice = '';
 			newVariantDiscount = '';
 			newVariantInitialStock = '';
 		}
@@ -144,6 +148,29 @@
 		data.variants.filter((v: any) => v.stockQuantity > 0 && v.stockQuantity <= 5).length
 	);
 	const outCount = $derived(data.variants.filter((v: any) => v.stockQuantity === 0).length);
+
+	// Per-variant stock value: sum of (variant costPrice * stockQuantity)
+	const totalStockValue = $derived(
+		data.variants.reduce((sum: number, v: any) => {
+			const cost = v.costPrice ?? data.product.costPrice ?? 0;
+			return sum + cost * v.stockQuantity;
+		}, 0)
+	);
+
+	// Profit margins across variants
+	const variantMargins = $derived(
+		data.variants
+			.filter((v: any) => {
+				const cost = v.costPrice ?? data.product.costPrice ?? 0;
+				return cost > 0 && v.price > 0;
+			})
+			.map((v: any) => {
+				const cost = v.costPrice ?? data.product.costPrice ?? 0;
+				return Math.round(((v.price - cost) / v.price) * 100);
+			})
+	);
+	const minMargin = $derived(variantMargins.length > 0 ? Math.min(...variantMargins) : 0);
+	const maxMargin = $derived(variantMargins.length > 0 ? Math.max(...variantMargins) : 0);
 
 	function stockChipClass(qty: number): string {
 		if (qty === 0)
@@ -333,6 +360,7 @@
 								<Table.Head>Size</Table.Head>
 								<Table.Head>Barcode</Table.Head>
 								<Table.Head>Price</Table.Head>
+								<Table.Head>Cost</Table.Head>
 								<Table.Head>Stock</Table.Head>
 								<Table.Head class="text-right">Actions</Table.Head>
 							</Table.Row>
@@ -353,6 +381,9 @@
 												-{variant.discount}% discount
 											</div>
 										{/if}
+									</Table.Cell>
+									<Table.Cell>
+										<div class="text-sm">{formatCurrency(variant.costPrice ?? data.product.costPrice ?? 0)}</div>
 									</Table.Cell>
 									<Table.Cell>
 										<span
@@ -422,13 +453,13 @@
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div>
-							<p class="text-xs text-muted-foreground">Selling Price</p>
+							<p class="text-xs text-muted-foreground">Default Selling Price</p>
 							<p class="text-xl font-bold break-words break-all">
 								{formatCurrency(data.product.templatePrice)}
 							</p>
 						</div>
 						<div>
-							<p class="text-xs text-muted-foreground">Cost / Buying Price</p>
+							<p class="text-xs text-muted-foreground">Default Cost Price</p>
 							<p class="text-lg font-bold break-words break-all">
 								{formatCurrency(data.product.costPrice ?? 0)}
 							</p>
@@ -436,16 +467,21 @@
 						<div>
 							<p class="text-xs text-muted-foreground">Total Stock Value (At Cost)</p>
 							<p class="text-lg font-bold break-words break-all text-indigo-600 dark:text-indigo-400">
-								{formatCurrency((data.product.costPrice ?? 0) * totalStock)}
+								{formatCurrency(totalStockValue)}
 							</p>
 						</div>
-						{#if data.product.costPrice && data.product.costPrice > 0}
+						{#if variantMargins.length > 0}
 							<div>
 								<p class="text-xs text-muted-foreground">Profit Margin</p>
-								<p class="font-medium text-emerald-600 dark:text-emerald-400">
-									{formatCurrency(data.product.templatePrice - data.product.costPrice)}
-									({Math.round(((data.product.templatePrice - data.product.costPrice) / data.product.templatePrice) * 100)}%)
-								</p>
+								{#if minMargin === maxMargin}
+									<p class="font-medium text-emerald-600 dark:text-emerald-400">
+										{minMargin}%
+									</p>
+								{:else}
+									<p class="font-medium text-emerald-600 dark:text-emerald-400">
+										{minMargin}% – {maxMargin}%
+									</p>
+								{/if}
 							</div>
 						{/if}
 						<div>
@@ -706,17 +742,32 @@
 			</div>
 
 			<div class="space-y-2">
-				<Label for="new-price">Price ({getCurrencySymbol()})</Label>
+				<Label for="new-price">Selling Price ({getCurrencySymbol()})</Label>
 				<Input
 					id="new-price"
 					name="price"
 					type="number"
 					step="0.01"
-					placeholder="Leave blank to use base price"
+					placeholder="Leave blank to use default"
 					bind:value={newVariantPrice}
 				/>
 				<p class="text-xs text-muted-foreground">
-					Base price: {formatCurrency(data.product.templatePrice)}
+					Default: {formatCurrency(data.product.templatePrice)}
+				</p>
+			</div>
+
+			<div class="space-y-2">
+				<Label for="new-cost-price">Cost Price ({getCurrencySymbol()})</Label>
+				<Input
+					id="new-cost-price"
+					name="costPrice"
+					type="number"
+					step="0.01"
+					placeholder="Leave blank to use default"
+					bind:value={newVariantCostPrice}
+				/>
+				<p class="text-xs text-muted-foreground">
+					Default: {formatCurrency(data.product.costPrice ?? 0)}
 				</p>
 			</div>
 
@@ -773,7 +824,7 @@
 		<form method="POST" action="?/editVariant" use:enhance class="space-y-4">
 			<input type="hidden" name="variantId" value={editingVariant?.id} />
 			<div class="space-y-2">
-				<Label>Price ({getCurrencySymbol()})</Label>
+				<Label>Selling Price ({getCurrencySymbol()})</Label>
 				<Input
 					name="price"
 					type="number"
@@ -782,7 +833,20 @@
 					bind:value={editVariantPrice}
 				/>
 				<p class="text-xs text-muted-foreground">
-					Base price: {formatCurrency(data.product.templatePrice)}
+					Default: {formatCurrency(data.product.templatePrice)}
+				</p>
+			</div>
+			<div class="space-y-2">
+				<Label>Cost Price ({getCurrencySymbol()})</Label>
+				<Input
+					name="costPrice"
+					type="number"
+					step="0.01"
+					placeholder="Enter cost price"
+					bind:value={editVariantCostPrice}
+				/>
+				<p class="text-xs text-muted-foreground">
+					Default: {formatCurrency(data.product.costPrice ?? 0)}
 				</p>
 			</div>
 			<div class="space-y-2">

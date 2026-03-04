@@ -22,39 +22,38 @@
 	let loading = $state(false);
 	let customSizeInput = $state('');
 
-	let sizeQuantities = $state<Record<string, string>>({});
+	let sizeData = $state<Record<string, { quantity: string; sellingPrice: string; costPrice: string }>>({});
 
 	// Clear selections when template changes
 	$effect(() => {
-		// Access selectedTemplate to track it
 		selectedTemplate;
-		sizeQuantities = {};
+		sizeData = {};
 	});
 
-	const selectedSizes = $derived(Object.keys(sizeQuantities));
+	const selectedSizes = $derived(Object.keys(sizeData));
 
 	function toggleSize(size: string) {
-		if (size in sizeQuantities) {
-			const { [size]: _, ...rest } = sizeQuantities;
-			sizeQuantities = rest;
+		if (size in sizeData) {
+			const { [size]: _, ...rest } = sizeData;
+			sizeData = rest;
 		} else {
-			sizeQuantities = { ...sizeQuantities, [size]: '' };
+			sizeData = { ...sizeData, [size]: { quantity: '', sellingPrice: '', costPrice: '' } };
 		}
 	}
 
 	function removeSize(size: string) {
-		const { [size]: _, ...rest } = sizeQuantities;
-		sizeQuantities = rest;
+		const { [size]: _, ...rest } = sizeData;
+		sizeData = rest;
 	}
 
 	function addCustomSize() {
 		const size = customSizeInput.trim();
 		if (!size) return;
-		if (size in sizeQuantities) {
+		if (size in sizeData) {
 			toast.error(`Size "${size}" is already added`);
 			return;
 		}
-		sizeQuantities = { ...sizeQuantities, [size]: '' };
+		sizeData = { ...sizeData, [size]: { quantity: '', sellingPrice: '', costPrice: '' } };
 		customSizeInput = '';
 	}
 </script>
@@ -136,7 +135,7 @@
 
 						<div class="grid gap-4 sm:grid-cols-2">
 							<div class="space-y-2">
-								<Label for="templatePrice">Selling Price ({getCurrencySymbol()})</Label>
+								<Label for="templatePrice">Default Selling Price ({getCurrencySymbol()})</Label>
 								<Input
 									id="templatePrice"
 									name="templatePrice"
@@ -151,7 +150,7 @@
 								{/if}
 							</div>
 							<div class="space-y-2">
-								<Label for="costPrice">Cost / Buying Price ({getCurrencySymbol()})</Label>
+								<Label for="costPrice">Default Cost Price ({getCurrencySymbol()})</Label>
 								<Input
 									id="costPrice"
 									name="costPrice"
@@ -186,7 +185,7 @@
 						<div>
 							<Label class="text-lg font-bold">Size Variants</Label>
 							<p class="text-sm text-muted-foreground">
-								Select the sizes you want to create and set initial stock.
+								Select the sizes you want to create and set pricing & stock.
 							</p>
 						</div>
 						<div class="w-[200px]">
@@ -208,7 +207,7 @@
 						{#each SIZE_TEMPLATES[selectedTemplate as keyof typeof SIZE_TEMPLATES] as size}
 							<button
 								type="button"
-								class="cursor-pointer rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors {size in sizeQuantities ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'}"
+								class="cursor-pointer rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors {size in sizeData ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'}"
 								onclick={() => toggleSize(size)}
 							>
 								{size}
@@ -238,38 +237,86 @@
 						<div class="space-y-6 border-t border-muted-foreground/10 pt-4">
 							<div class="space-y-3">
 								<Label class="text-sm font-bold tracking-wider text-muted-foreground uppercase"
-									>Quantity per size</Label
+									>Per-Size Pricing & Stock</Label
 								>
-								<div
-									class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8"
-								>
-									{#each selectedSizes as size}
-										<div
-											class="group relative flex flex-col gap-1 rounded-lg border bg-background p-3 shadow-sm"
-										>
-											<button
-												type="button"
-												class="absolute top-1 right-1 cursor-pointer rounded-full p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
-												onclick={() => removeSize(size)}
-											>
-												<X class="h-3 w-3" />
-											</button>
-											<span class="text-center text-xs font-bold">{size}</span>
-											<Input
-												type="number"
-												min="0"
-												value={sizeQuantities[size]}
-												oninput={(e: Event) => {
-													sizeQuantities = {
-														...sizeQuantities,
-														[size]: (e.target as HTMLInputElement).value
-													};
-												}}
-												class="h-8 border-0 bg-muted/50 text-center text-sm focus-visible:ring-1"
-												placeholder="0"
-											/>
-										</div>
-									{/each}
+								<p class="text-xs text-muted-foreground">
+									Leave price fields blank to use the defaults above.
+								</p>
+								<div class="overflow-x-auto rounded-lg border bg-background">
+									<table class="w-full text-sm">
+										<thead>
+											<tr class="border-b bg-muted/50">
+												<th class="px-3 py-2 text-left font-semibold">Size</th>
+												<th class="px-3 py-2 text-left font-semibold">Selling ({getCurrencySymbol()})</th>
+												<th class="px-3 py-2 text-left font-semibold">Cost ({getCurrencySymbol()})</th>
+												<th class="px-3 py-2 text-left font-semibold">Qty</th>
+												<th class="w-8 px-2 py-2"></th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each selectedSizes as size}
+												<tr class="border-b last:border-b-0">
+													<td class="px-3 py-2 font-bold">{size}</td>
+													<td class="px-3 py-2">
+														<Input
+															type="number"
+															step="0.01"
+															min="0"
+															value={sizeData[size].sellingPrice}
+															oninput={(e: Event) => {
+																sizeData = {
+																	...sizeData,
+																	[size]: { ...sizeData[size], sellingPrice: (e.target as HTMLInputElement).value }
+																};
+															}}
+															class="h-8 w-28 text-sm"
+															placeholder="Default"
+														/>
+													</td>
+													<td class="px-3 py-2">
+														<Input
+															type="number"
+															step="0.01"
+															min="0"
+															value={sizeData[size].costPrice}
+															oninput={(e: Event) => {
+																sizeData = {
+																	...sizeData,
+																	[size]: { ...sizeData[size], costPrice: (e.target as HTMLInputElement).value }
+																};
+															}}
+															class="h-8 w-28 text-sm"
+															placeholder="Default"
+														/>
+													</td>
+													<td class="px-3 py-2">
+														<Input
+															type="number"
+															min="0"
+															value={sizeData[size].quantity}
+															oninput={(e: Event) => {
+																sizeData = {
+																	...sizeData,
+																	[size]: { ...sizeData[size], quantity: (e.target as HTMLInputElement).value }
+																};
+															}}
+															class="h-8 w-20 text-sm"
+															placeholder="0"
+														/>
+													</td>
+													<td class="px-2 py-2">
+														<button
+															type="button"
+															class="cursor-pointer rounded-full p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-destructive"
+															onclick={() => removeSize(size)}
+														>
+															<X class="h-3 w-3" />
+														</button>
+													</td>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
 								</div>
 							</div>
 
@@ -289,10 +336,12 @@
 						</div>
 					{/if}
 
-					<!-- Hidden form fields for sizes and quantities -->
+					<!-- Hidden form fields for sizes, quantities, and per-variant prices -->
 					{#each selectedSizes as size}
 						<input type="hidden" name="sizes" value={size} />
-						<input type="hidden" name="quantities" value={sizeQuantities[size]} />
+						<input type="hidden" name="quantities" value={sizeData[size].quantity} />
+						<input type="hidden" name="sellingPrices" value={sizeData[size].sellingPrice} />
+						<input type="hidden" name="costPrices" value={sizeData[size].costPrice} />
 					{/each}
 
 					{#if form?.errors?.sizes}

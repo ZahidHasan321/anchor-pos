@@ -2,21 +2,21 @@ import { powersync } from './powersync.svelte';
 import { writable } from 'svelte/store';
 
 export function watchQuery(query: string, params: any[] = []) {
-    const { subscribe, set } = writable<any[]>([]);
-    
-    if (typeof window !== 'undefined' && (window as any).electron) {
-        const start = async () => {
-            const iterable = powersync.db.watch(query, params);
-            for await (const result of iterable) {
-                set(result.rows?._array || []);
-            }
-        };
-        start();
-    }
+	const { subscribe, set } = writable<any[]>([]);
 
-    return {
-        subscribe
-    };
+	if (typeof window !== 'undefined' && (window as any).electron) {
+		const start = async () => {
+			const iterable = powersync.db.watch(query, params);
+			for await (const result of iterable) {
+				set(result.rows?._array || []);
+			}
+		};
+		start();
+	}
+
+	return {
+		subscribe
+	};
 }
 
 // Basic stores for reactive UI
@@ -30,7 +30,7 @@ export const productsStore = watchQuery(`
         pv.barcode,
         p.category,
         pv.price,
-        p.cost_price as costPrice,
+        COALESCE(pv.cost_price, p.cost_price, 0) as costPrice,
         pv.discount,
         pv.stock_quantity as stockQuantity
     FROM product_variants pv
@@ -39,4 +39,3 @@ export const productsStore = watchQuery(`
 `);
 
 export const categoriesStore = watchQuery('SELECT DISTINCT category FROM products');
-

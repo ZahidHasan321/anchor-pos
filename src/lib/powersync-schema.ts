@@ -22,6 +22,7 @@ export const AppSchema = new Schema([
       new Column({ name: 'barcode', type: ColumnType.TEXT }),
       new Column({ name: 'stock_quantity', type: ColumnType.INTEGER }),
       new Column({ name: 'price', type: ColumnType.REAL }),
+      new Column({ name: 'cost_price', type: ColumnType.REAL }),
       new Column({ name: 'discount', type: ColumnType.REAL })
     ]
   }),

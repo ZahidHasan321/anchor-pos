@@ -21,7 +21,13 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const isElectron = process.env.BUILD_TARGET === 'electron';
 
 	const emptyResult = {
-		stats: { totalProducts: 0, totalVariants: 0, lowStockVariants: 0, outOfStockVariants: 0, totalInventoryValue: 0 },
+		stats: {
+			totalProducts: 0,
+			totalVariants: 0,
+			lowStockVariants: 0,
+			outOfStockVariants: 0,
+			totalInventoryValue: 0
+		},
 		categories: [],
 		products: [],
 		total: 0,
@@ -71,7 +77,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 						totalVariants: sql<number>`COUNT(${productVariants.id})`,
 						lowStockVariants: sql<number>`SUM(CASE WHEN ${productVariants.stockQuantity} > 0 AND ${productVariants.stockQuantity} <= ${threshold} THEN 1 ELSE 0 END)`,
 						outOfStockVariants: sql<number>`SUM(CASE WHEN ${productVariants.stockQuantity} = 0 THEN 1 ELSE 0 END)`,
-						totalInventoryValue: sql<number>`COALESCE(SUM(coalesce(${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`
+						totalInventoryValue: sql<number>`COALESCE(SUM(COALESCE(${productVariants.costPrice}, ${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`
 					})
 					.from(productVariants)
 					.innerJoin(products, eq(productVariants.productId, products.id)),
@@ -153,7 +159,10 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 					totalInventoryValue: 0
 				},
 				categories: categoryRows.map((c: any) => c.category).sort(),
-				products: productList.map((p: any) => ({ ...p, variants: variantsByProduct.get(p.id) ?? [] })),
+				products: productList.map((p: any) => ({
+					...p,
+					variants: variantsByProduct.get(p.id) ?? []
+				})),
 				total: countResult[0]?.count ?? 0,
 				totalPages: Math.ceil((countResult[0]?.count ?? 0) / perPage),
 				currentPage

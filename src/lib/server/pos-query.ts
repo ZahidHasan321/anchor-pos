@@ -34,7 +34,7 @@ export async function queryVariants(search: string, category: string, limit = 50
 			barcode: productVariants.barcode,
 			category: products.category,
 			price: productVariants.price,
-			costPrice: products.costPrice,
+			costPrice: sql<number>`COALESCE(${productVariants.costPrice}, ${products.costPrice}, 0)`,
 			discount: productVariants.discount,
 			stockQuantity: productVariants.stockQuantity
 		})
@@ -46,4 +46,3 @@ export async function queryVariants(search: string, category: string, limit = 50
 
 	return { items, hasMore: items.length === limit };
 }
-

@@ -150,7 +150,7 @@ export const actions: Actions = {
 					.select({
 						id: productVariants.id,
 						price: productVariants.price,
-						costPrice: products.costPrice,
+						costPrice: sql<number>`COALESCE(${productVariants.costPrice}, ${products.costPrice}, 0)`,
 						productName: products.name,
 						size: productVariants.size,
 						color: productVariants.color,
@@ -274,11 +274,7 @@ export const actions: Actions = {
 
 		// Unique check for phone
 		if (phone) {
-			const existing = await db
-				.select()
-				.from(customers)
-				.where(eq(customers.phone, phone))
-				.limit(1);
+			const existing = await db.select().from(customers).where(eq(customers.phone, phone)).limit(1);
 			if (existing.length > 0) {
 				return fail(400, { error: 'A customer with this phone number already exists.' });
 			}
