@@ -176,6 +176,26 @@ export class PowerSyncManager {
         fn();
     }
 
+    private async _checkUploadQueueAndToast() {
+        try {
+            const result = await this.db.get('SELECT COUNT(*) as cnt FROM ps_crud') as { cnt: number } | null;
+            if (result && result.cnt > 0) {
+                this._fireToast('upload-pending', () =>
+                    toast.warning(`${result.cnt} changes pending upload. Check your connection.`)
+                );
+            } else {
+                this._fireToast('synced', () =>
+                    toast.success('Data synced successfully')
+                );
+            }
+        } catch {
+            // ps_crud might not exist — just show success
+            this._fireToast('synced', () =>
+                toast.success('Data synced successfully')
+            );
+        }
+    }
+
     private _listenForSyncChanges() {
         let lastConnected = false;
         let lastDownloading = false;
@@ -228,14 +248,13 @@ export class PowerSyncManager {
                     );
                 }
 
-                // Toast: sync completed (downloading or uploading finished)
-                if (connected && !initialSync) {
+                // Toast: sync completed (only when BOTH download and upload are idle)
+                if (connected && !initialSync && !isSyncing) {
                     const downloadFinished = !downloading && lastDownloading;
                     const uploadFinished = !uploading && lastUploading;
-                    if ((downloadFinished || uploadFinished) && !isSyncing) {
-                        this._fireToast('synced', () =>
-                            toast.success('Data synced successfully')
-                        );
+                    if (downloadFinished || uploadFinished) {
+                        // Check if there are still pending uploads before declaring success
+                        this._checkUploadQueueAndToast();
                     }
                 }
 

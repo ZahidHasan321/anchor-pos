@@ -26,20 +26,24 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         if (isElectron) {
             try {
                 const vpsUrl = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
+                const appSecret = process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026';
+                console.log(`[PowerSync] Proxying upload to VPS for user ${userId} (${mutations.length} mutations)`);
                 const res = await fetch(`${vpsUrl}/api/powersync/upload`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'x-app-secret': process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026',
+                        'x-app-secret': appSecret,
                         'x-user-id': userId!,
                     },
                     body: JSON.stringify({ mutations })
                 });
                 if (res.ok) {
+                    console.log(`[PowerSync] VPS upload succeeded (${mutations.length} mutations)`);
                     return json({ success: true });
                 }
                 const vpsBody = await res.text().catch(() => '');
                 console.error(`[PowerSync] VPS upload returned ${res.status}: ${vpsBody}`);
+                // Return 503 so PowerSync retries — do NOT return 200
                 return json({ error: 'VPS upload failed', detail: vpsBody }, { status: 503 });
             } catch (e) {
                 console.error('[PowerSync] VPS unreachable:', e);
