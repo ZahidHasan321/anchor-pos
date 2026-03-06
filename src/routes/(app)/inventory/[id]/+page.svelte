@@ -322,7 +322,7 @@
 						<DollarSign class="h-4 w-4 text-indigo-500" />
 					</div>
 					<div>
-						<p class="text-xs text-muted-foreground">Cost Value</p>
+						<p class="text-xs text-muted-foreground">Inventory Value</p>
 						<p class="text-xl font-bold break-words break-all text-indigo-600">
 							{formatCurrency(totalCostValue)}
 						</p>

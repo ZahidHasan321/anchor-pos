@@ -224,7 +224,7 @@
 
 			<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
 				<div class="flex items-center justify-between">
-					<span class="text-[10px] font-bold text-muted-foreground uppercase">Cost Value</span>
+					<span class="text-[10px] font-bold text-muted-foreground uppercase">Inventory Value</span>
 					<div class="rounded-md bg-indigo-500/10 p-1.5">
 						<Package class="h-3.5 w-3.5 text-indigo-600" />
 					</div>
@@ -295,7 +295,7 @@
 
 				<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
 					<div class="flex items-center justify-between">
-						<span class="text-[10px] font-bold text-muted-foreground uppercase">Cost Value</span>
+						<span class="text-[10px] font-bold text-muted-foreground uppercase">Inventory Value</span>
 						<div class="rounded-md bg-indigo-500/10 p-1.5">
 							<Package class="h-3.5 w-3.5 text-indigo-600" />
 						</div>

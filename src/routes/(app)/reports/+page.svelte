@@ -421,7 +421,7 @@
 				<div class="min-w-[200px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
-							>Total Retail Value</span
+							>Retail Value</span
 						>
 						<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
 							<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
@@ -438,7 +438,7 @@
 				<div class="min-w-[200px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
-							>Total Cost Value</span
+							>Inventory Value</span
 						>
 						<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
 							<Package class="h-3.5 w-3.5 text-indigo-600" />
@@ -465,7 +465,7 @@
 						{formatCurrency(summaries.inventoryRetailValue - summaries.inventoryCostValue)}
 					</div>
 					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
-						Retail Value - Cost Value
+						Retail - Inventory Value
 					</p>
 				</div>
 			{/await}
