@@ -57,14 +57,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 				db
 					.select({ total: sql<number>`coalesce(sum(${cashbook.amount}), 0)` })
 					.from(cashbook)
-					.where(and(eq(cashbook.type, 'out'), gte(cashbook.createdAt, today))),
+					.where(and(eq(cashbook.type, 'out'), eq(cashbook.category, 'expense'), gte(cashbook.createdAt, today))),
 				db
 					.select({
 						total: sql<number>`coalesce(sum(${orderItems.costAtSale} * ${orderItems.quantity}), 0)`
 					})
 					.from(orderItems)
 					.innerJoin(orders, eq(orderItems.orderId, orders.id))
-					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, today))),
+					.where(and(
+						eq(orders.status, 'completed'), 
+						eq(orderItems.status, 'completed'),
+						gte(orders.createdAt, today)
+					)),
 				db
 					.select({
 						total: sql<number>`coalesce(sum(coalesce(${productVariants.costPrice}, ${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`
@@ -73,11 +77,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 					.innerJoin(products, eq(productVariants.productId, products.id))
 			]);
 
+			const grossProfit = (todaySales[0]?.total ?? 0) - (todayCogs[0]?.total ?? 0);
+
 			return {
 				todaySales: todaySales[0],
 				monthlySales: monthlySales[0],
 				todayExpenses: todayExpenses[0],
-				todayProfit: (todaySales[0]?.total ?? 0) - (todayCogs[0]?.total ?? 0),
+				todayProfit: grossProfit - (todayExpenses[0]?.total ?? 0),
 				inventoryValue: inventoryValue[0]?.total ?? 0
 			};
 		})(),
@@ -144,7 +150,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 				})
 				.from(orderItems)
 				.innerJoin(orders, eq(orderItems.orderId, orders.id))
-				.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, firstDayOfMonth)))
+				.where(and(
+					eq(orders.status, 'completed'), 
+					eq(orderItems.status, 'completed'),
+					gte(orders.createdAt, firstDayOfMonth)
+				))
 				.groupBy(orderItems.productName, orderItems.variantLabel)
 				.orderBy(sql`total_qty DESC`)
 				.limit(10);

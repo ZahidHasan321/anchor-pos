@@ -61,7 +61,8 @@
 			SELECT COUNT(DISTINCT p.id) as totalProducts, COUNT(pv.id) as totalVariants,
 				SUM(CASE WHEN pv.stock_quantity > 0 AND pv.stock_quantity <= 5 THEN 1 ELSE 0 END) as lowStockVariants,
 				SUM(CASE WHEN pv.stock_quantity = 0 THEN 1 ELSE 0 END) as outOfStockVariants,
-				COALESCE(SUM(COALESCE(p.cost_price, 0) * pv.stock_quantity), 0) as totalInventoryValue
+				COALESCE(SUM(COALESCE(pv.cost_price, p.cost_price, 0) * pv.stock_quantity), 0) as totalCostValue,
+				COALESCE(SUM(pv.price * pv.stock_quantity), 0) as totalRetailValue
 			FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id
 		`);
 
@@ -104,7 +105,7 @@
 
 		const total = (countResult as any)?.count ?? 0;
 		nativeData = {
-			stats: statsResult ?? { totalProducts: 0, totalVariants: 0, lowStockVariants: 0, outOfStockVariants: 0, totalInventoryValue: 0 },
+			stats: statsResult ?? { totalProducts: 0, totalVariants: 0, lowStockVariants: 0, outOfStockVariants: 0, totalCostValue: 0, totalRetailValue: 0 },
 			categories: (categoryRows as any[]).map(c => c.category).sort(),
 			products: (productList as any[]).map(p => ({ ...p, variants: variantsByProduct.get(p.id) ?? [] })),
 			total,
@@ -211,13 +212,25 @@
 
 			<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
 				<div class="flex items-center justify-between">
-					<span class="text-[10px] font-bold text-muted-foreground uppercase">Value</span>
+					<span class="text-[10px] font-bold text-muted-foreground uppercase">Retail Value</span>
+					<div class="rounded-md bg-emerald-500/10 p-1.5">
+						<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
+					</div>
+				</div>
+				<div class="mt-1.5 text-xl font-black text-emerald-600 sm:mt-2 sm:text-2xl">
+					{formatCurrency(nativeData.stats.totalRetailValue)}
+				</div>
+			</div>
+
+			<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+				<div class="flex items-center justify-between">
+					<span class="text-[10px] font-bold text-muted-foreground uppercase">Cost Value</span>
 					<div class="rounded-md bg-indigo-500/10 p-1.5">
-						<TrendingUp class="h-3.5 w-3.5 text-indigo-600" />
+						<Package class="h-3.5 w-3.5 text-indigo-600" />
 					</div>
 				</div>
 				<div class="mt-1.5 text-xl font-black text-indigo-600 sm:mt-2 sm:text-2xl">
-					{formatCurrency(nativeData.stats.totalInventoryValue)}
+					{formatCurrency(nativeData.stats.totalCostValue)}
 				</div>
 			</div>
 
@@ -251,10 +264,10 @@
 				</div>
 			</button>
 		{:else if isNative}
-			{#each Array(4) as _}<Skeleton class="h-20 min-w-[140px] flex-1 rounded-lg" />{/each}
+			{#each Array(5) as _}<Skeleton class="h-20 min-w-[140px] flex-1 rounded-lg" />{/each}
 		{:else}
 			{#await data.streamed}
-				{#each Array(4) as _}<Skeleton class="h-20 min-w-[140px] flex-1 rounded-lg" />{/each}
+				{#each Array(5) as _}<Skeleton class="h-20 min-w-[140px] flex-1 rounded-lg" />{/each}
 			{:then streamed}
 				<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
 					<div class="flex items-center justify-between">
@@ -270,13 +283,25 @@
 
 				<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
 					<div class="flex items-center justify-between">
-						<span class="text-[10px] font-bold text-muted-foreground uppercase">Value</span>
+						<span class="text-[10px] font-bold text-muted-foreground uppercase">Retail Value</span>
+						<div class="rounded-md bg-emerald-500/10 p-1.5">
+							<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-xl font-black text-emerald-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(streamed.stats.totalRetailValue)}
+					</div>
+				</div>
+
+				<div class="min-w-[140px] flex-1 rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+					<div class="flex items-center justify-between">
+						<span class="text-[10px] font-bold text-muted-foreground uppercase">Cost Value</span>
 						<div class="rounded-md bg-indigo-500/10 p-1.5">
-							<TrendingUp class="h-3.5 w-3.5 text-indigo-600" />
+							<Package class="h-3.5 w-3.5 text-indigo-600" />
 						</div>
 					</div>
 					<div class="mt-1.5 text-xl font-black text-indigo-600 sm:mt-2 sm:text-2xl">
-						{formatCurrency(streamed.stats.totalInventoryValue)}
+						{formatCurrency(streamed.stats.totalCostValue)}
 					</div>
 				</div>
 

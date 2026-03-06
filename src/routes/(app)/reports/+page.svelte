@@ -367,28 +367,20 @@
 					</p>
 				</div>
 
-				{#await data.reports}
-					<div class="min-w-[180px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
-						<Skeleton class="h-4 w-24" />
-						<Skeleton class="h-8 w-full" />
-						<Skeleton class="h-3 w-16" />
-					</div>
-				{:then reports}
-					<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
-						<div class="flex items-center justify-between">
-							<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
-								>Total Stocked</span
-							>
-							<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
-								<Plus class="h-3.5 w-3.5 text-emerald-600" />
-							</div>
+				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Total Stocked</span
+						>
+						<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
+							<Plus class="h-3.5 w-3.5 text-emerald-600" />
 						</div>
-						<div class="mt-1.5 text-lg font-bold text-emerald-600 sm:mt-2 sm:text-2xl">
-							{reports.stockSummary.totalStocked}
-						</div>
-						<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">Units added</p>
 					</div>
-				{/await}
+					<div class="mt-1.5 text-lg font-bold text-emerald-600 sm:mt-2 sm:text-2xl">
+						{summaries.totalStocked}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">Units added</p>
+				</div>
 
 				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
 					<div class="flex items-center justify-between">
@@ -404,6 +396,76 @@
 						{summaries.salesSummary.total > 0
 							? `${pct(summaries.salesSummary.totalDiscount, summaries.salesSummary.total + summaries.salesSummary.totalDiscount)}% of gross`
 							: 'No sales'}
+					</p>
+				</div>
+			{/await}
+		</div>
+	</div>
+
+	<!-- ==================== INVENTORY ASSETS ==================== -->
+	<div>
+		<h2
+			class="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:text-sm"
+		>
+			Current Inventory Assets
+		</h2>
+		<div class="flex flex-wrap gap-2.5 sm:gap-3">
+			{#await data.summaries}
+				{#each Array(2) as _}
+					<div class="min-w-[200px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
+						<Skeleton class="h-4 w-24" />
+						<Skeleton class="h-8 w-full" />
+					</div>
+				{/each}
+			{:then summaries}
+				<div class="min-w-[200px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Total Retail Value</span
+						>
+						<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
+							<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-xl font-black text-emerald-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(summaries.inventoryRetailValue)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						Potential revenue from stock
+					</p>
+				</div>
+
+				<div class="min-w-[200px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Total Cost Value</span
+						>
+						<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
+							<Package class="h-3.5 w-3.5 text-indigo-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-xl font-black text-indigo-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(summaries.inventoryCostValue)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						Total capital tied in stock
+					</p>
+				</div>
+
+				<div class="min-w-[200px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
+					<div class="flex items-center justify-between">
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+							>Potential Profit</span
+						>
+						<div class="hidden rounded-md bg-blue-500/10 p-1.5 sm:block">
+							<TrendingUp class="h-3.5 w-3.5 text-blue-600" />
+						</div>
+					</div>
+					<div class="mt-1.5 text-xl font-black text-blue-600 sm:mt-2 sm:text-2xl">
+						{formatCurrency(summaries.inventoryRetailValue - summaries.inventoryCostValue)}
+					</div>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						Retail Value - Cost Value
 					</p>
 				</div>
 			{/await}
@@ -431,7 +493,7 @@
 					</div>
 				</div>
 			{:then cd}
-				{#if cd.length === 0 || cd.every((d: any) => d.amount === 0)}
+				{#if !cd || cd.length === 0 || cd.every((d: any) => d.amount === 0)}
 					<div
 						class="flex h-[180px] items-center justify-center text-sm text-muted-foreground sm:h-[240px]"
 					>
@@ -453,7 +515,7 @@
 				<Card.Title class="text-sm sm:text-base">Payment Methods</Card.Title>
 			</Card.Header>
 			<Card.Content class="space-y-3 px-3 sm:space-y-4 sm:px-6">
-				{#await Promise.all([data.summaries, data.reports])}
+				{#await Promise.all([data.summaries, data.paymentBreakdown])}
 					{#each Array(2) as _}
 						<div class="space-y-2">
 							<div class="flex justify-between">
@@ -462,8 +524,8 @@
 							<Skeleton class="h-2 w-full" />
 						</div>
 					{/each}
-				{:then [summaries, reports]}
-					{@const paymentMap = new Map(reports.paymentBreakdown.map((p: any) => [p.method, p]))}
+				{:then [summaries, paymentBreakdown]}
+					{@const paymentMap = new Map((paymentBreakdown as any[]).map((p: any) => [p.method, p]))}
 					{@const totalSales = summaries.salesSummary.total}
 					{#each ['cash', 'card', 'split'] as method}
 						{@const mData = paymentMap.get(method) as any}
@@ -516,15 +578,15 @@
 				</div>
 			</Card.Header>
 			<Card.Content class="px-3 sm:px-6">
-				{#await data.reports}
+				{#await data.expenseBreakdown}
 					<div class="space-y-4">
 						{#each Array(3) as _}<Skeleton class="h-4 w-full" />{/each}
 					</div>
-				{:then reports}
-					{#if reports.expenseBreakdown.length > 0}
-						{@const maxExpense = Math.max(...reports.expenseBreakdown.map((e: any) => e.total), 1)}
+				{:then expenseBreakdown}
+					{#if expenseBreakdown && (expenseBreakdown as any[]).length > 0}
+						{@const maxExpense = Math.max(...(expenseBreakdown as any[]).map((e: any) => e.total), 1)}
 						<div class="space-y-3">
-							{#each reports.expenseBreakdown.slice(0, 5) as exp}
+							{#each (expenseBreakdown as any[]).slice(0, 5) as exp}
 								<div class="space-y-1">
 									<div class="flex items-center justify-between gap-2 text-xs sm:text-sm">
 										<span class="truncate">{exp.description}</span>
@@ -553,17 +615,17 @@
 				<Card.Title class="text-sm sm:text-base">Refunds & Voids</Card.Title>
 			</Card.Header>
 			<Card.Content class="px-3 sm:px-6">
-				{#await data.reports}
+				{#await data.refundSummary}
 					<div class="grid grid-cols-2 gap-2">
 						<Skeleton class="h-16 w-full" />
 						<Skeleton class="h-16 w-full" />
 					</div>
-				{:then reports}
-					{@const totalRefunds = reports.refundSummary.reduce(
+				{:then refundSummary}
+					{@const totalRefunds = !refundSummary ? 0 : (refundSummary as any[]).reduce(
 						(s: number, r: any) => s + r.total,
 						0
 					)}
-					{@const totalRefundCount = reports.refundSummary.reduce(
+					{@const totalRefundCount = !refundSummary ? 0 : (refundSummary as any[]).reduce(
 						(s: number, r: any) => s + r.count,
 						0
 					)}
@@ -580,7 +642,7 @@
 								</div>
 							</div>
 							<Separator />
-							{#each reports.refundSummary as r}
+							{#each (refundSummary as any[]) as r}
 								<div class="flex items-center justify-between text-xs">
 									<span class="text-muted-foreground capitalize">{r.status}</span>
 									<span>{formatCurrency(r.total)} ({r.count})</span>
@@ -607,15 +669,15 @@
 				</Card.Title>
 			</Card.Header>
 			<Card.Content class="px-3 sm:px-6">
-				{#await data.reports}
+				{#await data.categoryBreakdown}
 					<div class="space-y-4">
 						{#each Array(4) as _}<Skeleton class="h-8 w-full" />{/each}
 					</div>
-				{:then reports}
+				{:then categoryBreakdown}
 					{@const totalRev =
-						reports.categoryBreakdown.reduce((s: number, c: any) => s + c.totalRevenue, 0) || 1}
+						!categoryBreakdown ? 1 : (categoryBreakdown as any[]).reduce((s: number, c: any) => s + c.totalRevenue, 0) || 1}
 					<div class="space-y-3">
-						{#each reports.categoryBreakdown as cat}
+						{#each (categoryBreakdown as any[]) || [] as cat}
 							<div class="space-y-1">
 								<div class="flex items-center justify-between text-xs sm:text-sm">
 									<span class="font-medium">{cat.category}</span>
@@ -647,11 +709,11 @@
 				</div>
 			</Card.Header>
 			<Card.Content class="p-0">
-				{#await data.reports}
+				{#await data.topProducts}
 					<div class="space-y-3 p-4">
 						{#each Array(5) as _}<Skeleton class="h-6 w-full" />{/each}
 					</div>
-				{:then reports}
+				{:then topProducts}
 					<Table.Root>
 						<Table.Header
 							><Table.Row class="text-xs">
@@ -661,7 +723,7 @@
 							</Table.Row></Table.Header
 						>
 						<Table.Body>
-							{#each reports.topProducts.slice(0, 5) as p}
+							{#each (topProducts as any[])?.slice(0, 5) || [] as p}
 								<Table.Row
 									class="cursor-pointer text-sm hover:bg-muted/50"
 									onclick={() => goto(`/inventory/${p.productId}`)}
@@ -694,45 +756,45 @@
 			</Card.Title>
 		</Card.Header>
 		<Card.Content class="p-0">
-			{#await data.reports}
+			{#await data.stockUpdates}
 				<div class="space-y-3 p-4">
 					{#each Array(3) as _}<Skeleton class="h-10 w-full" />{/each}
 				</div>
-			{:then reports}
+			{:then stockUpdates}
 				<Table.Root>
-					<Table.Header
-						><Table.Row class="text-xs">
+					<Table.Header>
+						<Table.Row class="text-xs">
 							<Table.Head class="pl-6">Date</Table.Head>
 							<Table.Head>Product</Table.Head>
 							<Table.Head class="text-right">Change</Table.Head>
 							<Table.Head class="pr-6">User</Table.Head>
-						</Table.Row></Table.Header
-					>
+						</Table.Row>
+					</Table.Header>
 					<Table.Body>
-						{#each reports.stockUpdates as update}
-							<Table.Row class="text-sm">
-								<Table.Cell class="pl-6 text-[11px] text-muted-foreground"
-									>{formatDateTime(update.createdAt)}</Table.Cell
+							{#each (stockUpdates as any[]) || [] as update}
+								<Table.Row class="text-sm">
+									<Table.Cell class="pl-6 text-[11px] text-muted-foreground"
+										>{formatDateTime(update.createdAt)}</Table.Cell
+									>
+									<Table.Cell class="font-medium">{update.productName} ({update.size})</Table.Cell>
+									<Table.Cell
+										class="text-right font-bold {update.changeAmount > 0
+											? 'text-emerald-600'
+											: 'text-red-600'}"
+									>
+										{update.changeAmount > 0 ? '+' : ''}{update.changeAmount}
+									</Table.Cell>
+									<Table.Cell class="pr-6 text-xs text-muted-foreground">{update.userName}</Table.Cell
+									>
+								</Table.Row>
+							{:else}
+								<Table.Row
+									><Table.Cell colspan={4} class="py-6 text-center text-sm text-muted-foreground"
+										>No activity.</Table.Cell
+									></Table.Row
 								>
-								<Table.Cell class="font-medium">{update.productName} ({update.size})</Table.Cell>
-								<Table.Cell
-									class="text-right font-bold {update.changeAmount > 0
-										? 'text-emerald-600'
-										: 'text-red-600'}"
-								>
-									{update.changeAmount > 0 ? '+' : ''}{update.changeAmount}
-								</Table.Cell>
-								<Table.Cell class="pr-6 text-xs text-muted-foreground">{update.userName}</Table.Cell
-								>
-							</Table.Row>
-						{:else}
-							<Table.Row
-								><Table.Cell colspan={4} class="py-6 text-center text-sm text-muted-foreground"
-									>No activity.</Table.Cell
-								></Table.Row
-							>
-						{/each}
-					</Table.Body>
+							{/each}
+						</Table.Body>
 				</Table.Root>
 			{/await}
 		</Card.Content>
@@ -741,9 +803,9 @@
 
 <!-- Simplified Print Layout -->
 <div class="print-report">
-	{#await Promise.all([data.summaries, data.reports])}
+	{#await data.summaries}
 		<p>Loading report data for printing...</p>
-	{:then [summaries, reports]}
+	{:then summaries}
 		<div class="print-header">
 			<h1>{data.storeName}</h1>
 			<h2>Sales Report</h2>

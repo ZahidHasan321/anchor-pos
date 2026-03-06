@@ -20,7 +20,9 @@
 		AlertTriangle,
 		PackageX,
 		CircleCheck,
-		X
+		X,
+		TrendingUp,
+		DollarSign
 	} from '@lucide/svelte';
 	import { formatCurrency, getCurrencySymbol } from '$lib/format';
 	import { toast } from 'svelte-sonner';
@@ -149,11 +151,17 @@
 	);
 	const outCount = $derived(data.variants.filter((v: any) => v.stockQuantity === 0).length);
 
-	// Per-variant stock value: sum of (variant costPrice * stockQuantity)
-	const totalStockValue = $derived(
+	// Per-variant stock value
+	const totalCostValue = $derived(
 		data.variants.reduce((sum: number, v: any) => {
 			const cost = v.costPrice ?? data.product.costPrice ?? 0;
 			return sum + cost * v.stockQuantity;
+		}, 0)
+	);
+
+	const totalRetailValue = $derived(
+		data.variants.reduce((sum: number, v: any) => {
+			return sum + v.price * v.stockQuantity;
 		}, 0)
 	);
 
@@ -282,12 +290,12 @@
 			</div>
 		</div>
 
-		<!-- Stock Health Summary -->
+		<!-- Stock Summary -->
 		<div class="grid gap-4 sm:grid-cols-4">
 			<Card.Root>
 				<Card.Content class="flex items-center gap-3 p-4">
-					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-						<Package class="h-4 w-4 text-primary" />
+					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
+						<Package class="h-4 w-4 text-blue-600" />
 					</div>
 					<div>
 						<p class="text-xs text-muted-foreground">Total Stock</p>
@@ -297,14 +305,27 @@
 			</Card.Root>
 			<Card.Root>
 				<Card.Content class="flex items-center gap-3 p-4">
-					<div
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10"
-					>
-						<CircleCheck class="h-4 w-4 text-emerald-500" />
+					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+						<TrendingUp class="h-4 w-4 text-emerald-500" />
 					</div>
 					<div>
-						<p class="text-xs text-muted-foreground">Healthy</p>
-						<p class="text-xl font-bold break-words break-all">{healthyCount}</p>
+						<p class="text-xs text-muted-foreground">Retail Value</p>
+						<p class="text-xl font-bold break-words break-all text-emerald-600">
+							{formatCurrency(totalRetailValue)}
+						</p>
+					</div>
+				</Card.Content>
+			</Card.Root>
+			<Card.Root>
+				<Card.Content class="flex items-center gap-3 p-4">
+					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10">
+						<DollarSign class="h-4 w-4 text-indigo-500" />
+					</div>
+					<div>
+						<p class="text-xs text-muted-foreground">Cost Value</p>
+						<p class="text-xl font-bold break-words break-all text-indigo-600">
+							{formatCurrency(totalCostValue)}
+						</p>
 					</div>
 				</Card.Content>
 			</Card.Root>
@@ -314,19 +335,14 @@
 						<AlertTriangle class="h-4 w-4 text-amber-500" />
 					</div>
 					<div>
-						<p class="text-xs text-muted-foreground">Low Stock</p>
-						<p class="text-xl font-bold break-words break-all">{lowCount}</p>
-					</div>
-				</Card.Content>
-			</Card.Root>
-			<Card.Root>
-				<Card.Content class="flex items-center gap-3 p-4">
-					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/10">
-						<PackageX class="h-4 w-4 text-red-500" />
-					</div>
-					<div>
-						<p class="text-xs text-muted-foreground">Out of Stock</p>
-						<p class="text-xl font-bold break-words break-all">{outCount}</p>
+						<p class="text-xs text-muted-foreground">Stock Health</p>
+						<p class="text-sm font-bold">
+							<span class="text-emerald-600" title="Healthy">{healthyCount}H</span>
+							<span class="mx-0.5 text-muted-foreground">/</span>
+							<span class="text-amber-600" title="Low Stock">{lowCount}L</span>
+							<span class="mx-0.5 text-muted-foreground">/</span>
+							<span class="text-red-600" title="Out of Stock">{outCount}O</span>
+						</p>
 					</div>
 				</Card.Content>
 			</Card.Root>
@@ -462,12 +478,6 @@
 							<p class="text-xs text-muted-foreground">Default Cost Price</p>
 							<p class="text-lg font-bold break-words break-all">
 								{formatCurrency(data.product.costPrice ?? 0)}
-							</p>
-						</div>
-						<div>
-							<p class="text-xs text-muted-foreground">Total Stock Value (At Cost)</p>
-							<p class="text-lg font-bold break-words break-all text-indigo-600 dark:text-indigo-400">
-								{formatCurrency(totalStockValue)}
 							</p>
 						</div>
 						{#if variantMargins.length > 0}

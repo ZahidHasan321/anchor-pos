@@ -26,7 +26,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			totalVariants: 0,
 			lowStockVariants: 0,
 			outOfStockVariants: 0,
-			totalInventoryValue: 0
+			totalCostValue: 0,
+			totalRetailValue: 0
 		},
 		categories: [],
 		products: [],
@@ -52,7 +53,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 						totalVariants: 0,
 						lowStockVariants: 0,
 						outOfStockVariants: 0,
-						totalInventoryValue: 0
+						totalCostValue: 0,
+						totalRetailValue: 0
 					},
 					categories: [],
 					products: [],
@@ -77,7 +79,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 						totalVariants: sql<number>`COUNT(${productVariants.id})`,
 						lowStockVariants: sql<number>`SUM(CASE WHEN ${productVariants.stockQuantity} > 0 AND ${productVariants.stockQuantity} <= ${threshold} THEN 1 ELSE 0 END)`,
 						outOfStockVariants: sql<number>`SUM(CASE WHEN ${productVariants.stockQuantity} = 0 THEN 1 ELSE 0 END)`,
-						totalInventoryValue: sql<number>`COALESCE(SUM(COALESCE(${productVariants.costPrice}, ${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`
+						totalCostValue: sql<number>`COALESCE(SUM(COALESCE(${productVariants.costPrice}, ${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`,
+						totalRetailValue: sql<number>`COALESCE(SUM(${productVariants.price} * ${productVariants.stockQuantity}), 0)`
 					})
 					.from(productVariants)
 					.innerJoin(products, eq(productVariants.productId, products.id)),
@@ -156,7 +159,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 					totalVariants: 0,
 					lowStockVariants: 0,
 					outOfStockVariants: 0,
-					totalInventoryValue: 0
+					totalCostValue: 0,
+					totalRetailValue: 0
 				},
 				categories: categoryRows.map((c: any) => c.category).sort(),
 				products: productList.map((p: any) => ({

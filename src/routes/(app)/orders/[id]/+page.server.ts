@@ -8,9 +8,10 @@ import {
 	stockLogs,
 	customers,
 	users,
-	storeSettings
+	storeSettings,
+	cashbook
 } from '$lib/server/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 
@@ -147,6 +148,19 @@ export const actions: Actions = {
 					});
 				}
 
+				// 4. Add to cashbook (if it was a cash payment)
+				if (order.paymentMethod === 'cash') {
+					await tx.insert(cashbook).values({
+						id: generateId(),
+						amount: itemTotal,
+						type: 'out',
+						category: 'refund',
+						description: `Refund: ${item.productName} (Order #${order.orderNumber ?? params.id.slice(0, 8)})`,
+						userId: locals.user!.id,
+						createdAt: new Date()
+					});
+				}
+
 				await logAuditEvent({
 					userId: locals.user!.id,
 					userName: locals.user!.name,
@@ -177,44 +191,102 @@ export const actions: Actions = {
 		}
 
 		try {
-			await db
-				.update(orders)
-				.set({ status: status as 'completed' | 'refunded' | 'void' })
-				.where(eq(orders.id, params.id));
+			await db.transaction(async (tx: any) => {
+				await tx
+					.update(orders)
+					.set({ status: status as 'completed' | 'refunded' | 'void' })
+					.where(eq(orders.id, params.id));
 
-			await logAuditEvent({
-				userId: locals.user.id,
-				userName: locals.user.name,
-				action: 'UPDATE_ORDER_STATUS',
-				entity: 'orders',
-				entityId: params.id,
-				details: `Changed order status to ${status}`
-			});
+				await logAuditEvent({
+					userId: locals.user!.id,
+					userName: locals.user!.name,
+					action: 'UPDATE_ORDER_STATUS',
+					entity: 'orders',
+					entityId: params.id,
+					details: `Changed order status to ${status}`
+				});
 
-			// If refunded, restore stock
-			if (status === 'refunded') {
-				const items = await db.select().from(orderItems).where(eq(orderItems.orderId, params.id));
+				const orderData = (await tx.select().from(orders).where(eq(orders.id, params.id)).limit(1))[0];
 
-				for (const item of items) {
-					if (item.variantId && item.status !== 'refunded') {
-						await db
-							.update(productVariants)
-							.set({ stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}` })
-							.where(eq(productVariants.id, item.variantId));
+				// If refunded, restore stock and log cash
+				if (status === 'refunded') {
+					const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, params.id));
 
-						await db.insert(stockLogs).values({
+					for (const item of items) {
+						if (item.variantId && item.status !== 'refunded') {
+							await tx
+								.update(productVariants)
+								.set({ stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}` })
+								.where(eq(productVariants.id, item.variantId));
+
+							await tx.insert(stockLogs).values({
+								id: generateId(),
+								variantId: item.variantId,
+								changeAmount: item.quantity,
+								reason: `Return - Order ${params.id.substring(0, 8)} refunded`,
+								userId: locals.user!.id,
+								createdAt: new Date()
+							});
+						}
+					}
+					// Also mark all items as refunded in the DB for consistency
+					await tx
+						.update(orderItems)
+						.set({ status: 'refunded' })
+						.where(eq(orderItems.orderId, params.id));
+
+					// Log to cashbook (if it was a cash payment)
+					if (orderData.paymentMethod === 'cash') {
+						await tx.insert(cashbook).values({
 							id: generateId(),
-							variantId: item.variantId,
-							changeAmount: item.quantity,
-							reason: `Return - Order ${params.id.substring(0, 8)} refunded`,
-							userId: locals.user.id,
+							amount: orderData.totalAmount,
+							type: 'out',
+							category: 'refund',
+							description: `Full Refund: Order #${orderData.orderNumber ?? params.id.slice(0, 8)}`,
+							userId: locals.user!.id,
+							createdAt: new Date()
+						});
+					}
+				} else if (status === 'void') {
+					// If voided, we also restore stock but log as VOID
+					const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, params.id));
+					for (const item of items) {
+						if (item.variantId && item.status !== 'refunded') {
+							await tx
+								.update(productVariants)
+								.set({ stockQuantity: sql`${productVariants.stockQuantity} + ${item.quantity}` })
+								.where(eq(productVariants.id, item.variantId));
+
+							await tx.insert(stockLogs).values({
+								id: generateId(),
+								variantId: item.variantId,
+								changeAmount: item.quantity,
+								reason: `Void - Order ${params.id.substring(0, 8)} voided`,
+								userId: locals.user!.id,
+								createdAt: new Date()
+							});
+						}
+					}
+					// Mark items as voided (or just let them be, but consistency is good)
+					await tx
+						.update(orderItems)
+						.set({ status: 'voided' })
+						.where(and(eq(orderItems.orderId, params.id), sql`${orderItems.status} != 'refunded'`));
+
+					// Log to cashbook if it was a cash payment (money returned)
+					if (orderData.paymentMethod === 'cash') {
+						await tx.insert(cashbook).values({
+							id: generateId(),
+							amount: orderData.totalAmount,
+							type: 'out',
+							category: 'refund',
+							description: `Void: Order #${orderData.orderNumber ?? params.id.slice(0, 8)}`,
+							userId: locals.user!.id,
 							createdAt: new Date()
 						});
 					}
 				}
-				// Also mark all items as refunded in the DB for consistency
-				await db.update(orderItems).set({ status: 'refunded' }).where(eq(orderItems.orderId, params.id));
-			}
+			});
 		} catch (e) {
 			console.error('Failed to update order status:', e);
 			return fail(500, { error: 'Database error' });

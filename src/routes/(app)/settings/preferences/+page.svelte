@@ -21,6 +21,15 @@
 	import { formatDateTime } from '$lib/format';
 	import { untrack } from 'svelte';
 	import * as Select from '$lib/components/ui/select';
+	import {
+		isWebBluetoothSupported,
+		connectPrinter,
+		disconnectPrinter,
+		isConnected as isBtConnected,
+		getConnectedPrinterName,
+		testBluetoothPrint
+	} from '$lib/bluetooth-printer';
+	import { Bluetooth } from '@lucide/svelte';
 
 	let { data, form } = $props();
 	let loading = $state(false);
@@ -41,6 +50,33 @@
 	let thermalCharacterSet = $state('PC437_USA');
 	let thermalConnectionType = $state('usb_share');
 	let testingThermal = $state(false);
+
+	// --- Bluetooth Printer Settings (Mobile/Web) ---
+	let btSupported = $state(false);
+	let useBtPrinter = $state(false);
+	let btPrinterName = $state('');
+	let btConnected = $state(false);
+	let btConnecting = $state(false);
+	let btTesting = $state(false);
+	let btPaperWidth = $state('58');
+
+	$effect(() => {
+		// Bluetooth printer state (mobile/web)
+		btSupported = isWebBluetoothSupported();
+		useBtPrinter = localStorage.getItem('pos-use-bt-printer') === 'true';
+		btPrinterName = localStorage.getItem('pos-bt-printer-name') || '';
+		btPaperWidth = localStorage.getItem('pos-bt-printer-width') || '58';
+		btConnected = isBtConnected();
+
+		// Poll connection status every 2s when BT is enabled
+		const interval = setInterval(() => {
+			btConnected = isBtConnected();
+			if (btConnected) {
+				btPrinterName = getConnectedPrinterName();
+			}
+		}, 2000);
+		return () => clearInterval(interval);
+	});
 
 	$effect(() => {
 		// @ts-ignore
@@ -173,6 +209,51 @@
 			toast.error(`Label print error: ${e.message}`);
 		}
 		testPrintingLabel = false;
+	}
+
+	function saveBtSettings() {
+		localStorage.setItem('pos-use-bt-printer', useBtPrinter.toString());
+		localStorage.setItem('pos-bt-printer-width', btPaperWidth);
+		toast.success('Bluetooth printer settings saved');
+	}
+
+	async function handleBtConnect() {
+		btConnecting = true;
+		try {
+			const result = await connectPrinter();
+			if (result.success) {
+				btPrinterName = result.name || 'Unknown';
+				btConnected = true;
+				toast.success(`Connected to ${btPrinterName}`);
+			} else {
+				toast.error(result.error || 'Failed to connect');
+			}
+		} catch (e: any) {
+			toast.error(`Bluetooth error: ${e.message}`);
+		}
+		btConnecting = false;
+	}
+
+	function handleBtDisconnect() {
+		disconnectPrinter();
+		btConnected = false;
+		btPrinterName = '';
+		toast.success('Printer disconnected');
+	}
+
+	async function handleBtTest() {
+		btTesting = true;
+		try {
+			const result = await testBluetoothPrint();
+			if (result.success) {
+				toast.success('Bluetooth test print sent');
+			} else {
+				toast.error(`Test failed: ${result.error}`);
+			}
+		} catch (e: any) {
+			toast.error(`Test error: ${e.message}`);
+		}
+		btTesting = false;
 	}
 
 	let prefData = $state({
@@ -648,6 +729,154 @@
 									</Button>
 									<p class="text-[10px] text-muted-foreground mt-1">Sends a test page directly via ESC/POS commands to verify the connection.</p>
 								</div>
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+	{/if}
+
+	<!-- ==================== BLUETOOTH PRINTER (Mobile/Web) ==================== -->
+	{#if btSupported && !isElectron}
+		<Card.Root>
+			<Card.Header class="px-4 pb-4 sm:px-6">
+				<div class="flex items-center gap-2.5">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
+						<Bluetooth class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+					</div>
+					<div class="flex-1">
+						<Card.Title class="text-sm sm:text-base">Bluetooth Printer</Card.Title>
+						<Card.Description class="text-xs sm:text-sm">
+							Connect to a Bluetooth thermal printer for receipt printing.
+						</Card.Description>
+					</div>
+				</div>
+			</Card.Header>
+			<Card.Content class="space-y-4 px-4 sm:px-6">
+				<div class="flex items-center justify-between gap-4">
+					<div class="min-w-0 space-y-0.5">
+						<Label>Enable Bluetooth Printing</Label>
+						<p class="text-xs text-muted-foreground">Print receipts via Bluetooth instead of the browser print dialog.</p>
+					</div>
+					<Switch
+						checked={useBtPrinter}
+						onCheckedChange={(v) => { useBtPrinter = v; saveBtSettings(); }}
+					/>
+				</div>
+
+				{#if useBtPrinter}
+					<div class="space-y-4 animate-in duration-200 fade-in slide-in-from-top-1 rounded-lg border bg-muted/20 p-4">
+						<!-- Connection Status -->
+						<div class="flex items-center justify-between gap-3">
+							<div class="min-w-0">
+								<div class="flex items-center gap-2">
+									<div class="h-2.5 w-2.5 rounded-full {btConnected ? 'bg-emerald-500' : 'bg-red-400'}"></div>
+									<span class="text-sm font-medium">
+										{btConnected ? btPrinterName : 'Not connected'}
+									</span>
+								</div>
+								{#if btConnected}
+									<p class="text-xs text-muted-foreground mt-0.5">Ready to print</p>
+								{:else}
+									<p class="text-xs text-muted-foreground mt-0.5">Tap "Connect" and select your printer</p>
+								{/if}
+							</div>
+							<div class="flex gap-2">
+								{#if btConnected}
+									<Button
+										variant="outline"
+										size="sm"
+										class="cursor-pointer text-xs"
+										onclick={handleBtDisconnect}
+									>
+										Disconnect
+									</Button>
+								{:else}
+									<Button
+										variant="default"
+										size="sm"
+										class="cursor-pointer text-xs"
+										onclick={handleBtConnect}
+										disabled={btConnecting}
+									>
+										{#if btConnecting}
+											<Loader2 class="mr-1 h-3 w-3 animate-spin" />
+											Scanning...
+										{:else}
+											<Bluetooth class="mr-1 h-3 w-3" />
+											Connect
+										{/if}
+									</Button>
+								{/if}
+							</div>
+						</div>
+
+						<!-- Paper Width -->
+						<div class="space-y-2">
+							<Label>Paper Width</Label>
+							<Select.Root
+								type="single"
+								value={btPaperWidth}
+								onValueChange={(v) => { btPaperWidth = v ?? '58'; saveBtSettings(); }}
+							>
+								<Select.Trigger class="w-full cursor-pointer">
+									{btPaperWidth === '58' ? '58mm (32 chars)' : '80mm (48 chars)'}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="58" label="58mm (32 chars)">58mm (32 chars)</Select.Item>
+									<Select.Item value="80" label="80mm (48 chars)">80mm (48 chars)</Select.Item>
+								</Select.Content>
+							</Select.Root>
+							<p class="text-[10px] text-muted-foreground">Most portable Bluetooth printers use 58mm paper.</p>
+						</div>
+
+						<!-- Test Print -->
+						{#if btConnected}
+							<div class="flex gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									class="cursor-pointer text-xs"
+									onclick={handleBtTest}
+									disabled={btTesting}
+								>
+									{#if btTesting}
+										<Loader2 class="mr-1 h-3 w-3 animate-spin" />
+										Testing...
+									{:else}
+										<Printer class="mr-1 h-3 w-3" />
+										Test Print
+									{/if}
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									class="cursor-pointer text-xs"
+									onclick={async () => {
+										const result = await printReceipt({
+											storeSettings: data.settings,
+											orderId: '#TEST-BT',
+											date: formatDateTime(new Date()),
+											cashier: data.user?.name ?? 'Admin',
+											items: [
+												{ name: 'DUMMY PRODUCT', variant: 'Large / Black', qty: 1, total: 1200 },
+												{ name: 'SAMPLE ITEM', variant: 'Medium / Blue', qty: 2, total: 1600 }
+											],
+											total: 2800,
+											cashReceived: 3000,
+											changeGiven: 200
+										});
+										if (result && !result.success) {
+											toast.error(`Print failed: ${result.error}`);
+										} else if (result?.success) {
+											toast.success('Test receipt printed via Bluetooth');
+										}
+									}}
+								>
+									<Printer class="mr-1 h-3 w-3" />
+									Test Full Receipt
+								</Button>
 							</div>
 						{/if}
 					</div>

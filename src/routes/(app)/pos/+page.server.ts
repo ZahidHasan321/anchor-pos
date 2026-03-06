@@ -241,6 +241,7 @@ export const actions: Actions = {
 					id: generateId(),
 					amount: totalAmount,
 					type: 'in',
+					category: 'sale',
 					description: `Sale ${orderId.slice(0, 8).toUpperCase()}`,
 					userId: locals.user!.id
 				});

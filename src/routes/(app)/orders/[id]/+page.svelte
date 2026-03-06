@@ -76,21 +76,26 @@
 
 	function handlePrintReceipt() {
 		const o = order;
+		const originalTotal = items.reduce((acc: number, item: any) => acc + (item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100)), 0);
+		
 		printReceipt({
 			storeSettings: storeSettings,
 			orderId: '#' + (o.orderNumber ?? o.id.slice(0, 8).toUpperCase()),
-			orderUuid: o.id, // We'll pass both to printReceipt
+			orderUuid: o.id,
 			date: formatDateTime(o.createdAt),
 			cashier: o.userName ?? '',
 			items: items.map((item: any) => ({
 				name: item.productName,
 				variant: item.variantLabel,
 				qty: item.quantity,
-				total: item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100)
+				total: item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100),
+				status: item.status
 			})),
 			total: o.totalAmount,
+			originalTotal: originalTotal,
 			cashReceived: o.cashReceived || 0,
 			changeGiven: o.changeGiven || 0,
+			status: o.status,
 			footerNote: 'Reprinted on ' + new Date().toLocaleString(),
 			isReprint: true
 		});

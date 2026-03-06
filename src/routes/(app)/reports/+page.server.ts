@@ -114,15 +114,18 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		endDate: endDate.toISOString().split('T')[0],
 		chartGrouping,
 
-		// Summaries
+		// Summaries (Instantly visible cards)
 		summaries: (async () => {
 			if (!db) return {
 				salesSummary: { count: 0, total: 0, avgOrder: 0, totalDiscount: 0 },
 				expenseSummary: { total: 0 },
 				itemsSold: 0,
-				grossProfit: 0
+				grossProfit: 0,
+				inventoryRetailValue: 0,
+				inventoryCostValue: 0,
+				totalStocked: 0
 			};
-			const [sales, expenses, items] = await Promise.all([
+			const [sales, expenses, items, inventory, stockSum] = await Promise.all([
 				db.select({
 					count: sql<number>`count(*)`,
 					total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`,
@@ -132,17 +135,35 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				
 				db.select({
 					total: sql<number>`coalesce(sum(${cashbook.amount}), 0)`
-				}).from(cashbook).where(and(eq(cashbook.type, 'out'), gte(cashbook.createdAt, startDate), lt(cashbook.createdAt, endDate))),
+				}).from(cashbook).where(and(
+					eq(cashbook.type, 'out'), 
+					eq(cashbook.category, 'expense'),
+					gte(cashbook.createdAt, startDate), 
+					lt(cashbook.createdAt, endDate)
+				)),
 
 				db.select({
 					totalQty: sql<number>`coalesce(sum(${orderItems.quantity}), 0)`,
 					totalCost: sql<number>`coalesce(sum(${orderItems.costAtSale} * ${orderItems.quantity}), 0)`
-				}).from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id)).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate)))
+				}).from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id)).where(and(
+					eq(orders.status, 'completed'), 
+					eq(orderItems.status, 'completed'),
+					gte(orders.createdAt, startDate), 
+					lt(orders.createdAt, endDate)
+				)),
+
+				db.select({
+					totalCost: sql<number>`COALESCE(SUM(COALESCE(${productVariants.costPrice}, ${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`,
+					totalRetail: sql<number>`COALESCE(SUM(${productVariants.price} * ${productVariants.stockQuantity}), 0)`
+				}).from(productVariants).innerJoin(products, eq(productVariants.productId, products.id)),
+
+				db.select({ totalStocked: sql<number>`coalesce(sum(${stockLogs.changeAmount}), 0)` }).from(stockLogs).where(and(sql`${stockLogs.changeAmount} > 0`, gte(stockLogs.createdAt, startDate), lt(stockLogs.createdAt, endDate)))
 			]);
 
 			const s = sales[0];
 			const e = expenses[0];
 			const i = items[0];
+			const inv = inventory[0];
 
 			const grossProfit = (s?.total ?? 0) - (i?.totalCost ?? 0);
 
@@ -151,89 +172,70 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				expenseSummary: e ?? { total: 0 },
 				itemsSold: i?.totalQty ?? 0,
 				grossProfit: grossProfit,
-				netProfit: grossProfit - (e?.total ?? 0)
+				netProfit: grossProfit - (e?.total ?? 0),
+				inventoryRetailValue: inv?.totalRetail ?? 0,
+				inventoryCostValue: inv?.totalCost ?? 0,
+				totalStocked: stockSum[0]?.totalStocked ?? 0
 			};
 		})(),
 
-		// Chart Data
+		// Individual Report Promises (Decomposed for performance)
+		topProducts: (async () => {
+			if (!db) return [];
+			const res = await db.select({ productId: products.id, productName: orderItems.productName, totalQty: sql<number>`sum(${orderItems.quantity})`.as('totalQty'), totalRevenue: sql<number>`sum(${orderItems.priceAtSale} * ${orderItems.quantity} * (1 - ${orderItems.discount} / 100))`.as('totalRevenue') }).from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id)).leftJoin(productVariants, eq(orderItems.variantId, productVariants.id)).leftJoin(products, eq(productVariants.productId, products.id)).where(and(
+				eq(orderItems.status, 'completed'), 
+				gte(orders.createdAt, startDate), 
+				lt(orders.createdAt, endDate)
+			)).groupBy(orderItems.productName, products.id).orderBy(desc(sql`"totalQty"`)).limit(10);
+			return res;
+		})(),
+
+		categoryBreakdown: (async () => {
+			if (!db) return [];
+			const res = await db.select({ category: sql<string>`coalesce(${products.category}, 'Unknown')`.as('category'), totalQty: sql<number>`sum(${orderItems.quantity})`.as('totalQty'), totalRevenue: sql<number>`sum(${orderItems.priceAtSale} * ${orderItems.quantity} * (1 - ${orderItems.discount} / 100))`.as('totalRevenue') }).from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id)).leftJoin(productVariants, eq(orderItems.variantId, productVariants.id)).leftJoin(products, eq(productVariants.productId, products.id)).where(and(
+				eq(orders.status, 'completed'), 
+				eq(orderItems.status, 'completed'), 
+				gte(orders.createdAt, startDate), 
+				lt(orders.createdAt, endDate)
+				)).groupBy(products.category).orderBy(desc(sql`"totalRevenue"`)).limit(10);
+				return res;		})(),
+
+		paymentBreakdown: (async () => {
+			if (!db) return [];
+			return db.select({ method: orders.paymentMethod, count: sql<number>`count(*)`.as('count'), total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('total') }).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(orders.paymentMethod);
+		})(),
+
+		refundSummary: (async () => {
+			if (!db) return [];
+			return db.select({ status: orders.status, count: sql<number>`count(*)`.as('count'), total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('total') }).from(orders).where(and(inArray(orders.status, ['refunded', 'void']), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(orders.status);
+		})(),
+
+		expenseBreakdown: (async () => {
+			if (!db) return [];
+			return db.select({ description: cashbook.description, total: sql<number>`coalesce(sum(${cashbook.amount}), 0)`.as('total'), count: sql<number>`count(*)`.as('count') }).from(cashbook).where(and(eq(cashbook.type, 'out'), gte(cashbook.createdAt, startDate), lt(cashbook.createdAt, endDate))).groupBy(cashbook.description).orderBy(desc(sql`total`)).limit(10);
+		})(),
+
+		stockUpdates: (async () => {
+			if (!db) return [];
+			return db.select({ id: stockLogs.id, productId: products.id, productName: products.name, size: productVariants.size, changeAmount: stockLogs.changeAmount, reason: stockLogs.reason, userName: users.name, createdAt: stockLogs.createdAt }).from(stockLogs).innerJoin(productVariants, eq(stockLogs.variantId, productVariants.id)).innerJoin(products, eq(productVariants.productId, products.id)).innerJoin(users, eq(stockLogs.userId, users.id)).where(and(sql`${stockLogs.reason} != 'sale'`, gte(stockLogs.createdAt, startDate), lt(stockLogs.createdAt, endDate))).orderBy(desc(stockLogs.createdAt)).limit(10);
+		})(),
+
 		chartData: (async () => {
 			if (!db) return [];
-			const chartDataRaw = await db.select({
-				date: dateExpressionMap[chartGrouping].as('date'),
-				total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('total'),
+			const dateExpr = dateExpressionMap[chartGrouping];
+			return db.select({
+				date: dateExpr.as('date'),
+				amount: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('amount'),
 				count: sql<number>`count(*)`.as('count')
-			}).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(sql`date`).orderBy(sql`date`);
-
-			const salesByDate = new Map<string, { amount: number; count: number }>(
-				chartDataRaw.map((d: any) => [d.date, { amount: d.total, count: d.count }])
-			);
-			const chartData: { date: string; fullDate: string; amount: number; count: number }[] = [];
-			const currentDate = new Date(startDate);
-			currentDate.setMinutes(0, 0, 0);
-
-			while (currentDate <= loopEndDate) {
-				let key: string;
-				let label: string;
-				if (chartGrouping === 'hour') {
-					key = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')} ${String(currentDate.getHours()).padStart(2, '0')}`;
-					const h = currentDate.getHours();
-					label = `${h === 0 ? 12 : h > 12 ? h - 12 : h}${h >= 12 ? 'PM' : 'AM'}`;
-					currentDate.setHours(currentDate.getHours() + 1);
-				} else if (chartGrouping === 'day') {
-					key = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-					label = currentDate.toLocaleDateString(storeLocale, { day: '2-digit', month: 'short', timeZone: storeTimezone });
-					currentDate.setDate(currentDate.getDate() + 1);
-				} else if (chartGrouping === 'month') {
-					key = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-					label = currentDate.toLocaleDateString(storeLocale, { month: 'short', year: '2-digit', timeZone: storeTimezone });
-					currentDate.setMonth(currentDate.getMonth() + 1);
-				} else {
-					key = `${currentDate.getFullYear()}`;
-					label = key;
-					currentDate.setFullYear(currentDate.getFullYear() + 1);
-				}
-				const sale = salesByDate.get(key);
-				chartData.push({ date: label, fullDate: key, amount: sale?.amount ?? 0, count: sale?.count ?? 0 });
-			}
-			return chartData;
+			})
+			.from(orders)
+			.where(and(
+				eq(orders.status, 'completed'),
+				gte(orders.createdAt, startDate),
+				lt(orders.createdAt, endDate)
+			))
+			.groupBy(dateExpr)
+			.orderBy(dateExpr);
 		})(),
-
-		// All other reports
-		reports: (async () => {
-			if (!db) return {
-				topProducts: [],
-				categoryBreakdown: [],
-				cashierPerformance: [],
-				topCustomers: [],
-				paymentBreakdown: [],
-				refundSummary: [],
-				expenseBreakdown: [],
-				stockSummary: { totalStocked: 0 },
-				stockUpdates: []
-			};
-			const [topProductsRaw, categoryBreakdownRaw, cashierPerformanceRaw, topCustomersRaw, paymentBreakdown, refundSummary, expenseBreakdown, stockSummaryResult, stockUpdates] = await Promise.all([
-				db.select({ productId: products.id, productName: orderItems.productName, total_qty: sql<number>`sum(${orderItems.quantity})`.as('total_qty'), total_revenue: sql<number>`sum(${orderItems.priceAtSale} * ${orderItems.quantity} * (1 - ${orderItems.discount} / 100))`.as('total_revenue') }).from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id)).leftJoin(productVariants, eq(orderItems.variantId, productVariants.id)).leftJoin(products, eq(productVariants.productId, products.id)).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(orderItems.productName, products.id).orderBy(desc(sql`total_qty`)).limit(10),
-				db.select({ category: sql<string>`coalesce(${products.category}, 'Unknown')`.as('category'), total_qty: sql<number>`sum(${orderItems.quantity})`.as('total_qty'), total_revenue: sql<number>`sum(${orderItems.priceAtSale} * ${orderItems.quantity} * (1 - ${orderItems.discount} / 100))`.as('total_revenue') }).from(orderItems).innerJoin(orders, eq(orderItems.orderId, orders.id)).leftJoin(productVariants, eq(orderItems.variantId, productVariants.id)).leftJoin(products, eq(productVariants.productId, products.id)).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(products.category).orderBy(desc(sql`total_revenue`)).limit(10),
-				db.select({ userId: users.id, cashierName: users.name, order_count: sql<number>`count(*)`.as('order_count'), total_sales: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('total_sales'), avg_order: sql<number>`coalesce(avg(${orders.totalAmount}), 0)`.as('avg_order') }).from(orders).innerJoin(users, eq(orders.userId, users.id)).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(users.id).orderBy(desc(sql`total_sales`)).limit(10),
-				db.select({ customerId: customers.id, customerName: customers.name, customerPhone: customers.phone, order_count: sql<number>`count(*)`.as('order_count'), total_spent: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('total_spent') }).from(orders).innerJoin(customers, eq(orders.customerId, customers.id)).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(customers.id).orderBy(desc(sql`total_spent`)).limit(10),
-				db.select({ method: orders.paymentMethod, count: sql<number>`count(*)`.as('count'), total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('total') }).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(orders.paymentMethod),
-				db.select({ status: orders.status, count: sql<number>`count(*)`.as('count'), total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('total') }).from(orders).where(and(inArray(orders.status, ['refunded', 'void']), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(orders.status),
-				db.select({ description: cashbook.description, total: sql<number>`coalesce(sum(${cashbook.amount}), 0)`.as('total'), count: sql<number>`count(*)`.as('count') }).from(cashbook).where(and(eq(cashbook.type, 'out'), gte(cashbook.createdAt, startDate), lt(cashbook.createdAt, endDate))).groupBy(cashbook.description).orderBy(desc(sql`total`)).limit(10),
-				db.select({ totalStocked: sql<number>`coalesce(sum(${stockLogs.changeAmount}), 0)` }).from(stockLogs).where(and(sql`${stockLogs.changeAmount} > 0`, gte(stockLogs.createdAt, startDate), lt(stockLogs.createdAt, endDate))),
-				db.select({ id: stockLogs.id, productId: products.id, productName: products.name, size: productVariants.size, changeAmount: stockLogs.changeAmount, reason: stockLogs.reason, userName: users.name, createdAt: stockLogs.createdAt }).from(stockLogs).innerJoin(productVariants, eq(stockLogs.variantId, productVariants.id)).innerJoin(products, eq(productVariants.productId, products.id)).innerJoin(users, eq(stockLogs.userId, users.id)).where(and(sql`${stockLogs.reason} != 'sale'`, gte(stockLogs.createdAt, startDate), lt(stockLogs.createdAt, endDate))).orderBy(desc(stockLogs.createdAt)).limit(10)
-			]);
-
-			return {
-				topProducts: topProductsRaw.map((p: any) => ({ ...p, totalQty: p.total_qty, totalRevenue: p.total_revenue })),
-				categoryBreakdown: categoryBreakdownRaw.map((c: any) => ({ ...c, totalQty: c.total_qty, totalRevenue: c.total_revenue })),
-				cashierPerformance: cashierPerformanceRaw.map((c: any) => ({ ...c, orderCount: c.order_count, totalSales: c.total_sales, avgOrder: c.avg_order })),
-				topCustomers: topCustomersRaw.map((c: any) => ({ ...c, orderCount: c.order_count, totalSpent: c.total_spent })),
-				paymentBreakdown,
-				refundSummary,
-				expenseBreakdown,
-				stockSummary: stockSummaryResult[0] ?? { totalStocked: 0 },
-				stockUpdates
-			};
-		})()
 	};
 };

@@ -69,8 +69,8 @@ export const AppSchema = new Schema([
     columns: [
       new Column({ name: 'amount', type: ColumnType.REAL }),
       new Column({ name: 'type', type: ColumnType.TEXT }),
-      new Column({ name: 'description', type: ColumnType.TEXT }),
-      new Column({ name: 'user_id', type: ColumnType.TEXT }),
+      new Column({ name: 'category', type: ColumnType.TEXT }),
+      new Column({ name: 'description', type: ColumnType.TEXT }),      new Column({ name: 'user_id', type: ColumnType.TEXT }),
       new Column({ name: 'created_at', type: ColumnType.TEXT })
     ]
   }),

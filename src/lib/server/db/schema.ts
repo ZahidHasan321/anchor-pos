@@ -173,6 +173,7 @@ export const cashbook = pgTable(
 		id: text('id').primaryKey(),
 		amount: doublePrecision('amount').notNull(),
 		type: text('type').notNull(), // enum: ['in', 'out']
+		category: text('category').notNull().default('expense'), // 'sale', 'refund', 'expense'
 		description: text('description').notNull(),
 		userId: text('user_id').references(() => users.id),
 		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()

@@ -1,4 +1,5 @@
 import { getCurrencySymbol } from './format';
+import { isConnected as isBtConnected, printBluetoothReceipt } from './bluetooth-printer';
 
 export type ReceiptData = {
 	storeSettings: {
@@ -25,12 +26,14 @@ export type ReceiptData = {
 	orderUuid?: string;
 	date: string;
 	cashier: string;
-	items: Array<{ name: string; variant: string; qty: number; total: number }>;
+	items: Array<{ name: string; variant: string; qty: number; total: number; status?: string }>;
 	total: number;
+	originalTotal?: number;
 	cashReceived: number;
 	changeGiven: number;
 	footerNote?: string;
 	isReprint?: boolean;
+	status?: string;
 };
 
 export async function printReceipt(data: ReceiptData, preview = false): Promise<{ success: boolean; error?: string } | void> {
@@ -40,12 +43,18 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 	const itemsHtml = data.items
 		.map(
 			(item) => `<tr>
-				<td style="padding-bottom: 4px;">${item.name}<br/><small>${item.variant}</small></td>
+				<td style="padding-bottom: 4px;">
+					${item.status === 'refunded' ? `<span style="border: 1px solid #000; padding: 0 2px; font-size: 9px; font-weight: bold;">REFUNDED</span> ` : ''}
+					${item.name}<br/><small>${item.variant}</small>
+				</td>
 				<td style="text-align:center">${item.qty}</td>
-				<td style="text-align:right">${item.total.toFixed(2)}</td>
+				<td style="text-align:right">${item.status === 'refunded' ? '-' : ''}${item.total.toFixed(2)}</td>
 			</tr>`
 		)
 		.join('');
+
+	const hasRefunds = data.items.some(i => i.status === 'refunded') || data.status === 'refunded';
+	const refundAmount = data.originalTotal ? data.originalTotal - data.total : 0;
 
 	const html = `<!DOCTYPE html>
 <html><head><title>Receipt ${data.orderId}</title>
@@ -116,6 +125,16 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 			${s.store_bin ? `<div style="font-size: 11px; margin-top: 2px;">BIN: ${s.store_bin}</div>` : ''}
 		</div>
 
+		${data.status === 'refunded' ? `
+			<div style="text-align:center; border: 2px solid #000; padding: 5px; margin: 10px 0; font-weight: bold; font-size: 16px;">
+				FULL REFUND
+			</div>
+		` : hasRefunds ? `
+			<div style="text-align:center; border: 1px solid #000; padding: 3px; margin: 10px 0; font-weight: bold; font-size: 12px;">
+				PARTIAL REFUND
+			</div>
+		` : ''}
+
 		<div class="line"></div>
 
 		<div style="font-size: 11px;">
@@ -142,8 +161,18 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 		<div class="line"></div>
 
 		<table>
+			${data.originalTotal && data.originalTotal !== data.total ? `
+				<tr style="font-size: 12px;">
+					<td>ORIGINAL TOTAL</td>
+					<td style="text-align:right">${symbol}${data.originalTotal.toFixed(2)}</td>
+				</tr>
+				<tr style="font-size: 12px; color: #d00;">
+					<td>TOTAL REFUND</td>
+					<td style="text-align:right">-${symbol}${refundAmount.toFixed(2)}</td>
+				</tr>
+			` : ''}
 			<tr class="total-line">
-				<td>TOTAL</td>
+				<td>NET TOTAL</td>
 				<td style="text-align:right">${symbol}${data.total.toFixed(2)}</td>
 			</tr>
 			<tr style="font-size: 11px;">
@@ -242,6 +271,20 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 		// @ts-ignore
 		window.electron.printNative(html, preview);
 		return { success: true };
+	}
+
+	// --- Bluetooth Thermal Printing (Mobile) ---
+	if (typeof window !== 'undefined' && !preview) {
+		const useBt = localStorage.getItem('pos-use-bt-printer') === 'true';
+		if (useBt && isBtConnected()) {
+			try {
+				const result = await printBluetoothReceipt(data);
+				return result;
+			} catch (e) {
+				console.error('Bluetooth print failed, falling back:', e);
+				// fall through to web printing
+			}
+		}
 	}
 
 	// --- Standard Web Printing (Fallback) ---

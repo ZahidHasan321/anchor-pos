@@ -260,7 +260,8 @@ export function queryInventoryStats() {
 			COUNT(pv.id) as totalVariants,
 			SUM(CASE WHEN pv.stock_quantity > 0 AND pv.stock_quantity <= 5 THEN 1 ELSE 0 END) as lowStockVariants,
 			SUM(CASE WHEN pv.stock_quantity = 0 THEN 1 ELSE 0 END) as outOfStockVariants,
-			COALESCE(SUM(COALESCE(pv.cost_price, p.cost_price, 0) * pv.stock_quantity), 0) as totalInventoryValue
+			COALESCE(SUM(COALESCE(pv.cost_price, p.cost_price, 0) * pv.stock_quantity), 0) as totalCostValue,
+			COALESCE(SUM(pv.price * pv.stock_quantity), 0) as totalRetailValue
 		FROM product_variants pv
 		INNER JOIN products p ON pv.product_id = p.id
 	`);
@@ -304,6 +305,13 @@ export function queryDashboardStats() {
 		),
 		inventoryValue: createWatchQuery(
 			`SELECT coalesce(sum(coalesce(pv.cost_price, p.cost_price, 0) * pv.stock_quantity), 0) as total FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id`
+		),
+		todayCogs: createWatchQuery(
+			`SELECT coalesce(sum(oi.cost_at_sale * oi.quantity), 0) as total 
+			 FROM order_items oi 
+			 INNER JOIN orders o ON oi.order_id = o.id 
+			 WHERE o.status = 'completed' AND oi.status = 'completed' AND o.created_at >= ?`,
+			[todayIso]
 		)
 	};
 }
@@ -342,7 +350,7 @@ export function queryTopProducts() {
 			sum(quantity) as totalQty, sum(quantity * price_at_sale) as totalRevenue
 		FROM order_items oi
 		INNER JOIN orders o ON oi.order_id = o.id
-		WHERE o.status = 'completed' AND o.created_at >= ?
+		WHERE o.status = 'completed' AND oi.status = 'completed' AND o.created_at >= ?
 		GROUP BY product_name, variant_label
 		ORDER BY totalQty DESC
 		LIMIT 10
@@ -418,9 +426,9 @@ export async function checkoutTransaction(
 
 		// Cashbook entry
 		await tx.execute(`
-			INSERT INTO cashbook (id, amount, type, description, user_id, created_at)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, [generateId(), totalAmount, 'in', `Sale ${orderId.slice(0, 8).toUpperCase()}`, userId, now]);
+			INSERT INTO cashbook (id, amount, type, category, description, user_id, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, [generateId(), totalAmount, 'in', 'sale', `Sale ${orderId.slice(0, 8).toUpperCase()}`, userId, now]);
 	});
 
 	return {
