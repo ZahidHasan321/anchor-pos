@@ -153,7 +153,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				)),
 
 				db.select({
-					totalCost: sql<number>`COALESCE(SUM(COALESCE(${productVariants.costPrice}, ${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`,
+					totalCost: sql<number>`COALESCE(SUM(COALESCE(NULLIF(${productVariants.costPrice}, 0), ${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`,
 					totalRetail: sql<number>`COALESCE(SUM(${productVariants.price} * ${productVariants.stockQuantity}), 0)`
 				}).from(productVariants).innerJoin(products, eq(productVariants.productId, products.id)),
 

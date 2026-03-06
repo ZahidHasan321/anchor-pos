@@ -30,7 +30,7 @@ export const productsStore = watchQuery(`
         pv.barcode,
         p.category,
         pv.price,
-        COALESCE(pv.cost_price, p.cost_price, 0) as costPrice,
+        COALESCE(NULLIF(pv.cost_price, 0), p.cost_price, 0) as costPrice,
         pv.discount,
         pv.stock_quantity as stockQuantity
     FROM product_variants pv

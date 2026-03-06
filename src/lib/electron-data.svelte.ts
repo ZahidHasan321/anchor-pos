@@ -260,7 +260,7 @@ export function queryInventoryStats() {
 			COUNT(pv.id) as totalVariants,
 			SUM(CASE WHEN pv.stock_quantity > 0 AND pv.stock_quantity <= 5 THEN 1 ELSE 0 END) as lowStockVariants,
 			SUM(CASE WHEN pv.stock_quantity = 0 THEN 1 ELSE 0 END) as outOfStockVariants,
-			COALESCE(SUM(COALESCE(pv.cost_price, p.cost_price, 0) * pv.stock_quantity), 0) as totalCostValue,
+			COALESCE(SUM(COALESCE(NULLIF(pv.cost_price, 0), p.cost_price, 0) * pv.stock_quantity), 0) as totalCostValue,
 			COALESCE(SUM(pv.price * pv.stock_quantity), 0) as totalRetailValue
 		FROM product_variants pv
 		INNER JOIN products p ON pv.product_id = p.id
@@ -304,7 +304,7 @@ export function queryDashboardStats() {
 			[todayIso]
 		),
 		inventoryValue: createWatchQuery(
-			`SELECT coalesce(sum(coalesce(pv.cost_price, p.cost_price, 0) * pv.stock_quantity), 0) as total FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id`
+			`SELECT coalesce(sum(coalesce(NULLIF(pv.cost_price, 0), p.cost_price, 0) * pv.stock_quantity), 0) as total FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id`
 		),
 		todayCogs: createWatchQuery(
 			`SELECT coalesce(sum(oi.cost_at_sale * oi.quantity), 0) as total 
@@ -379,7 +379,7 @@ export async function checkoutTransaction(
 		const variantIds = cart.items.map(i => i.variantId);
 		const placeholders = variantIds.map(() => '?').join(',');
 		const dbVariants = await tx.getAll(`
-			SELECT pv.id, pv.price, COALESCE(pv.cost_price, p.cost_price, 0) as costPrice, p.name as productName, pv.size, pv.color, pv.stock_quantity as stockQuantity
+			SELECT pv.id, pv.price, COALESCE(NULLIF(pv.cost_price, 0), p.cost_price, 0) as costPrice, p.name as productName, pv.size, pv.color, pv.stock_quantity as stockQuantity
 			FROM product_variants pv
 			INNER JOIN products p ON pv.product_id = p.id
 			WHERE pv.id IN (${placeholders})

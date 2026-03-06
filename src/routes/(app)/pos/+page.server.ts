@@ -150,7 +150,7 @@ export const actions: Actions = {
 					.select({
 						id: productVariants.id,
 						price: productVariants.price,
-						costPrice: sql<number>`COALESCE(${productVariants.costPrice}, ${products.costPrice}, 0)`,
+						costPrice: sql<number>`COALESCE(NULLIF(${productVariants.costPrice}, 0), ${products.costPrice}, 0)`,
 						productName: products.name,
 						size: productVariants.size,
 						color: productVariants.color,
