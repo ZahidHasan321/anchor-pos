@@ -3,7 +3,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { DateInput } from '$lib/components/ui/date-input';
+	import DatePicker from '$lib/components/ui/DatePicker.svelte';
 	import { Label } from '$lib/components/ui/label';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -242,13 +242,13 @@
 		<div class="flex flex-wrap items-end gap-2">
 			<div class="space-y-1">
 				<Label for="from" class="text-[11px] font-semibold text-muted-foreground">From</Label>
-				<DateInput id="from" bind:value={customFrom} class="h-8 w-[150px] text-xs" />
+				<DatePicker id="from" bind:value={customFrom} class="w-[150px]" />
 			</div>
 			<div class="space-y-1">
 				<Label for="to" class="text-[11px] font-semibold text-muted-foreground">To</Label>
-				<DateInput id="to" bind:value={customTo} class="h-8 w-[150px] text-xs" />
+				<DatePicker id="to" bind:value={customTo} class="w-[150px]" />
 			</div>
-			<Button size="sm" onclick={applyCustomRange} class="h-8 cursor-pointer text-xs">Apply</Button>
+			<Button size="sm" onclick={applyCustomRange} class="h-11 cursor-pointer text-xs">Apply</Button>
 		</div>
 	</div>
 

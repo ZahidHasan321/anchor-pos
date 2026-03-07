@@ -8,7 +8,8 @@ const config: CapacitorConfig = {
 		// The Capacitor app loads your web app from this URL and provides native Bluetooth access
 		url: 'https://anchorshop.cloud',
 		cleartext: true,
-		androidScheme: 'https'
+		androidScheme: 'https',
+		errorPath: '/offline.html'
 	},
 	plugins: {
 		CapacitorThermalPrinter: {}

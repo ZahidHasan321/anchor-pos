@@ -1,5 +1,5 @@
 import { getCurrencySymbol } from './format';
-import { isConnected as isBtConnected, printBluetoothReceipt } from './bluetooth-printer';
+import { isConnected as isBtConnected, printBluetoothReceipt, isCapacitorNative, connectPrinter } from './bluetooth-printer';
 
 export type ReceiptData = {
 	storeSettings: {
@@ -276,14 +276,33 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 	// --- Bluetooth Thermal Printing (Mobile) ---
 	if (typeof window !== 'undefined' && !preview) {
 		const useBt = localStorage.getItem('pos-use-bt-printer') === 'true';
-		if (useBt && isBtConnected()) {
-			try {
-				const result = await printBluetoothReceipt(data);
-				return result;
-			} catch (e) {
-				console.error('Bluetooth print failed, falling back:', e);
-				// fall through to web printing
+		if (useBt) {
+			// On Capacitor native, auto-reconnect to last known printer if not connected
+			if (!isBtConnected() && isCapacitorNative()) {
+				const lastAddr = localStorage.getItem('pos-bt-printer-address');
+				if (lastAddr) {
+					try {
+						await connectPrinter();
+					} catch (e) {
+						console.error('Auto-reconnect to BT printer failed:', e);
+					}
+				}
 			}
+
+			if (isBtConnected()) {
+				try {
+					const result = await printBluetoothReceipt(data);
+					return result;
+				} catch (e) {
+					console.error('Bluetooth print failed, falling back:', e);
+					// fall through to web printing
+				}
+			} else if (isCapacitorNative()) {
+				// No web print fallback on Capacitor — it won't show anything
+				return { success: false, error: 'Bluetooth printer not connected. Set up in Settings > Preferences.' };
+			}
+		} else if (isCapacitorNative()) {
+			return { success: false, error: 'Enable Bluetooth printing in Settings > Preferences.' };
 		}
 	}
 

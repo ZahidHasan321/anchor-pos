@@ -252,7 +252,7 @@
 			const s = await data.streamed;
 			storeSettings = (s as any).storeSettings;
 		}
-		printReceipt({
+		const result = await printReceipt({
 			storeSettings,
 			orderId: '#' + completedOrder.orderNumber,
 			orderUuid: completedOrder.orderId,
@@ -269,6 +269,9 @@
 			changeGiven: completedOrder.changeGiven,
 			footerNote: 'Printed on ' + formatDateTime(new Date())
 		}, preview);
+		if (result && !result.success && result.error) {
+			toast.error(result.error);
+		}
 	}
 </script>
 

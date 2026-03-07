@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { DateInput } from '$lib/components/ui/date-input';
+	import DatePicker from '$lib/components/ui/DatePicker.svelte';
 	import { Autocomplete } from '$lib/components/ui/autocomplete';
 	import { Label } from '$lib/components/ui/label';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -237,9 +237,9 @@
 						<ChevronLeft class="h-4 w-4" />
 					</Button>
 					<div class="flex-1 sm:flex-none">
-						<DateInput
+						<DatePicker
 							id="date-filter"
-							class="h-9 w-full sm:w-52"
+							class="w-full sm:w-52"
 							bind:value={selectedDate}
 							onchange={handleDateChange}
 						/>

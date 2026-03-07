@@ -87,15 +87,15 @@
 	<title>Dashboard — Clothing POS</title>
 </svelte:head>
 
-<div class="space-y-6 p-6">
+<div class="space-y-6 p-4 sm:p-6">
 	<div
-		class="flex animate-in items-center justify-between duration-500 fade-in slide-in-from-top-2"
+		class="flex animate-in flex-col gap-4 duration-500 fade-in slide-in-from-top-2 sm:flex-row sm:items-center sm:justify-between"
 	>
 		<div>
-			<h1 class="text-3xl font-bold tracking-tight">Dashboard</h1>
-			<p class="text-muted-foreground">Overview of your store's performance.</p>
+			<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Dashboard</h1>
+			<p class="text-sm text-muted-foreground sm:text-base">Overview of your store's performance.</p>
 		</div>
-		<Button variant="outline" href="/reports" class="cursor-pointer">
+		<Button variant="outline" href="/reports" class="w-full cursor-pointer sm:w-auto">
 			<BarChart3 class="mr-2 h-4 w-4" /> Full Reports
 		</Button>
 	</div>
@@ -105,7 +105,7 @@
 		{#if isNative}
 			{#if nativeStats === null}
 				{#each Array(4) as _}
-					<div class="min-w-[150px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
+					<div class="min-w-[140px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
 						<Skeleton class="h-8 w-full" />
 						<Skeleton class="h-3 w-16" />
@@ -113,7 +113,7 @@
 				{/each}
 			{:else}
 				<div
-					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+					class="min-w-[140px] flex-1 animate-in rounded-lg border bg-card p-3 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
@@ -132,7 +132,7 @@
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-75 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+					class="min-w-[140px] flex-1 animate-in rounded-lg border bg-card p-3 delay-75 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
@@ -151,7 +151,7 @@
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-150 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+					class="min-w-[140px] flex-1 animate-in rounded-lg border bg-card p-3 delay-150 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
@@ -170,7 +170,7 @@
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-175 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+					class="min-w-[140px] flex-1 animate-in rounded-lg border bg-card p-3 delay-175 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
@@ -193,7 +193,7 @@
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+					class="min-w-[140px] flex-1 animate-in rounded-lg border bg-card p-3 delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
@@ -212,7 +212,7 @@
 		{:else}
 			{#await data.stats}
 				{#each Array(4) as _}
-					<div class="min-w-[150px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
+					<div class="min-w-[140px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
 						<Skeleton class="h-8 w-full" />
 						<Skeleton class="h-3 w-16" />
@@ -220,7 +220,7 @@
 				{/each}
 			{:then stats}
 				<div
-					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+					class="min-w-[140px] flex-1 animate-in rounded-lg border bg-card p-3 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
@@ -239,7 +239,7 @@
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-75 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+					class="min-w-[140px] flex-1 animate-in rounded-lg border bg-card p-3 delay-75 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
@@ -258,7 +258,7 @@
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-150 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+					class="min-w-[140px] flex-1 animate-in rounded-lg border bg-card p-3 delay-150 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
@@ -277,7 +277,7 @@
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-175 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+					class="min-w-[140px] flex-1 animate-in rounded-lg border bg-card p-3 delay-175 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
@@ -300,7 +300,7 @@
 				</div>
 
 				<div
-					class="min-w-[150px] flex-1 animate-in rounded-lg border bg-card p-3 delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
+					class="min-w-[140px] flex-1 animate-in rounded-lg border bg-card p-3 delay-200 duration-300 fill-mode-both fade-in slide-in-from-bottom-2 sm:p-4"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
@@ -319,11 +319,11 @@
 		{/if}
 
 		<div
-			class="min-w-[150px] flex-1 animate-in delay-300 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
+			class="min-w-[140px] flex-1 animate-in delay-300 duration-300 fill-mode-both fade-in slide-in-from-bottom-2"
 		>
 			{#if isNative}
 				{#if nativeStockAlerts === null}
-					<div class="min-w-[150px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
+					<div class="min-w-[140px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
 						<Skeleton class="h-8 w-full" />
 						<Skeleton class="h-3 w-16" />
@@ -351,7 +351,7 @@
 				{/if}
 			{:else}
 				{#await data.stockAlerts}
-					<div class="min-w-[150px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
+					<div class="min-w-[140px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
 						<Skeleton class="h-8 w-full" />
 						<Skeleton class="h-3 w-16" />
@@ -399,48 +399,52 @@
 								{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
 							</div>
 						{:else}
-							<Table.Root>
-								<Table.Header>
-									<Table.Row>
-										<Table.Head>Product</Table.Head>
-										<Table.Head class="text-right">Qty</Table.Head>
-										<Table.Head class="text-right">Revenue</Table.Head>
-									</Table.Row>
-								</Table.Header>
-								<Table.Body>
-									{#each nativeTopProducts as product, i}
+							<div class="-mx-6 overflow-x-auto px-6">
+								<Table.Root class="min-w-[400px]">
+									<Table.Header>
 										<Table.Row>
-											<Table.Cell class="py-2">
-												<div class="flex items-center gap-2">
-													<span
-														class="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold {i <
-														3
-															? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
-															: 'bg-muted text-muted-foreground'}"
-													>
-														{i + 1}
-													</span>
-													<div>
-														<div class="font-medium">{product.name}</div>
-														<div class="text-xs text-muted-foreground">{product.variantLabel}</div>
-													</div>
-												</div>
-											</Table.Cell>
-											<Table.Cell class="py-2 text-right font-mono">{product.totalQty}</Table.Cell>
-											<Table.Cell class="py-2 text-right font-bold"
-												>{formatCurrency(product.totalRevenue)}</Table.Cell
-											>
+											<Table.Head>Product</Table.Head>
+											<Table.Head class="text-right">Qty</Table.Head>
+											<Table.Head class="text-right">Revenue</Table.Head>
 										</Table.Row>
-									{/each}
-									{#if nativeTopProducts.length === 0}
-										<Table.Row
-											><Table.Cell colspan={3} class="py-8 text-center text-muted-foreground italic"
-												>No sales this month yet.</Table.Cell
-											></Table.Row
-										>
-									{/if}
-								</Table.Body>
-							</Table.Root>
+									</Table.Header>
+									<Table.Body>
+										{#each nativeTopProducts as product, i}
+											<Table.Row>
+												<Table.Cell class="py-2">
+													<div class="flex items-center gap-2">
+														<span
+															class="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold {i <
+															3
+																? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
+																: 'bg-muted text-muted-foreground'}"
+														>
+															{i + 1}
+														</span>
+														<div>
+															<div class="font-medium">{product.name}</div>
+															<div class="text-xs text-muted-foreground">{product.variantLabel}</div>
+														</div>
+													</div>
+												</Table.Cell>
+												<Table.Cell class="py-2 text-right font-mono">{product.totalQty}</Table.Cell>
+												<Table.Cell class="py-2 text-right font-bold"
+													>{formatCurrency(product.totalRevenue)}</Table.Cell
+												>
+											</Table.Row>
+										{/each}
+										{#if nativeTopProducts.length === 0}
+											<Table.Row
+												><Table.Cell
+													colspan={3}
+													class="py-8 text-center text-muted-foreground italic"
+													>No sales this month yet.</Table.Cell
+												></Table.Row
+											>
+										{/if}
+									</Table.Body>
+								</Table.Root>
+							</div>
 						{/if}
 					{:else}
 						{#await data.topProducts}
@@ -448,48 +452,52 @@
 								{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
 							</div>
 						{:then products}
-							<Table.Root>
-								<Table.Header>
-									<Table.Row>
-										<Table.Head>Product</Table.Head>
-										<Table.Head class="text-right">Qty</Table.Head>
-										<Table.Head class="text-right">Revenue</Table.Head>
-									</Table.Row>
-								</Table.Header>
-								<Table.Body>
-									{#each products as product, i}
+							<div class="-mx-6 overflow-x-auto px-6">
+								<Table.Root class="min-w-[400px]">
+									<Table.Header>
 										<Table.Row>
-											<Table.Cell class="py-2">
-												<div class="flex items-center gap-2">
-													<span
-														class="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold {i <
-														3
-															? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
-															: 'bg-muted text-muted-foreground'}"
-													>
-														{i + 1}
-													</span>
-													<div>
-														<div class="font-medium">{product.name}</div>
-														<div class="text-xs text-muted-foreground">{product.variantLabel}</div>
-													</div>
-												</div>
-											</Table.Cell>
-											<Table.Cell class="py-2 text-right font-mono">{product.totalQty}</Table.Cell>
-											<Table.Cell class="py-2 text-right font-bold"
-												>{formatCurrency(product.totalRevenue)}</Table.Cell
-											>
+											<Table.Head>Product</Table.Head>
+											<Table.Head class="text-right">Qty</Table.Head>
+											<Table.Head class="text-right">Revenue</Table.Head>
 										</Table.Row>
-									{/each}
-									{#if products.length === 0}
-										<Table.Row
-											><Table.Cell colspan={3} class="py-8 text-center text-muted-foreground italic"
-												>No sales this month yet.</Table.Cell
-											></Table.Row
-										>
-									{/if}
-								</Table.Body>
-							</Table.Root>
+									</Table.Header>
+									<Table.Body>
+										{#each products as product, i}
+											<Table.Row>
+												<Table.Cell class="py-2">
+													<div class="flex items-center gap-2">
+														<span
+															class="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold {i <
+															3
+																? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
+																: 'bg-muted text-muted-foreground'}"
+														>
+															{i + 1}
+														</span>
+														<div>
+															<div class="font-medium">{product.name}</div>
+															<div class="text-xs text-muted-foreground">{product.variantLabel}</div>
+														</div>
+													</div>
+												</Table.Cell>
+												<Table.Cell class="py-2 text-right font-mono">{product.totalQty}</Table.Cell>
+												<Table.Cell class="py-2 text-right font-bold"
+													>{formatCurrency(product.totalRevenue)}</Table.Cell
+												>
+											</Table.Row>
+										{/each}
+										{#if products.length === 0}
+											<Table.Row
+												><Table.Cell
+													colspan={3}
+													class="py-8 text-center text-muted-foreground italic"
+													>No sales this month yet.</Table.Cell
+												></Table.Row
+											>
+										{/if}
+									</Table.Body>
+								</Table.Root>
+							</div>
 						{/await}
 					{/if}
 				</Card.Content>
@@ -511,28 +519,30 @@
 								{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
 							</div>
 						{:else}
-							<Table.Root>
-								<Table.Body>
-									{#each nativeStockAlerts.lowStockItems as item}
-										<Table.Row>
-											<Table.Cell class="py-2">
-												<div class="font-medium">{item.name}</div>
-												<div class="text-xs text-muted-foreground">{item.size}</div>
-											</Table.Cell>
-											<Table.Cell class="py-2 text-right"
-												><Badge variant="destructive">{item.stock}</Badge></Table.Cell
+							<div class="-mx-6 overflow-x-auto px-6">
+								<Table.Root class="min-w-[400px]">
+									<Table.Body>
+										{#each nativeStockAlerts.lowStockItems as item}
+											<Table.Row>
+												<Table.Cell class="py-2">
+													<div class="font-medium">{item.name}</div>
+													<div class="text-xs text-muted-foreground">{item.size}</div>
+												</Table.Cell>
+												<Table.Cell class="py-2 text-right"
+													><Badge variant="destructive">{item.stock}</Badge></Table.Cell
+												>
+											</Table.Row>
+										{/each}
+										{#if nativeStockAlerts.lowStockItems.length === 0}
+											<Table.Row
+												><Table.Cell class="py-8 text-center text-muted-foreground italic"
+													>No low stock items.</Table.Cell
+												></Table.Row
 											>
-										</Table.Row>
-									{/each}
-									{#if nativeStockAlerts.lowStockItems.length === 0}
-										<Table.Row
-											><Table.Cell class="py-8 text-center text-muted-foreground italic"
-												>No low stock items.</Table.Cell
-											></Table.Row
-										>
-									{/if}
-								</Table.Body>
-							</Table.Root>
+										{/if}
+									</Table.Body>
+								</Table.Root>
+							</div>
 						{/if}
 					{:else}
 						{#await data.stockAlerts}
@@ -540,28 +550,30 @@
 								{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
 							</div>
 						{:then alerts}
-							<Table.Root>
-								<Table.Body>
-									{#each alerts.lowStockItems as item}
-										<Table.Row>
-											<Table.Cell class="py-2">
-												<div class="font-medium">{item.name}</div>
-												<div class="text-xs text-muted-foreground">{item.size}</div>
-											</Table.Cell>
-											<Table.Cell class="py-2 text-right"
-												><Badge variant="destructive">{item.stock}</Badge></Table.Cell
+							<div class="-mx-6 overflow-x-auto px-6">
+								<Table.Root class="min-w-[400px]">
+									<Table.Body>
+										{#each alerts.lowStockItems as item}
+											<Table.Row>
+												<Table.Cell class="py-2">
+													<div class="font-medium">{item.name}</div>
+													<div class="text-xs text-muted-foreground">{item.size}</div>
+												</Table.Cell>
+												<Table.Cell class="py-2 text-right"
+													><Badge variant="destructive">{item.stock}</Badge></Table.Cell
+												>
+											</Table.Row>
+										{/each}
+										{#if alerts.lowStockItems.length === 0}
+											<Table.Row
+												><Table.Cell class="py-8 text-center text-muted-foreground italic"
+													>No low stock items.</Table.Cell
+												></Table.Row
 											>
-										</Table.Row>
-									{/each}
-									{#if alerts.lowStockItems.length === 0}
-										<Table.Row
-											><Table.Cell class="py-8 text-center text-muted-foreground italic"
-												>No low stock items.</Table.Cell
-											></Table.Row
-										>
-									{/if}
-								</Table.Body>
-							</Table.Root>
+										{/if}
+									</Table.Body>
+								</Table.Root>
+							</div>
 						{/await}
 					{/if}
 				</Card.Content>
@@ -584,43 +596,47 @@
 						{#each Array(5) as _}<Skeleton class="h-12 w-full" />{/each}
 					</div>
 				{:else}
-					<Table.Root>
-						<Table.Header>
-							<Table.Row>
-								<Table.Head>Order ID</Table.Head>
-								<Table.Head>Date</Table.Head>
-								<Table.Head>Amount</Table.Head>
-								<Table.Head>Payment</Table.Head>
-								<Table.Head>Status</Table.Head>
-							</Table.Row>
-						</Table.Header>
-						<Table.Body>
-							{#each nativeRecentOrders as order}
+					<div class="-mx-6 overflow-x-auto px-6">
+						<Table.Root class="min-w-[600px]">
+							<Table.Header>
 								<Table.Row>
-									<Table.Cell class="font-mono text-xs">
-										<a href="/orders/{order.id}" class="hover:underline"
-											>#{order.id.substring(0, 8).toUpperCase()}</a
-										>
-									</Table.Cell>
-									<Table.Cell>{formatDateTime(order.created_at)}</Table.Cell>
-									<Table.Cell class="font-bold">{formatCurrency(order.total_amount)}</Table.Cell>
-									<Table.Cell class="capitalize">{order.payment_method}</Table.Cell>
-									<Table.Cell
-										><Badge variant={order.status === 'completed' ? 'secondary' : 'destructive'}
-											>{order.status}</Badge
-										></Table.Cell
-									>
+									<Table.Head>Order ID</Table.Head>
+									<Table.Head>Date</Table.Head>
+									<Table.Head>Amount</Table.Head>
+									<Table.Head>Payment</Table.Head>
+									<Table.Head>Status</Table.Head>
 								</Table.Row>
-							{/each}
-							{#if nativeRecentOrders.length === 0}
-								<Table.Row
-									><Table.Cell colspan={5} class="h-24 text-center text-muted-foreground italic"
-										>No orders found.</Table.Cell
-									></Table.Row
-								>
-							{/if}
-						</Table.Body>
-					</Table.Root>
+							</Table.Header>
+							<Table.Body>
+								{#each nativeRecentOrders as order}
+									<Table.Row>
+										<Table.Cell class="font-mono text-xs">
+											<a href="/orders/{order.id}" class="hover:underline"
+												>#{order.id.substring(0, 8).toUpperCase()}</a
+											>
+										</Table.Cell>
+										<Table.Cell class="whitespace-nowrap"
+											>{formatDateTime(order.created_at)}</Table.Cell
+										>
+										<Table.Cell class="font-bold">{formatCurrency(order.total_amount)}</Table.Cell>
+										<Table.Cell class="capitalize">{order.payment_method}</Table.Cell>
+										<Table.Cell
+											><Badge variant={order.status === 'completed' ? 'secondary' : 'destructive'}
+												>{order.status}</Badge
+											></Table.Cell
+										>
+									</Table.Row>
+								{/each}
+								{#if nativeRecentOrders.length === 0}
+									<Table.Row
+										><Table.Cell colspan={5} class="h-24 text-center text-muted-foreground italic"
+											>No orders found.</Table.Cell
+										></Table.Row
+									>
+								{/if}
+							</Table.Body>
+						</Table.Root>
+					</div>
 				{/if}
 			{:else}
 				{#await data.recentOrders}
@@ -628,43 +644,47 @@
 						{#each Array(5) as _}<Skeleton class="h-12 w-full" />{/each}
 					</div>
 				{:then orders}
-					<Table.Root>
-						<Table.Header>
-							<Table.Row>
-								<Table.Head>Order ID</Table.Head>
-								<Table.Head>Date</Table.Head>
-								<Table.Head>Amount</Table.Head>
-								<Table.Head>Payment</Table.Head>
-								<Table.Head>Status</Table.Head>
-							</Table.Row>
-						</Table.Header>
-						<Table.Body>
-							{#each orders as order}
+					<div class="-mx-6 overflow-x-auto px-6">
+						<Table.Root class="min-w-[600px]">
+							<Table.Header>
 								<Table.Row>
-									<Table.Cell class="font-mono text-xs">
-										<a href="/orders/{order.id}" class="hover:underline"
-											>#{order.id.substring(0, 8).toUpperCase()}</a
-										>
-									</Table.Cell>
-									<Table.Cell>{formatDateTime(order.createdAt)}</Table.Cell>
-									<Table.Cell class="font-bold">{formatCurrency(order.totalAmount)}</Table.Cell>
-									<Table.Cell class="capitalize">{order.paymentMethod}</Table.Cell>
-									<Table.Cell
-										><Badge variant={order.status === 'completed' ? 'secondary' : 'destructive'}
-											>{order.status}</Badge
-										></Table.Cell
-									>
+									<Table.Head>Order ID</Table.Head>
+									<Table.Head>Date</Table.Head>
+									<Table.Head>Amount</Table.Head>
+									<Table.Head>Payment</Table.Head>
+									<Table.Head>Status</Table.Head>
 								</Table.Row>
-							{/each}
-							{#if orders.length === 0}
-								<Table.Row
-									><Table.Cell colspan={5} class="h-24 text-center text-muted-foreground italic"
-										>No orders found.</Table.Cell
-									></Table.Row
-								>
-							{/if}
-						</Table.Body>
-					</Table.Root>
+							</Table.Header>
+							<Table.Body>
+								{#each orders as order}
+									<Table.Row>
+										<Table.Cell class="font-mono text-xs">
+											<a href="/orders/{order.id}" class="hover:underline"
+												>#{order.id.substring(0, 8).toUpperCase()}</a
+											>
+										</Table.Cell>
+										<Table.Cell class="whitespace-nowrap"
+											>{formatDateTime(order.createdAt)}</Table.Cell
+										>
+										<Table.Cell class="font-bold">{formatCurrency(order.totalAmount)}</Table.Cell>
+										<Table.Cell class="capitalize">{order.paymentMethod}</Table.Cell>
+										<Table.Cell
+											><Badge variant={order.status === 'completed' ? 'secondary' : 'destructive'}
+												>{order.status}</Badge
+											></Table.Cell
+										>
+									</Table.Row>
+								{/each}
+								{#if orders.length === 0}
+									<Table.Row
+										><Table.Cell colspan={5} class="h-24 text-center text-muted-foreground italic"
+											>No orders found.</Table.Cell
+										></Table.Row
+									>
+								{/if}
+							</Table.Body>
+						</Table.Root>
+					</div>
 				{/await}
 			{/if}
 		</Card.Content>

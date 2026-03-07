@@ -5,7 +5,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import * as Card from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
-	import { DateInput } from '$lib/components/ui/date-input';
+	import DatePicker from '$lib/components/ui/DatePicker.svelte';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
 	import { Separator } from '$lib/components/ui/separator';
@@ -247,17 +247,17 @@
 							>
 						</div>
 					</div>
-					<div class="flex items-center gap-2">
-						<DateInput
+					<div class="flex max-w-sm items-center gap-2">
+						<DatePicker
 							bind:value={dateFrom}
 							onchange={applyFilters}
-							class="h-9 flex-1 text-xs"
+							class="flex-1"
 						/>
 						<span class="text-[10px] font-bold text-muted-foreground/50 uppercase">to</span>
-						<DateInput
+						<DatePicker
 							bind:value={dateTo}
 							onchange={applyFilters}
-							class="h-9 flex-1 text-xs"
+							class="flex-1"
 						/>
 					</div>
 				</div>

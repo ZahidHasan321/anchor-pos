@@ -74,11 +74,11 @@
 		}
 	});
 
-	function handlePrintReceipt() {
+	async function handlePrintReceipt() {
 		const o = order;
 		const originalTotal = items.reduce((acc: number, item: any) => acc + (item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100)), 0);
-		
-		printReceipt({
+
+		const result = await printReceipt({
 			storeSettings: storeSettings,
 			orderId: '#' + (o.orderNumber ?? o.id.slice(0, 8).toUpperCase()),
 			orderUuid: o.id,
@@ -99,6 +99,9 @@
 			footerNote: 'Reprinted on ' + new Date().toLocaleString(),
 			isReprint: true
 		});
+		if (result && !result.success && result.error) {
+			toast.error(result.error);
+		}
 	}
 </script>
 
