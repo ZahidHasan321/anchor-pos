@@ -22,14 +22,22 @@
 	import { untrack } from 'svelte';
 	import * as Select from '$lib/components/ui/select';
 	import {
-		isWebBluetoothSupported,
+		isBluetoothSupported,
+		isCapacitorNative,
 		connectPrinter,
 		disconnectPrinter,
 		isConnected as isBtConnected,
 		getConnectedPrinterName,
-		testBluetoothPrint
+		testBluetoothPrint,
+		scanDevices,
+		stopScan,
+		getDiscoveredDevices,
+		onDevicesDiscovered,
+		onScanFinished,
+		connectToDevice,
+		type DiscoveredDevice
 	} from '$lib/bluetooth-printer';
-	import { Bluetooth } from '@lucide/svelte';
+	import { Bluetooth, Search } from '@lucide/svelte';
 
 	let { data, form } = $props();
 	let loading = $state(false);
@@ -51,31 +59,49 @@
 	let thermalConnectionType = $state('usb_share');
 	let testingThermal = $state(false);
 
-	// --- Bluetooth Printer Settings (Mobile/Web) ---
+	// --- Bluetooth Printer Settings (Mobile/Web/Capacitor) ---
 	let btSupported = $state(false);
+	let isNativeBt = $state(false);
 	let useBtPrinter = $state(false);
 	let btPrinterName = $state('');
 	let btConnected = $state(false);
 	let btConnecting = $state(false);
 	let btTesting = $state(false);
 	let btPaperWidth = $state('58');
+	let btScanning = $state(false);
+	let btDevices: DiscoveredDevice[] = $state([]);
 
 	$effect(() => {
-		// Bluetooth printer state (mobile/web)
-		btSupported = isWebBluetoothSupported();
+		btSupported = isBluetoothSupported();
+		isNativeBt = isCapacitorNative();
 		useBtPrinter = localStorage.getItem('pos-use-bt-printer') === 'true';
 		btPrinterName = localStorage.getItem('pos-bt-printer-name') || '';
 		btPaperWidth = localStorage.getItem('pos-bt-printer-width') || '58';
 		btConnected = isBtConnected();
 
-		// Poll connection status every 2s when BT is enabled
+		// Capacitor native: subscribe to device discovery events
+		let unsubDevices: (() => void) | undefined;
+		let unsubFinish: (() => void) | undefined;
+		if (isNativeBt) {
+			unsubDevices = onDevicesDiscovered((devices) => {
+				btDevices = devices;
+			});
+			unsubFinish = onScanFinished(() => {
+				btScanning = false;
+			});
+		}
+
 		const interval = setInterval(() => {
 			btConnected = isBtConnected();
 			if (btConnected) {
 				btPrinterName = getConnectedPrinterName();
 			}
 		}, 2000);
-		return () => clearInterval(interval);
+		return () => {
+			clearInterval(interval);
+			unsubDevices?.();
+			unsubFinish?.();
+		};
 	});
 
 	$effect(() => {
@@ -215,6 +241,42 @@
 		localStorage.setItem('pos-use-bt-printer', useBtPrinter.toString());
 		localStorage.setItem('pos-bt-printer-width', btPaperWidth);
 		toast.success('Bluetooth printer settings saved');
+	}
+
+	async function handleBtScan() {
+		btScanning = true;
+		btDevices = [];
+		try {
+			await scanDevices();
+			// discoveryFinish event will set btScanning = false
+			// Timeout fallback in case event doesn't fire
+			setTimeout(() => {
+				btScanning = false;
+				btDevices = getDiscoveredDevices();
+			}, 15000);
+		} catch (e: any) {
+			toast.error(`Scan error: ${e.message}`);
+			btScanning = false;
+		}
+	}
+
+	async function handleBtConnectDevice(address: string) {
+		btConnecting = true;
+		try {
+			await stopScan().catch(() => {});
+			btScanning = false;
+			const result = await connectToDevice(address);
+			if (result.success) {
+				btPrinterName = result.name || 'Unknown';
+				btConnected = true;
+				toast.success(`Connected to ${btPrinterName}`);
+			} else {
+				toast.error(result.error || 'Failed to connect');
+			}
+		} catch (e: any) {
+			toast.error(`Bluetooth error: ${e.message}`);
+		}
+		btConnecting = false;
 	}
 
 	async function handleBtConnect() {
@@ -737,7 +799,7 @@
 		</Card.Root>
 	{/if}
 
-	<!-- ==================== BLUETOOTH PRINTER (Mobile/Web) ==================== -->
+	<!-- ==================== BLUETOOTH PRINTER (Mobile/Web/Capacitor) ==================== -->
 	{#if btSupported && !isElectron}
 		<Card.Root>
 			<Card.Header class="px-4 pb-4 sm:px-6">
@@ -778,6 +840,8 @@
 								</div>
 								{#if btConnected}
 									<p class="text-xs text-muted-foreground mt-0.5">Ready to print</p>
+								{:else if isNativeBt}
+									<p class="text-xs text-muted-foreground mt-0.5">Tap "Scan" to discover nearby Bluetooth printers</p>
 								{:else}
 									<p class="text-xs text-muted-foreground mt-0.5">Tap "Connect" and select your printer</p>
 								{/if}
@@ -792,7 +856,25 @@
 									>
 										Disconnect
 									</Button>
+								{:else if isNativeBt}
+									<!-- Capacitor native: Scan for devices -->
+									<Button
+										variant="default"
+										size="sm"
+										class="cursor-pointer text-xs"
+										onclick={handleBtScan}
+										disabled={btScanning || btConnecting}
+									>
+										{#if btScanning}
+											<Loader2 class="mr-1 h-3 w-3 animate-spin" />
+											Scanning...
+										{:else}
+											<Search class="mr-1 h-3 w-3" />
+											Scan
+										{/if}
+									</Button>
 								{:else}
+									<!-- Web Bluetooth: Browser device picker -->
 									<Button
 										variant="default"
 										size="sm"
@@ -802,7 +884,7 @@
 									>
 										{#if btConnecting}
 											<Loader2 class="mr-1 h-3 w-3 animate-spin" />
-											Scanning...
+											Connecting...
 										{:else}
 											<Bluetooth class="mr-1 h-3 w-3" />
 											Connect
@@ -811,6 +893,49 @@
 								{/if}
 							</div>
 						</div>
+
+						<!-- Capacitor Native: Discovered Devices List -->
+						{#if isNativeBt && !btConnected && (btDevices.length > 0 || btScanning)}
+							<div class="space-y-2">
+								<Label>Discovered Devices</Label>
+								<div class="rounded-md border divide-y max-h-48 overflow-y-auto">
+									{#if btDevices.length === 0 && btScanning}
+										<div class="p-3 text-center text-sm text-muted-foreground">
+											<Loader2 class="inline mr-1 h-3 w-3 animate-spin" />
+											Searching for printers...
+										</div>
+									{/if}
+									{#each btDevices as device}
+										<button
+											type="button"
+											class="flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-muted/50 transition-colors cursor-pointer"
+											onclick={() => handleBtConnectDevice(device.address)}
+											disabled={btConnecting}
+										>
+											<div class="min-w-0">
+												<div class="text-sm font-medium truncate">{device.name || 'Unknown Device'}</div>
+												<div class="text-[10px] text-muted-foreground font-mono">{device.address}</div>
+											</div>
+											{#if btConnecting}
+												<Loader2 class="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+											{:else}
+												<Bluetooth class="h-4 w-4 shrink-0 text-muted-foreground" />
+											{/if}
+										</button>
+									{/each}
+								</div>
+								{#if btScanning}
+									<Button
+										variant="ghost"
+										size="sm"
+										class="cursor-pointer text-xs"
+										onclick={async () => { await stopScan().catch(() => {}); btScanning = false; }}
+									>
+										Stop Scanning
+									</Button>
+								{/if}
+							</div>
+						{/if}
 
 						<!-- Paper Width -->
 						<div class="space-y-2">
