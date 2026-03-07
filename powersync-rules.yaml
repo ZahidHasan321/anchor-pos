@@ -31,5 +31,5 @@ bucket_definitions:
       - SELECT id, variant_id, change_amount, reason, user_id,
             created_at::text AS created_at FROM stock_logs
 
-      - SELECT id, amount, type, description, user_id,
+      - SELECT id, amount, type, category, description, user_id,
             created_at::text AS created_at FROM cashbook

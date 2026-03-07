@@ -4,6 +4,20 @@ import { orders, orderItems, productVariants, stockLogs, cashbook, customers } f
 import { eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
+/**
+ * Convert snake_case keys from PowerSync opData to camelCase keys expected by Drizzle ORM.
+ * PowerSync CRUD mutations use actual DB column names (snake_case),
+ * but Drizzle's .values() expects the JS property names (camelCase).
+ */
+function toCamel(obj: Record<string, any>): Record<string, any> {
+    const result: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+        const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+        result[camelKey] = value;
+    }
+    return result;
+}
+
 export const POST: RequestHandler = async ({ request, locals }) => {
     // Allow Electron clients to authenticate via app secret header (for proxied uploads)
     let userId = locals.user?.id;
@@ -59,7 +73,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
             for (const mutation of mutations) {
                 // PowerSync CrudEntry uses { op, table, id, opData }
                 const { table, op, id, opData } = mutation;
-                const data = opData || {};
+                // Convert snake_case keys from PowerSync to camelCase for Drizzle
+                const data = toCamel(opData || {});
 
                 if (table === 'orders') {
                     if (op === 'PUT') {
