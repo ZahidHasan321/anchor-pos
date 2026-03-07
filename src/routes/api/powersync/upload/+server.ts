@@ -74,11 +74,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
     try {
         await db.transaction(async (tx: any) => {
+            console.log(`[PowerSync] Processing ${mutations.length} mutations from user ${userId}`);
             for (const mutation of mutations) {
-                // PowerSync CrudEntry uses { op, table, id, opData }
                 const { table, op, id, opData } = mutation;
-                // Convert snake_case keys from PowerSync to camelCase for Drizzle
                 const data = toCamel(opData || {});
+                
+                console.log(`[PowerSync] -> ${op} on ${table} (${id})`);
 
                 if (table === 'orders') {
                     if (op === 'PUT') {
@@ -144,9 +145,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
             }
         });
 
+        console.log(`[PowerSync] Transaction committed successfully for ${mutations.length} mutations`);
         return json({ success: true });
     } catch (e: any) {
-        console.error('PowerSync upload failed:', e);
+        console.error('[PowerSync] Transaction failed:', e);
         return json({ error: e.message }, { status: 500 });
     }
-};
+}

@@ -78,6 +78,7 @@ export class PowerSyncManager {
         this._connecting = true;
 
         try {
+            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://anchorshop.cloud';
             const powersyncUrl = import.meta.env.VITE_POWERSYNC_URL || import.meta.env.POWERSYNC_URL || 'https://powersync.anchorshop.cloud';
 
             const connector: any = {
@@ -86,7 +87,7 @@ export class PowerSyncManager {
                     const maxAttempts = 3;
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                         try {
-                            const res = await fetch(`/api/powersync/token`, {
+                            const res = await fetch(`${baseUrl}/api/powersync/token`, {
                                 credentials: 'include'
                             });
                             if (!res.ok) {
@@ -124,7 +125,7 @@ export class PowerSyncManager {
                     console.log(`[PowerSync] Uploading ${mutationCount} mutations for tables: ${tables.join(', ')}`);
 
                     try {
-                        const res = await fetch(`/api/powersync/upload`, {
+                        const res = await fetch(`${baseUrl}/api/powersync/upload`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             credentials: 'include',
