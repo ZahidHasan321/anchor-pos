@@ -181,16 +181,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const isLocalOrigin = origin && (origin.startsWith('http://localhost') || origin.startsWith('app://'));
 
 	if (event.request.method === 'OPTIONS' && isLocalOrigin) {
-		return new Response(null, {
-			headers: {
-				'Access-Control-Allow-Origin': origin,
-				'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-				'Access-Control-Allow-Headers': 'Content-Type, x-app-secret',
-				'Access-Control-Allow-Credentials': 'true'
-			}
-		});
+			return new Response(null, {
+					headers: {
+							'Access-Control-Allow-Origin': origin,
+							'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+							'Access-Control-Allow-Headers': 'Content-Type, x-app-secret, x-user-id',
+							'Access-Control-Allow-Credentials': 'true'
+					}
+			});
 	}
-
 	const response = await resolve(event);
 
 	if (isLocalOrigin) {

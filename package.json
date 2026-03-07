@@ -32,7 +32,7 @@
 		"db:bootstrap": "pnpm tsx scripts/bootstrap-admin.ts",
 		"cap:sync": "npx cap sync android",
 		"cap:open": "npx cap open android",
-		"build:android": "cross-env CAPACITOR_BUILD=true pnpm run build && npx cap sync android"
+		"build:android": "rm -rf build android/app/src/main/assets/public && cross-env CAPACITOR_BUILD=true pnpm run build && npx cap sync android && find android/app/src/main/assets/public -name \"*.gz\" -delete"
 	},
 	"build": {
 		"npmRebuild": true,

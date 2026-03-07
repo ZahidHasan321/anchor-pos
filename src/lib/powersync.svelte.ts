@@ -87,8 +87,9 @@ export class PowerSyncManager {
                     const maxAttempts = 3;
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                         try {
+                            const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
                             const res = await fetch(`${baseUrl}/api/powersync/token`, {
-                                credentials: 'include'
+                                credentials: isStandardWeb ? 'include' : 'omit'
                             });
                             if (!res.ok) {
                                 const body = await res.text().catch(() => '');
@@ -120,15 +121,35 @@ export class PowerSyncManager {
                     const transaction = await database.getNextCrudTransaction();
                     if (!transaction) return;
 
+                    const appSecret = import.meta.env.VITE_APP_SECRET || 'auto-pos-secret-handshake-2026';
                     const mutationCount = transaction.crud?.length ?? 0;
                     const tables = [...new Set((transaction.crud || []).map((m: any) => m.table))];
                     console.log(`[PowerSync] Uploading ${mutationCount} mutations for tables: ${tables.join(', ')}`);
 
                     try {
+                        // We need the user ID for the header if we're in Electron
+                        // Try to get it from our singleton state or cookie
+                        let userId = '';
+                        if (browser) {
+                            const sessionCookie = document.cookie.split('; ').find(row => row.startsWith('session='));
+                            if (sessionCookie) {
+                                try {
+                                    const token = sessionCookie.split('=')[1];
+                                    const payload = JSON.parse(atob(token.split('.')[1]));
+                                    userId = payload.sub;
+                                } catch(e) {}
+                            }
+                        }
+
+                        const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
                         const res = await fetch(`${baseUrl}/api/powersync/upload`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'x-app-secret': appSecret,
+                                'x-user-id': userId
+                            },
+                            credentials: isStandardWeb ? 'include' : 'omit',
                             body: JSON.stringify({ mutations: transaction.crud })
                         });
 
