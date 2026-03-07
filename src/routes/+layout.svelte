@@ -22,13 +22,17 @@
 		}
 	});
 
-	// Initialize PowerSync once in Electron mode
-	let powersyncInitialized = false;
+	// Initialize PowerSync in Electron mode
+	let lastConnectedUserId = $state<string | null>(null);
 	$effect(() => {
 		const isElectron = import.meta.env.BUILD_TARGET === 'electron' || (browser && (window as any).electron);
-		if (!browser || !isElectron || powersyncInitialized) return;
-		powersyncInitialized = true;
-		powersync.init().then(() => powersync.connect());
+		if (!browser || !isElectron) return;
+		
+		const currentUserId = data.user?.id;
+		if (currentUserId && currentUserId !== lastConnectedUserId) {
+			lastConnectedUserId = currentUserId;
+			powersync.init().then(() => powersync.connect(currentUserId));
+		}
 	});
 
 	// In Electron mode, load store settings from PowerSync once ready

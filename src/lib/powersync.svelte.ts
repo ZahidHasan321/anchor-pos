@@ -7,6 +7,7 @@ type PowerSyncDatabase = any;
 export class PowerSyncManager {
     db!: PowerSyncDatabase;
     private static instance: PowerSyncManager;
+    private _currentUserId: string | null = null;
     ready = $state(false);
     isConnected = $state(false);
     /** Increments each time a sync completes — use as a dependency in $effect to re-query */
@@ -73,8 +74,9 @@ export class PowerSyncManager {
 
     private _connecting = false;
 
-    async connect() {
+    async connect(providedUserId?: string) {
         if (!browser || this._connecting) return;
+        if (providedUserId) this._currentUserId = providedUserId;
         this._connecting = true;
 
         try {
@@ -127,10 +129,12 @@ export class PowerSyncManager {
                     console.log(`[PowerSync] Uploading ${mutationCount} mutations for tables: ${tables.join(', ')}`);
 
                     try {
-                        // We need the user ID for the header if we're in Electron
-                        // Try to get it from our singleton state or cookie
-                        let userId = '';
-                        if (browser) {
+                        const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
+                        // Use stored ID, then provided ID, then fallback to cookie scraping
+                        let userId = this._currentUserId || providedUserId || '';
+                        
+                        if (!userId && browser) {
+                            // Last resort fallback
                             const sessionCookie = document.cookie.split('; ').find(row => row.startsWith('session='));
                             if (sessionCookie) {
                                 try {
@@ -141,7 +145,12 @@ export class PowerSyncManager {
                             }
                         }
 
-                        const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
+                        if (!userId) {
+                            console.warn('[PowerSync] No user ID found for upload. Request will likely fail 401.');
+                        } else {
+                            console.log(`[PowerSync] Uploading using user ID: ${userId}`);
+                        }
+
                         const res = await fetch(`${baseUrl}/api/powersync/upload`, {
                             method: 'POST',
                             headers: { 
