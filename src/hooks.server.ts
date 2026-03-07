@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { jwtVerify, importJWK } from 'jose';
 import { getLocalPublicKey } from '$lib/server/offline-auth';
+import { cleanupAuditLogs } from '$lib/server/audit';
 
 const IS_ELECTRON = process.env.BUILD_TARGET === 'electron';
 
@@ -49,6 +50,14 @@ async function bootstrapAdmin() {
 				isActive: true
 			});
 		}
+
+		// Perform maintenance tasks on start (infrequent)
+		const retentionDays = parseInt(env.AUDIT_LOG_RETENTION_DAYS || '365');
+		const deletedCount = await cleanupAuditLogs(retentionDays);
+		if (deletedCount > 0) {
+			console.log(`[Maintenance] Cleaned up ${deletedCount} old audit logs.`);
+		}
+
 		isBootstrapped = true;
 	} catch (e) {
 		console.error('[Bootstrap] Failed to check/create admin user:', e);

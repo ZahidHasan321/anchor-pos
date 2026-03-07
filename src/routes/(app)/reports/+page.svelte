@@ -531,7 +531,7 @@
 					{@const totalSales = summaries.salesSummary.total}
 					{#if totalSales > 0}
 						<div class="space-y-4">
-							{#each ['cash', 'card', 'split'] as method}
+							{#each ['cash', 'card', 'mobile'] as method}
 								{@const mData = paymentMap.get(method) as any}
 								<div class="space-y-1.5">
 									<div class="flex items-center justify-between text-xs sm:text-sm">
@@ -541,7 +541,7 @@
 													? 'bg-emerald-500'
 													: method === 'card'
 														? 'bg-blue-500'
-														: 'bg-violet-500'}"
+														: 'bg-rose-500'}"
 											></div>
 											<span class="font-medium capitalize">{method}</span>
 										</div>
@@ -555,12 +555,12 @@
 												? 'bg-emerald-500'
 												: method === 'card'
 													? 'bg-blue-500'
-													: 'bg-violet-500'}"
+													: 'bg-rose-500'}"
 											style="width: {pct(mData?.total ?? 0, totalSales)}%"
 										></div>
 									</div>
 									<p class="text-[10px] text-muted-foreground">
-										{mData?.count ?? 0} orders &middot; {pct(mData?.total ?? 0, totalSales)}%
+										{mData?.count ?? 0} {method === 'cash' ? 'receipts' : 'transactions'} &middot; {pct(mData?.total ?? 0, totalSales)}%
 									</p>
 								</div>
 							{/each}

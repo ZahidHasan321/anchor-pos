@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { db } from './db';
 import { auditLogs } from './db/schema';
-import { desc } from 'drizzle-orm';
+import { desc, lt } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 
 const GENESIS_HASH = '0000000000000000000000000000000000000000000000000000000000000000';
@@ -108,4 +108,24 @@ export async function verifyAuditChain(): Promise<{
 	}
 
 	return { valid: true, total: allLogs.length };
+}
+
+/**
+ * Removes audit logs older than the specified number of days.
+ * Industry standards typically suggest:
+ * - 90 days for basic security
+ * - 1-2 years for business operations
+ * - 5-7 years for strict financial compliance
+ */
+export async function cleanupAuditLogs(daysToKeep = 365): Promise<number> {
+	if (!db) return 0;
+	
+	const cutoff = new Date();
+	cutoff.setDate(cutoff.getDate() - daysToKeep);
+
+	const result = await db.delete(auditLogs)
+		.where(lt(auditLogs.createdAt, cutoff));
+	
+	// Note: result.rowCount depends on the driver, but for postgres.js it's often available
+	return (result as any).count ?? 0;
 }

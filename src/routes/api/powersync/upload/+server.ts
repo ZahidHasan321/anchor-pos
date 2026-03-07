@@ -5,15 +5,19 @@ import { eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
 /**
- * Convert snake_case keys from PowerSync opData to camelCase keys expected by Drizzle ORM.
  * PowerSync CRUD mutations use actual DB column names (snake_case),
  * but Drizzle's .values() expects the JS property names (camelCase).
+ * This helper ensures keys like 'cash_amount' become 'cashAmount'.
  */
 function toCamel(obj: Record<string, any>): Record<string, any> {
     const result: Record<string, any> = {};
     for (const [key, value] of Object.entries(obj)) {
-        const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-        result[camelKey] = value;
+        if (key === 'mobile_trx_id') {
+            result['mobileTrxId'] = value;
+        } else {
+            const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+            result[camelKey] = value;
+        }
     }
     return result;
 }

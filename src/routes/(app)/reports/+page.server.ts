@@ -211,24 +211,41 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 		paymentBreakdown: (async () => {
 			if (!db) return [];
-			// To get accurate totals including split payments, we sum the individual amount columns
+			
+			// To handle both legacy orders (where cashAmount etc are NULL) and new split orders:
+			// 1. For Cash: Sum cashAmount, or if NULL and method is 'cash', use totalAmount
 			const cashData = await db.select({ 
 				method: sql<string>`'cash'`, 
 				count: sql<number>`count(*)`, 
-				total: sql<number>`coalesce(sum(${orders.cashAmount}), 0)` 
-			}).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate), gt(orders.cashAmount, 0)));
+				total: sql<number>`coalesce(sum(coalesce(${orders.cashAmount}, CASE WHEN ${orders.paymentMethod} = 'cash' THEN ${orders.totalAmount} ELSE 0 END)), 0)` 
+			}).from(orders).where(and(
+				eq(orders.status, 'completed'), 
+				gte(orders.createdAt, startDate), 
+				lt(orders.createdAt, endDate),
+				sql`(coalesce(${orders.cashAmount}, 0) > 0 OR ${orders.paymentMethod} = 'cash')`
+			));
 
 			const cardData = await db.select({ 
 				method: sql<string>`'card'`, 
 				count: sql<number>`count(*)`, 
-				total: sql<number>`coalesce(sum(${orders.cardAmount}), 0)` 
-			}).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate), gt(orders.cardAmount, 0)));
+				total: sql<number>`coalesce(sum(coalesce(${orders.cardAmount}, CASE WHEN ${orders.paymentMethod} = 'card' THEN ${orders.totalAmount} ELSE 0 END)), 0)` 
+			}).from(orders).where(and(
+				eq(orders.status, 'completed'), 
+				gte(orders.createdAt, startDate), 
+				lt(orders.createdAt, endDate),
+				sql`(coalesce(${orders.cardAmount}, 0) > 0 OR ${orders.paymentMethod} = 'card')`
+			));
 
 			const mobileData = await db.select({ 
 				method: sql<string>`'mobile'`, 
 				count: sql<number>`count(*)`, 
-				total: sql<number>`coalesce(sum(${orders.mobileAmount}), 0)` 
-			}).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate), gt(orders.mobileAmount, 0)));
+				total: sql<number>`coalesce(sum(coalesce(${orders.mobileAmount}, CASE WHEN ${orders.paymentMethod} = 'mobile' THEN ${orders.totalAmount} ELSE 0 END)), 0)` 
+			}).from(orders).where(and(
+				eq(orders.status, 'completed'), 
+				gte(orders.createdAt, startDate), 
+				lt(orders.createdAt, endDate),
+				sql`(coalesce(${orders.mobileAmount}, 0) > 0 OR ${orders.paymentMethod} = 'mobile')`
+			));
 
 			return [...cashData, ...cardData, ...mobileData];
 		})(),

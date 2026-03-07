@@ -23,6 +23,7 @@ bucket_definitions:
 
       - SELECT id, order_number, customer_id, user_id, total_amount, status,
             payment_method, discount_amount, cash_received, change_given,
+            cash_amount, card_amount, mobile_amount, mobile_method, mobile_trx_id,
             created_at::text AS created_at FROM orders
 
       - SELECT id, order_id, variant_id, quantity, price_at_sale, cost_at_sale, discount,
