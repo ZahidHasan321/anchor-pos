@@ -12,12 +12,24 @@ import type { RequestHandler } from './$types';
 function toCamel(obj: Record<string, any>): Record<string, any> {
     const result: Record<string, any> = {};
     for (const [key, value] of Object.entries(obj)) {
+        let finalKey: string;
         if (key === 'mobile_trx_id') {
-            result['mobileTrxId'] = value;
+            finalKey = 'mobileTrxId';
         } else {
-            const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-            result[camelKey] = value;
+            finalKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
         }
+
+        // Convert ISO strings back to Date objects for Drizzle timestamps
+        // Matches strings like 2026-03-07T12:34:56.789Z
+        if (typeof value === 'string' && value.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+            const d = new Date(value);
+            if (!isNaN(d.getTime())) {
+                result[finalKey] = d;
+                continue;
+            }
+        }
+
+        result[finalKey] = value;
     }
     return result;
 }
