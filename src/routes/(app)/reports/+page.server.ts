@@ -12,7 +12,7 @@ import {
 	productVariants,
 	stockLogs
 } from '$lib/server/db/schema';
-import { eq, sql, gte, lt, and, desc, inArray } from 'drizzle-orm';
+import { eq, sql, gte, lt, and, desc, inArray, gt } from 'drizzle-orm';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
@@ -36,68 +36,77 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const customFrom = url.searchParams.get('from');
 	const customTo = url.searchParams.get('to');
 
-	const now = new Date();
+	// Helper to get date in store timezone
+	const getStoreDate = (d: Date = new Date()) => {
+		const str = d.toLocaleString('en-US', { timeZone: storeTimezone });
+		return new Date(str);
+	};
+
+	const nowInStore = getStoreDate();
 	let startDate: Date;
-	let endDate: Date = new Date(now);
+	let endDate: Date = new Date(nowInStore);
 	endDate.setHours(23, 59, 59, 999);
 
 	switch (period) {
 		case 'today':
-			startDate = new Date(now);
+			startDate = new Date(nowInStore);
 			startDate.setHours(0, 0, 0, 0);
 			break;
 		case 'week':
-			startDate = new Date(now);
-			startDate.setDate(now.getDate() - 7);
+			startDate = new Date(nowInStore);
+			startDate.setDate(nowInStore.getDate() - 7);
 			startDate.setHours(0, 0, 0, 0);
 			break;
 		case 'month':
-			startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+			startDate = new Date(nowInStore.getFullYear(), nowInStore.getMonth(), 1);
+			startDate.setHours(0, 0, 0, 0);
 			break;
 		case 'year':
-			startDate = new Date(now.getFullYear(), 0, 1);
+			startDate = new Date(nowInStore.getFullYear(), 0, 1);
+			startDate.setHours(0, 0, 0, 0);
 			break;
 		case 'custom':
-			startDate = customFrom ? new Date(customFrom) : new Date(now.getFullYear(), now.getMonth(), 1);
-			if (isNaN(startDate.getTime())) startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+			startDate = customFrom ? new Date(`${customFrom}T00:00:00`) : new Date(nowInStore.getFullYear(), nowInStore.getMonth(), 1);
+			if (isNaN(startDate.getTime())) startDate = new Date(nowInStore.getFullYear(), nowInStore.getMonth(), 1);
 			startDate.setHours(0, 0, 0, 0);
-			endDate = customTo ? new Date(customTo) : endDate;
-			if (isNaN(endDate.getTime())) endDate = new Date(now);
-			endDate.setHours(23, 59, 59, 999);
+			
+			if (customTo) {
+				endDate = new Date(`${customTo}T23:59:59`);
+			} else {
+				endDate = new Date(nowInStore);
+				endDate.setHours(23, 59, 59, 999);
+			}
+			if (isNaN(endDate.getTime())) endDate = new Date(nowInStore);
 			break;
 		case 'all':
 		default:
 			const firstOrderResult = db ? await db.select({ date: orders.createdAt }).from(orders).orderBy(orders.createdAt).limit(1) : [];
-			startDate = firstOrderResult[0] ? new Date(firstOrderResult[0].date) : new Date(now.getFullYear(), now.getMonth(), 1);
+			startDate = firstOrderResult[0]?.date ? new Date(firstOrderResult[0].date) : new Date(nowInStore.getFullYear(), nowInStore.getMonth(), 1);
 			startDate.setHours(0, 0, 0, 0);
 			break;
 	}
 
 	let chartGrouping: 'hour' | 'day' | 'month' | 'year';
-	const loopEndDate: Date = new Date(endDate);
+	const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
-	switch (period) {
-		case 'today':
-			chartGrouping = 'hour';
-			break;
-		case 'week':
-		case 'month':
-			chartGrouping = 'day';
-			break;
-		case 'year':
-			chartGrouping = 'month';
-			break;
-		case 'all':
-			chartGrouping = 'year';
-			break;
-		default:
-			const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-			if (daysDiff <= 2) chartGrouping = 'hour';
-			else if (daysDiff <= 180) chartGrouping = 'day';
-			else if (daysDiff <= 1095) chartGrouping = 'month';
-			else chartGrouping = 'year';
-			break;
+	if (period === 'today') {
+		chartGrouping = 'hour';
+	} else if (daysDiff <= 3) {
+		chartGrouping = 'hour';
+	} else if (daysDiff <= 95) {
+		chartGrouping = 'day';
+	} else if (daysDiff <= 730) {
+		chartGrouping = 'month';
+	} else {
+		chartGrouping = 'year';
 	}
+
+	const formatDateToStore = (d: Date) => {
+		const year = d.getFullYear();
+		const month = String(d.getMonth() + 1).padStart(2, '0');
+		const day = String(d.getDate()).padStart(2, '0');
+		return `${year}-${month}-${day}`;
+	};
 
 	const dateExpressionMap = {
 		hour: sql<string>`to_char(${orders.createdAt}, 'YYYY-MM-DD HH24')`,
@@ -110,8 +119,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	return {
 		storeName: settings.store_name ?? 'Store',
 		period,
-		startDate: startDate.toISOString().split('T')[0],
-		endDate: endDate.toISOString().split('T')[0],
+		startDate: formatDateToStore(startDate),
+		endDate: formatDateToStore(endDate),
 		chartGrouping,
 
 		// Summaries (Instantly visible cards)
@@ -202,7 +211,26 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 		paymentBreakdown: (async () => {
 			if (!db) return [];
-			return db.select({ method: orders.paymentMethod, count: sql<number>`count(*)`.as('count'), total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`.as('total') }).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate))).groupBy(orders.paymentMethod);
+			// To get accurate totals including split payments, we sum the individual amount columns
+			const cashData = await db.select({ 
+				method: sql<string>`'cash'`, 
+				count: sql<number>`count(*)`, 
+				total: sql<number>`coalesce(sum(${orders.cashAmount}), 0)` 
+			}).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate), gt(orders.cashAmount, 0)));
+
+			const cardData = await db.select({ 
+				method: sql<string>`'card'`, 
+				count: sql<number>`count(*)`, 
+				total: sql<number>`coalesce(sum(${orders.cardAmount}), 0)` 
+			}).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate), gt(orders.cardAmount, 0)));
+
+			const mobileData = await db.select({ 
+				method: sql<string>`'mobile'`, 
+				count: sql<number>`count(*)`, 
+				total: sql<number>`coalesce(sum(${orders.mobileAmount}), 0)` 
+			}).from(orders).where(and(eq(orders.status, 'completed'), gte(orders.createdAt, startDate), lt(orders.createdAt, endDate), gt(orders.mobileAmount, 0)));
+
+			return [...cashData, ...cardData, ...mobileData];
 		})(),
 
 		refundSummary: (async () => {

@@ -239,16 +239,18 @@
 			{/each}
 		</div>
 
-		<div class="flex flex-wrap items-end gap-2">
-			<div class="space-y-1">
-				<Label for="from" class="text-[11px] font-semibold text-muted-foreground">From</Label>
-				<DatePicker id="from" bind:value={customFrom} class="w-[150px]" />
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+			<div class="flex flex-1 items-end gap-2">
+				<div class="flex-1 space-y-1 sm:w-48 sm:flex-none">
+					<Label for="from" class="text-[11px] font-semibold text-muted-foreground">From</Label>
+					<DatePicker id="from" bind:value={customFrom} class="w-full [&>button]:h-11" />
+				</div>
+				<div class="flex-1 space-y-1 sm:w-48 sm:flex-none">
+					<Label for="to" class="text-[11px] font-semibold text-muted-foreground">To</Label>
+					<DatePicker id="to" bind:value={customTo} class="w-full [&>button]:h-11" />
+				</div>
 			</div>
-			<div class="space-y-1">
-				<Label for="to" class="text-[11px] font-semibold text-muted-foreground">To</Label>
-				<DatePicker id="to" bind:value={customTo} class="w-[150px]" />
-			</div>
-			<Button size="sm" onclick={applyCustomRange} class="h-11 cursor-pointer text-xs">Apply</Button>
+			<Button size="sm" onclick={applyCustomRange} class="h-11 w-full cursor-pointer text-xs sm:w-auto px-6">Apply</Button>
 		</div>
 	</div>
 
@@ -516,7 +518,7 @@
 			</Card.Header>
 			<Card.Content class="space-y-3 px-3 sm:space-y-4 sm:px-6">
 				{#await Promise.all([data.summaries, data.paymentBreakdown])}
-					{#each Array(2) as _}
+					{#each Array(3) as _}
 						<div class="space-y-2">
 							<div class="flex justify-between">
 								<Skeleton class="h-4 w-16" /><Skeleton class="h-4 w-20" />
@@ -527,39 +529,51 @@
 				{:then [summaries, paymentBreakdown]}
 					{@const paymentMap = new Map((paymentBreakdown as any[]).map((p: any) => [p.method, p]))}
 					{@const totalSales = summaries.salesSummary.total}
-					{#each ['cash', 'card', 'split'] as method}
-						{@const mData = paymentMap.get(method) as any}
-						{#if mData}
-							<div class="space-y-1.5">
-								<div class="flex items-center justify-between text-xs sm:text-sm">
-									<div class="flex items-center gap-2">
+					{#if totalSales > 0}
+						<div class="space-y-4">
+							{#each ['cash', 'card', 'split'] as method}
+								{@const mData = paymentMap.get(method) as any}
+								<div class="space-y-1.5">
+									<div class="flex items-center justify-between text-xs sm:text-sm">
+										<div class="flex items-center gap-2">
+											<div
+												class="h-2.5 w-2.5 rounded-full {method === 'cash'
+													? 'bg-emerald-500'
+													: method === 'card'
+														? 'bg-blue-500'
+														: 'bg-violet-500'}"
+											></div>
+											<span class="font-medium capitalize">{method}</span>
+										</div>
+										<span class="tabular-nums font-bold"
+											>{formatCurrency(mData?.total ?? 0)}</span
+										>
+									</div>
+									<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
 										<div
-											class="h-2.5 w-2.5 rounded-full {method === 'cash'
+											class="h-full {method === 'cash'
 												? 'bg-emerald-500'
 												: method === 'card'
 													? 'bg-blue-500'
 													: 'bg-violet-500'}"
+											style="width: {pct(mData?.total ?? 0, totalSales)}%"
 										></div>
-										<span class="font-medium capitalize">{method}</span>
 									</div>
-									<span class="tabular-nums">{formatCurrency(mData.total)}</span>
+									<p class="text-[10px] text-muted-foreground">
+										{mData?.count ?? 0} orders &middot; {pct(mData?.total ?? 0, totalSales)}%
+									</p>
 								</div>
-								<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
-									<div
-										class="h-full {method === 'cash'
-											? 'bg-emerald-500'
-											: method === 'card'
-												? 'bg-blue-500'
-												: 'bg-violet-500'}"
-										style="width: {pct(mData.total, totalSales)}%"
-									></div>
-								</div>
-								<p class="text-[10px] text-muted-foreground">
-									{mData.count} orders &middot; {pct(mData.total, totalSales)}%
-								</p>
+							{/each}
+						</div>
+					{:else}
+						<div class="flex flex-col items-center justify-center py-8 text-center">
+							<div class="rounded-full bg-muted p-3 mb-3">
+								<DollarSign class="h-6 w-6 text-muted-foreground/50" />
 							</div>
-						{/if}
-					{/each}
+							<p class="text-sm font-medium text-muted-foreground">No sales in this period</p>
+							<p class="text-[10px] text-muted-foreground/60">Payment breakdown will appear once sales are made</p>
+						</div>
+					{/if}
 				{/await}
 			</Card.Content>
 		</Card.Root>
@@ -675,26 +689,33 @@
 					</div>
 				{:then categoryBreakdown}
 					{@const totalRev =
-						!categoryBreakdown ? 1 : (categoryBreakdown as any[]).reduce((s: number, c: any) => s + c.totalRevenue, 0) || 1}
+						!categoryBreakdown || (categoryBreakdown as any[]).length === 0
+							? 0
+							: (categoryBreakdown as any[]).reduce((s: number, c: any) => s + c.totalRevenue, 0)}
 					<div class="space-y-3">
-						{#each (categoryBreakdown as any[]) || [] as cat}
-							<div class="space-y-1">
-								<div class="flex items-center justify-between text-xs sm:text-sm">
-									<span class="font-medium">{cat.category}</span>
-									<span class="tabular-nums"
-										>{formatCurrency(cat.totalRevenue)} ({pct(cat.totalRevenue, totalRev)}%)</span
-									>
+						{#if totalRev > 0}
+							{#each (categoryBreakdown as any[]) || [] as cat}
+								<div class="space-y-1">
+									<div class="flex items-center justify-between text-xs sm:text-sm">
+										<span class="font-medium">{cat.category}</span>
+										<span class="tabular-nums"
+											>{formatCurrency(cat.totalRevenue)} ({pct(cat.totalRevenue, totalRev)}%)</span
+										>
+									</div>
+									<div class="h-1.5 overflow-hidden rounded-full bg-muted">
+										<div
+											class="h-full bg-primary/70"
+											style="width: {(cat.totalRevenue / totalRev) * 100}%"
+										></div>
+									</div>
 								</div>
-								<div class="h-1.5 overflow-hidden rounded-full bg-muted">
-									<div
-										class="h-full bg-primary/70"
-										style="width: {(cat.totalRevenue / totalRev) * 100}%"
-									></div>
-								</div>
-							</div>
+							{/each}
 						{:else}
-							<p class="py-6 text-center text-sm text-muted-foreground">No data.</p>
-						{/each}
+							<div class="flex flex-col items-center justify-center py-10 text-center">
+								<Layers class="h-8 w-8 text-muted-foreground/30 mb-2" />
+								<p class="text-sm font-medium text-muted-foreground">No category data</p>
+							</div>
+						{/if}
 					</div>
 				{/await}
 			</Card.Content>
@@ -714,39 +735,40 @@
 						{#each Array(5) as _}<Skeleton class="h-6 w-full" />{/each}
 					</div>
 				{:then topProducts}
-					<Table.Root>
-						<Table.Header
-							><Table.Row class="text-xs">
-								<Table.Head class="pl-6">Product</Table.Head>
-								<Table.Head class="text-right">Qty</Table.Head>
-								<Table.Head class="pr-6 text-right">Revenue</Table.Head>
-							</Table.Row></Table.Header
-						>
-						<Table.Body>
-							{#each (topProducts as any[])?.slice(0, 5) || [] as p}
-								<Table.Row
-									class="cursor-pointer text-sm hover:bg-muted/50"
-									onclick={() => goto(`/inventory/${p.productId}`)}
-								>
-									<Table.Cell class="pl-6 font-medium">{p.productName}</Table.Cell>
-									<Table.Cell class="text-right">{p.totalQty}</Table.Cell>
-									<Table.Cell class="pr-6 text-right font-semibold"
-										>{formatCurrency(p.totalRevenue)}</Table.Cell
+					{#if topProducts && (topProducts as any[]).length > 0}
+						<Table.Root>
+							<Table.Header
+								><Table.Row class="text-xs">
+									<Table.Head class="pl-6">Product</Table.Head>
+									<Table.Head class="text-right">Qty</Table.Head>
+									<Table.Head class="pr-6 text-right">Revenue</Table.Head>
+								</Table.Row></Table.Header
+							>
+							<Table.Body>
+								{#each (topProducts as any[])?.slice(0, 5) || [] as p}
+									<Table.Row
+										class="cursor-pointer text-sm hover:bg-muted/50"
+										onclick={() => goto(`/inventory/${p.productId}`)}
+									>
+										<Table.Cell class="pl-6 font-medium">{p.productName}</Table.Cell>
+										<Table.Cell class="text-right">{p.totalQty}</Table.Cell>
+										<Table.Cell class="pr-6 text-right font-semibold"
+											>{formatCurrency(p.totalRevenue)}</Table.Cell
 									>
 								</Table.Row>
-							{:else}
-								<Table.Row
-									><Table.Cell colspan={3} class="text-center py-6 text-muted-foreground"
-										>No products sold.</Table.Cell
-									></Table.Row
-								>
 							{/each}
 						</Table.Body>
 					</Table.Root>
-				{/await}
-			</Card.Content>
-		</Card.Root>
-	</div>
+				{:else}
+					<div class="flex flex-col items-center justify-center py-10 text-center">
+						<Package class="h-8 w-8 text-muted-foreground/30 mb-2" />
+						<p class="text-sm font-medium text-muted-foreground">No products sold yet</p>
+					</div>
+				{/if}
+			{/await}
+		</Card.Content>
+	</Card.Root>
+</div>
 
 	<!-- ==================== ACTIVITY & STAFF ==================== -->
 	<Card.Root>

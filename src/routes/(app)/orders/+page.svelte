@@ -222,49 +222,55 @@
 	<Card.Root class="border-primary/10 shadow-sm overflow-hidden">
 		<Card.Content class="p-0">
 			<div class="flex flex-col lg:flex-row lg:items-stretch">
-				<!-- Date Section -->
-				<div class="flex-1 border-b p-4 lg:border-b-0 lg:border-r">
-					<div class="mb-3 flex items-center justify-between">
-						<Label class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Date Range</Label>
-						<div class="flex rounded-md border bg-muted/30 p-0.5">
-							<Button
-								variant={isToday ? 'secondary' : 'ghost'}
-								size="sm"
-								onclick={setToday}
-								class="h-6 px-2 text-[10px]">Today</Button
-							>
-							<Button
-								variant={isThisWeek ? 'secondary' : 'ghost'}
-								size="sm"
-								onclick={setThisWeek}
-								class="h-6 px-2 text-[10px]">Week</Button
-							>
-							<Button
-								variant={isThisMonth ? 'secondary' : 'ghost'}
-								size="sm"
-								onclick={setThisMonth}
-								class="h-6 px-2 text-[10px]">Month</Button
-							>
+				<!-- Presets & Date Range -->
+				<div class="flex-1 space-y-4 border-b p-4 lg:border-b-0 lg:border-r">
+					<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+						<div class="space-y-3 flex-1">
+							<Label class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Presets</Label>
+							<div class="flex flex-wrap gap-2">
+								<Button
+									variant={isToday ? 'default' : 'outline'}
+									size="sm"
+									onclick={setToday}
+									class="h-9 px-4 text-xs cursor-pointer">Today</Button
+								>
+								<Button
+									variant={isThisWeek ? 'default' : 'outline'}
+									size="sm"
+									onclick={setThisWeek}
+									class="h-9 px-4 text-xs cursor-pointer">This Week</Button
+								>
+								<Button
+									variant={isThisMonth ? 'default' : 'outline'}
+									size="sm"
+									onclick={setThisMonth}
+									class="h-9 px-4 text-xs cursor-pointer">This Month</Button
+								>
+							</div>
 						</div>
-					</div>
-					<div class="flex max-w-sm items-center gap-2">
-						<DatePicker
-							bind:value={dateFrom}
-							onchange={applyFilters}
-							class="flex-1"
-						/>
-						<span class="text-[10px] font-bold text-muted-foreground/50 uppercase">to</span>
-						<DatePicker
-							bind:value={dateTo}
-							onchange={applyFilters}
-							class="flex-1"
-						/>
+
+						<div class="space-y-3">
+							<Label class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Custom Range</Label>
+							<div class="flex items-center gap-2">
+								<DatePicker
+									bind:value={dateFrom}
+									onchange={applyFilters}
+									class="w-[140px]"
+								/>
+								<span class="text-[10px] font-bold text-muted-foreground/50 uppercase">to</span>
+								<DatePicker
+									bind:value={dateTo}
+									onchange={applyFilters}
+									class="w-[140px]"
+								/>
+							</div>
+						</div>
 					</div>
 				</div>
 
 				<!-- Status & Clear Section -->
-				<div class="flex items-center gap-3 bg-muted/5 p-4 sm:flex-row">
-					<div class="flex-1 space-y-1.5">
+				<div class="flex items-end gap-3 bg-muted/5 p-4 sm:flex-row">
+					<div class="flex-1 space-y-3">
 						<Label class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</Label>
 						<Select.Root
 							type="single"
@@ -286,12 +292,12 @@
 						</Select.Root>
 					</div>
 					{#if dateFrom || dateTo || statusFilter || searchQuery}
-						<div class="mt-auto">
+						<div class="flex-none">
 							<Button
 								variant="outline"
 								size="sm"
 								onclick={clearFilters}
-								class="h-9 border-destructive/20 px-3 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground"
+								class="h-9 border-destructive/20 px-3 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground cursor-pointer"
 							>
 								<X class="mr-1.5 h-3.5 w-3.5" /> Clear
 							</Button>

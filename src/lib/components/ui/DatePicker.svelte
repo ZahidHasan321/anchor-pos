@@ -29,20 +29,31 @@
 
 	let open = $state(false);
 
-	// Converts string to @internationalized/date object
-	let dateValue = $derived.by(() => (value ? toCalendarDate(value) : undefined));
+	// Converts string to @internationalized/date object for the calendar
+	let dateValue = $state<any>(undefined);
 	let placeholderDate = $state(today(getLocalTimeZone()));
+
+	// Sync value string to dateValue object
+	$effect(() => {
+		const parsed = value ? toCalendarDate(value) : undefined;
+		if (formatDateString(parsed) !== formatDateString(dateValue)) {
+			dateValue = parsed;
+		}
+	});
 
 	function handleSelect(v: any) {
 		const newValue = formatDateString(v);
-		value = newValue;
-		onchange?.(newValue);
+		if (newValue !== value) {
+			value = newValue;
+			onchange?.(newValue);
+		}
 		open = false;
 	}
 
 	function clearDate(e: MouseEvent) {
 		e.stopPropagation();
 		value = '';
+		dateValue = undefined;
 		onchange?.('');
 	}
 </script>
@@ -83,7 +94,7 @@
 		>
 			<Calendar
 				type="single"
-				bind:value={value as any}
+				bind:value={dateValue}
 				onValueChange={handleSelect}
 				bind:placeholder={placeholderDate}
 			/>

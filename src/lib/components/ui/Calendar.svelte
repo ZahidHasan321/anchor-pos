@@ -9,7 +9,7 @@
 		placeholder = $bindable(),
 		class: className,
 		...restProps
-	}: CalendarRootProps = $props();
+	}: any = $props();
 </script>
 
 <Calendar.Root bind:value bind:placeholder bind:ref class={cn('p-4', className)} {...restProps}>

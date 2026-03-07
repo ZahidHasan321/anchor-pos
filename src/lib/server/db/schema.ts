@@ -111,10 +111,18 @@ export const orders = pgTable(
 		userId: text('user_id').references(() => users.id), // Cashier
 		totalAmount: doublePrecision('total_amount').notNull(),
 		status: text('status').notNull().default('completed'), // enum: ['completed', 'refunded', 'void']
-		paymentMethod: text('payment_method').notNull(), // enum: ['cash', 'card', 'split']
+		paymentMethod: text('payment_method').notNull(), // enum: ['cash', 'card', 'split', 'mobile']
 		discountAmount: doublePrecision('discount_amount').default(0),
 		cashReceived: doublePrecision('cash_received'),
 		changeGiven: doublePrecision('change_given'),
+
+		// Split & Mobile details
+		cashAmount: doublePrecision('cash_amount'),
+		cardAmount: doublePrecision('card_amount'),
+		mobileAmount: doublePrecision('mobile_amount'),
+		mobileMethod: text('mobile_method'), // 'bkash', 'nagad', 'rocket', etc
+		mobileTrxId: text('mobile_trx_id'),
+
 		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
 	},
 	(table) => ({

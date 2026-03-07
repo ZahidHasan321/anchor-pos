@@ -390,45 +390,45 @@
 						<Trophy class="h-4 w-4 text-amber-500" />
 						<Card.Title>Top Selling Products</Card.Title>
 					</div>
-					<span class="text-xs text-muted-foreground">This month</span>
+					<span class="text-[10px] text-muted-foreground sm:text-xs">This month</span>
 				</Card.Header>
-				<Card.Content>
+				<Card.Content class="p-0 sm:p-6">
 					{#if isNative}
 						{#if nativeTopProducts.length === 0 && nativeStats === null}
-							<div class="space-y-4">
+							<div class="space-y-4 p-4 sm:p-0">
 								{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
 							</div>
 						{:else}
-							<div class="-mx-6 overflow-x-auto px-6">
-								<Table.Root class="min-w-[400px]">
+							<div class="overflow-x-auto">
+								<Table.Root>
 									<Table.Header>
 										<Table.Row>
-											<Table.Head>Product</Table.Head>
+											<Table.Head class="pl-4 sm:pl-0">Product</Table.Head>
 											<Table.Head class="text-right">Qty</Table.Head>
-											<Table.Head class="text-right">Revenue</Table.Head>
+											<Table.Head class="pr-4 text-right sm:pr-0">Revenue</Table.Head>
 										</Table.Row>
 									</Table.Header>
 									<Table.Body>
 										{#each nativeTopProducts as product, i}
 											<Table.Row>
-												<Table.Cell class="py-2">
+												<Table.Cell class="py-2.5 pl-4 sm:pl-0">
 													<div class="flex items-center gap-2">
 														<span
-															class="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold {i <
+															class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold {i <
 															3
 																? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
 																: 'bg-muted text-muted-foreground'}"
 														>
 															{i + 1}
 														</span>
-														<div>
-															<div class="font-medium">{product.name}</div>
-															<div class="text-xs text-muted-foreground">{product.variantLabel}</div>
+														<div class="min-w-0">
+															<div class="truncate text-xs font-medium sm:text-sm">{product.name}</div>
+															<div class="truncate text-[10px] text-muted-foreground">{product.variantLabel}</div>
 														</div>
 													</div>
 												</Table.Cell>
-												<Table.Cell class="py-2 text-right font-mono">{product.totalQty}</Table.Cell>
-												<Table.Cell class="py-2 text-right font-bold"
+												<Table.Cell class="py-2.5 text-right font-mono text-xs sm:text-sm">{product.totalQty}</Table.Cell>
+												<Table.Cell class="py-2.5 pr-4 text-right font-bold text-xs sm:pr-0 sm:text-sm"
 													>{formatCurrency(product.totalRevenue)}</Table.Cell
 												>
 											</Table.Row>
@@ -437,7 +437,7 @@
 											<Table.Row
 												><Table.Cell
 													colspan={3}
-													class="py-8 text-center text-muted-foreground italic"
+													class="py-8 text-center text-muted-foreground italic text-xs"
 													>No sales this month yet.</Table.Cell
 												></Table.Row
 											>
@@ -448,40 +448,40 @@
 						{/if}
 					{:else}
 						{#await data.topProducts}
-							<div class="space-y-4">
+							<div class="space-y-4 p-4 sm:p-0">
 								{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
 							</div>
 						{:then products}
-							<div class="-mx-6 overflow-x-auto px-6">
-								<Table.Root class="min-w-[400px]">
+							<div class="overflow-x-auto">
+								<Table.Root>
 									<Table.Header>
 										<Table.Row>
-											<Table.Head>Product</Table.Head>
+											<Table.Head class="pl-4 sm:pl-0">Product</Table.Head>
 											<Table.Head class="text-right">Qty</Table.Head>
-											<Table.Head class="text-right">Revenue</Table.Head>
+											<Table.Head class="pr-4 text-right sm:pr-0">Revenue</Table.Head>
 										</Table.Row>
 									</Table.Header>
 									<Table.Body>
 										{#each products as product, i}
 											<Table.Row>
-												<Table.Cell class="py-2">
+												<Table.Cell class="py-2.5 pl-4 sm:pl-0">
 													<div class="flex items-center gap-2">
 														<span
-															class="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold {i <
+															class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold {i <
 															3
 																? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
 																: 'bg-muted text-muted-foreground'}"
 														>
 															{i + 1}
 														</span>
-														<div>
-															<div class="font-medium">{product.name}</div>
-															<div class="text-xs text-muted-foreground">{product.variantLabel}</div>
+														<div class="min-w-0">
+															<div class="truncate text-xs font-medium sm:text-sm">{product.name}</div>
+															<div class="truncate text-[10px] text-muted-foreground">{product.variantLabel}</div>
 														</div>
 													</div>
 												</Table.Cell>
-												<Table.Cell class="py-2 text-right font-mono">{product.totalQty}</Table.Cell>
-												<Table.Cell class="py-2 text-right font-bold"
+												<Table.Cell class="py-2.5 text-right font-mono text-xs sm:text-sm">{product.totalQty}</Table.Cell>
+												<Table.Cell class="py-2.5 pr-4 text-right font-bold text-xs sm:pr-0 sm:text-sm"
 													>{formatCurrency(product.totalRevenue)}</Table.Cell
 												>
 											</Table.Row>
@@ -490,7 +490,7 @@
 											<Table.Row
 												><Table.Cell
 													colspan={3}
-													class="py-8 text-center text-muted-foreground italic"
+													class="py-8 text-center text-muted-foreground italic text-xs"
 													>No sales this month yet.</Table.Cell
 												></Table.Row
 											>
@@ -512,30 +512,30 @@
 						>View All</Button
 					>
 				</Card.Header>
-				<Card.Content>
+				<Card.Content class="p-0 sm:p-6">
 					{#if isNative}
 						{#if nativeStockAlerts === null}
-							<div class="space-y-4">
+							<div class="space-y-4 p-4 sm:p-0">
 								{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
 							</div>
 						{:else}
-							<div class="-mx-6 overflow-x-auto px-6">
-								<Table.Root class="min-w-[400px]">
+							<div class="overflow-x-auto">
+								<Table.Root>
 									<Table.Body>
 										{#each nativeStockAlerts.lowStockItems as item}
 											<Table.Row>
-												<Table.Cell class="py-2">
-													<div class="font-medium">{item.name}</div>
-													<div class="text-xs text-muted-foreground">{item.size}</div>
+												<Table.Cell class="py-2.5 pl-4 sm:pl-0">
+													<div class="text-xs font-medium sm:text-sm">{item.name}</div>
+													<div class="text-[10px] text-muted-foreground">{item.size}</div>
 												</Table.Cell>
-												<Table.Cell class="py-2 text-right"
-													><Badge variant="destructive">{item.stock}</Badge></Table.Cell
+												<Table.Cell class="py-2.5 pr-4 text-right sm:pr-0"
+													><Badge variant="destructive" class="px-1.5 h-5 text-[10px]">{item.stock}</Badge></Table.Cell
 												>
 											</Table.Row>
 										{/each}
 										{#if nativeStockAlerts.lowStockItems.length === 0}
 											<Table.Row
-												><Table.Cell class="py-8 text-center text-muted-foreground italic"
+												><Table.Cell class="py-8 text-center text-muted-foreground italic text-xs"
 													>No low stock items.</Table.Cell
 												></Table.Row
 											>
@@ -546,27 +546,27 @@
 						{/if}
 					{:else}
 						{#await data.stockAlerts}
-							<div class="space-y-4">
+							<div class="space-y-4 p-4 sm:p-0">
 								{#each Array(5) as _}<Skeleton class="h-10 w-full" />{/each}
 							</div>
 						{:then alerts}
-							<div class="-mx-6 overflow-x-auto px-6">
-								<Table.Root class="min-w-[400px]">
+							<div class="overflow-x-auto">
+								<Table.Root>
 									<Table.Body>
 										{#each alerts.lowStockItems as item}
 											<Table.Row>
-												<Table.Cell class="py-2">
-													<div class="font-medium">{item.name}</div>
-													<div class="text-xs text-muted-foreground">{item.size}</div>
+												<Table.Cell class="py-2.5 pl-4 sm:pl-0">
+													<div class="text-xs font-medium sm:text-sm">{item.name}</div>
+													<div class="text-[10px] text-muted-foreground">{item.size}</div>
 												</Table.Cell>
-												<Table.Cell class="py-2 text-right"
-													><Badge variant="destructive">{item.stock}</Badge></Table.Cell
+												<Table.Cell class="py-2.5 pr-4 text-right sm:pr-0"
+													><Badge variant="destructive" class="px-1.5 h-5 text-[10px]">{item.stock}</Badge></Table.Cell
 												>
 											</Table.Row>
 										{/each}
 										{#if alerts.lowStockItems.length === 0}
 											<Table.Row
-												><Table.Cell class="py-8 text-center text-muted-foreground italic"
+												><Table.Cell class="py-8 text-center text-muted-foreground italic text-xs"
 													>No low stock items.</Table.Cell
 												></Table.Row
 											>

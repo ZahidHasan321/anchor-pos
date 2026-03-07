@@ -23,9 +23,17 @@ type CustomerInfo = {
 function createCart() {
 	let items = $state<CartItem[]>([]);
 	let customer = $state<CustomerInfo>(null);
-	let paymentMethod = $state<'cash' | 'card'>('cash');
-	let cashReceived = $state<number>(0);
+	let paymentMethod = $state<'cash' | 'card' | 'split' | 'mobile'>('cash');
+	let cashReceived = $state<number | null>(null);
 	let globalDiscount = $state<number | null>(null);
+
+	// Split payment fields
+	let cashAmount = $state<number | null>(null);
+	let cardAmount = $state<number | null>(null);
+
+	// Mobile payment fields
+	let mobileMethod = $state<'bkash' | 'nagad' | 'rocket' | 'other'>('bkash');
+	let mobileTrxId = $state<string>('');
 
 	const subtotal = $derived(
 		items.reduce((sum, item) => {
@@ -38,7 +46,11 @@ function createCart() {
 	);
 
 	const totalItems = $derived(items.reduce((sum, item) => sum + item.quantity, 0));
-	const changeAmount = $derived(Math.max(0, cashReceived - subtotal));
+	const changeAmount = $derived.by(() => {
+		if (paymentMethod === 'cash') return Math.max(0, (cashReceived ?? 0) - subtotal);
+		if (paymentMethod === 'split') return Math.max(0, (cashReceived ?? 0) - (cashAmount ?? 0));
+		return 0;
+	});
 
 	return {
 		get items() {
@@ -50,13 +62,17 @@ function createCart() {
 		get paymentMethod() {
 			return paymentMethod;
 		},
-		set paymentMethod(v: 'cash' | 'card') {
+		set paymentMethod(v: 'cash' | 'card' | 'split' | 'mobile') {
 			paymentMethod = v;
+			if (v === 'split') {
+				cashAmount = null;
+				cardAmount = subtotal;
+			}
 		},
 		get cashReceived() {
 			return cashReceived;
 		},
-		set cashReceived(v: number) {
+		set cashReceived(v: number | null) {
 			cashReceived = v;
 		},
 		get globalDiscount() {
@@ -73,6 +89,41 @@ function createCart() {
 		},
 		get changeAmount() {
 			return changeAmount;
+		},
+
+		// Split payment getters/setters
+		get cashAmount() {
+			return cashAmount;
+		},
+		set cashAmount(v: number | null) {
+			cashAmount = v;
+			cardAmount = Math.max(0, subtotal - (v ?? 0));
+		},
+		get cardAmount() {
+			return cardAmount;
+		},
+		set cardAmount(v: number | null) {
+			cardAmount = v;
+			cashAmount = Math.max(0, subtotal - (v ?? 0));
+		},
+
+		exactAmount() {
+			if (paymentMethod === 'cash') cashReceived = subtotal;
+			else if (paymentMethod === 'split') cashReceived = cashAmount;
+		},
+
+		// Mobile payment getters/setters
+		get mobileMethod() {
+			return mobileMethod;
+		},
+		set mobileMethod(v: 'bkash' | 'nagad' | 'rocket' | 'other') {
+			mobileMethod = v;
+		},
+		get mobileTrxId() {
+			return mobileTrxId;
+		},
+		set mobileTrxId(v: string) {
+			mobileTrxId = v;
 		},
 
 		addItem(item: Omit<CartItem, 'quantity'>) {

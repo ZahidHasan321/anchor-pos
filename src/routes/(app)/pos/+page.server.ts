@@ -114,12 +114,18 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const cartItemsRaw = data.get('cartItems') as string;
 		const customerId = (data.get('customerId') as string) || null;
-		const paymentMethod = (data.get('paymentMethod') as 'cash' | 'card') || 'cash';
+		const paymentMethod = (data.get('paymentMethod') as 'cash' | 'card' | 'split' | 'mobile') || 'cash';
 		const cashReceived = parseFloat(data.get('cashReceived') as string) || 0;
 		const globalDiscount = Math.min(
 			100,
 			Math.max(0, parseFloat(data.get('globalDiscount') as string) || 0)
 		);
+
+		const cashAmount = parseFloat(data.get('cashAmount') as string) || 0;
+		const cardAmount = parseFloat(data.get('cardAmount') as string) || 0;
+		const mobileAmount = parseFloat(data.get('mobileAmount') as string) || 0;
+		const mobileMethod = (data.get('mobileMethod') as string) || null;
+		const mobileTrxId = (data.get('mobileTrxId') as string) || null;
 
 		let cartItems: CartItem[] = [];
 		try {
@@ -204,6 +210,11 @@ export const actions: Actions = {
 					discountAmount: totalDiscount,
 					cashReceived,
 					changeGiven,
+					cashAmount: paymentMethod === 'split' ? cashAmount : (paymentMethod === 'cash' ? totalAmount : 0),
+					cardAmount: paymentMethod === 'split' ? cardAmount : (paymentMethod === 'card' ? totalAmount : 0),
+					mobileAmount: paymentMethod === 'split' ? mobileAmount : (paymentMethod === 'mobile' ? totalAmount : 0),
+					mobileMethod: mobileMethod,
+					mobileTrxId: mobileTrxId,
 					status: 'completed'
 				});
 

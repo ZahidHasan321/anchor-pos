@@ -47,6 +47,11 @@ export const AppSchema = new Schema([
       new Column({ name: 'discount_amount', type: ColumnType.REAL }),
       new Column({ name: 'cash_received', type: ColumnType.REAL }),
       new Column({ name: 'change_given', type: ColumnType.REAL }),
+      new Column({ name: 'cash_amount', type: ColumnType.REAL }),
+      new Column({ name: 'card_amount', type: ColumnType.REAL }),
+      new Column({ name: 'mobile_amount', type: ColumnType.REAL }),
+      new Column({ name: 'mobile_method', type: ColumnType.TEXT }),
+      new Column({ name: 'mobile_trx_id', type: ColumnType.TEXT }),
       new Column({ name: 'created_at', type: ColumnType.TEXT })
     ]
   }),

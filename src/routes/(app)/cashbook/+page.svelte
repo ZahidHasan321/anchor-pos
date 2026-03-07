@@ -239,7 +239,7 @@
 					<div class="flex-1 sm:flex-none">
 						<DatePicker
 							id="date-filter"
-							class="w-full sm:w-52"
+							class="w-full sm:w-52 [&>button]:h-9"
 							bind:value={selectedDate}
 							onchange={handleDateChange}
 						/>

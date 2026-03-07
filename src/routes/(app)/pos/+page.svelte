@@ -7,6 +7,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Label } from '$lib/components/ui/label';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
+	import { Separator } from '$lib/components/ui/separator';
 	import {
 		Search,
 		Plus,
@@ -148,9 +149,30 @@
 			const orderId = crypto.randomUUID();
 			
 			await powersync.db.execute(`
-				INSERT INTO orders (id, customer_id, user_id, total_amount, payment_method, discount_amount, cash_received, change_given, status, created_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`, [orderId, cart.customer?.id || null, data.user?.id, cart.subtotal, cart.paymentMethod, 0, cart.cashReceived, cart.changeAmount, 'completed', new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
+				INSERT INTO orders (
+					id, customer_id, user_id, total_amount, payment_method, 
+					discount_amount, cash_received, change_given, 
+					cash_amount, card_amount, mobile_amount, mobile_method, mobile_trx_id,
+					status, created_at
+				)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, [
+				orderId, 
+				cart.customer?.id || null, 
+				data.user?.id, 
+				cart.subtotal, 
+				cart.paymentMethod, 
+				0, 
+				cart.cashReceived, 
+				cart.changeAmount,
+				cart.paymentMethod === 'split' ? cart.cashAmount : (cart.paymentMethod === 'cash' ? cart.subtotal : 0),
+				cart.paymentMethod === 'split' ? cart.cardAmount : (cart.paymentMethod === 'card' ? cart.subtotal : 0),
+				cart.paymentMethod === 'mobile' ? cart.subtotal : 0,
+				cart.paymentMethod === 'mobile' ? cart.mobileMethod : null,
+				cart.paymentMethod === 'mobile' ? cart.mobileTrxId : null,
+				'completed', 
+				new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')
+			]);
 
 			for (const item of cart.items) {
 				const orderItemId = crypto.randomUUID();
@@ -354,7 +376,7 @@
 								<button
 									onclick={() => handleAddToCart(variant)}
 									disabled={availableStock <= 0}
-									class="group relative flex w-full cursor-pointer flex-col rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+									class="group relative flex w-full cursor-pointer flex-col rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed {cartQty > 0 ? 'border-primary ring-2 ring-primary/20' : ''}"
 								>
 									<div class="absolute top-2 right-2">
 										<Badge variant={availableStock <= 5 ? 'destructive' : 'secondary'}
@@ -562,63 +584,160 @@
 <Dialog.Root bind:open={checkoutOpen} onOpenChange={(open) => {
 	if (open) cart.cashReceived = 0;
 }}>
-	<Dialog.Content class="max-w-md">
-		<Dialog.Header
-			><Dialog.Title>Complete Payment</Dialog.Title><Dialog.Description
-				>Total: <span class="font-bold text-primary">{formatCurrency(cart.subtotal)}</span
-				></Dialog.Description
-			></Dialog.Header
-		>
-		<div class="grid grid-cols-2 gap-2 py-4">
-			<button
-				onclick={() => (cart.paymentMethod = 'cash')}
-				class="flex flex-col items-center gap-2 rounded-xl border-2 p-4 {cart.paymentMethod ===
-				'cash'
-					? 'border-primary bg-primary/5'
-					: ''}"><Banknote class="h-6 w-6" /><span>Cash</span></button
-			>
-			<button
-				onclick={() => (cart.paymentMethod = 'card')}
-				class="flex flex-col items-center gap-2 rounded-xl border-2 p-4 {cart.paymentMethod ===
-				'card'
-					? 'border-primary bg-primary/5'
-					: ''}"><CreditCard class="h-6 w-6" /><span>Card</span></button
-			>
-		</div>
-		{#if cart.paymentMethod === 'cash'}
-			<div class="space-y-4">
-				<div class="space-y-2">
-					<Label>Cash Received</Label><Input
-						type="number"
-						class="h-14 text-center text-2xl font-bold"
-						placeholder="0"
-						value={cart.cashReceived || ''}
-						oninput={(e) => (cart.cashReceived = Number(e.currentTarget.value))}
-					/>
-				</div>
-				<div class="grid grid-cols-4 gap-2">
-					{#each [100, 500, 1000, 2000] as a}<Button
-							variant="outline"
-							onclick={() => (cart.cashReceived += a)}>+{a}</Button
-						>{/each}
-				</div>
-				{#if cart.cashReceived > 0}<div
-						class="flex items-center justify-between rounded-xl bg-emerald-50 p-4"
-					>
-						<span class="font-bold text-emerald-700">Change:</span><span
-							class="text-2xl font-black text-emerald-600">{formatCurrency(cart.changeAmount)}</span
-						>
-					</div>{/if}
+	<Dialog.Content class="max-w-md p-0 overflow-hidden">
+		<Dialog.Header class="px-6 pt-6">
+			<Dialog.Title>Complete Payment</Dialog.Title>
+			<Dialog.Description>Select payment method and finalize the sale.</Dialog.Description>
+		</Dialog.Header>
+
+		<div class="px-6 py-4 space-y-6">
+			<!-- Amount Display -->
+			<div class="rounded-xl border bg-muted/30 p-4 flex justify-between items-center">
+				<span class="text-sm font-medium text-muted-foreground">Total Amount</span>
+				<span class="text-2xl font-bold text-primary">{formatCurrency(cart.subtotal)}</span>
 			</div>
-		{/if}
-		<Dialog.Footer
-			>{#if isNative}
+
+			<!-- Payment Method Selector -->
+			<div class="grid grid-cols-2 gap-2">
+				{#each [
+					{ id: 'cash', icon: Banknote, label: 'Cash' },
+					{ id: 'card', icon: CreditCard, label: 'Card' },
+					{ id: 'split', icon: Users, label: 'Split Payment' },
+					{ id: 'mobile', icon: ShoppingCart, label: 'Mobile Banking' }
+				] as method}
+					<button
+						onclick={() => (cart.paymentMethod = method.id as any)}
+						class="flex items-center gap-3 rounded-xl border px-4 py-3 transition-all {cart.paymentMethod === method.id
+							? 'border-primary bg-primary/5 ring-1 ring-primary'
+							: 'bg-card hover:border-primary/50'}"
+					>
+						<method.icon class="h-5 w-5 {cart.paymentMethod === method.id ? 'text-primary' : 'text-muted-foreground'}" />
+						<span class="text-sm font-semibold">{method.label}</span>
+					</button>
+				{/each}
+			</div>
+
+			<!-- Details Section -->
+			<div class="space-y-4">
+				{#if cart.paymentMethod === 'cash'}
+					<div class="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+						<div class="space-y-2">
+							<div class="flex items-center justify-between">
+								<Label class="text-xs font-semibold">Cash Received</Label>
+								<button class="text-[10px] font-bold text-primary hover:underline" onclick={() => cart.exactAmount()}>Exact Amount</button>
+							</div>
+							<Input
+								type="number"
+								class="h-12 text-lg font-bold"
+								placeholder="0.00"
+								value={cart.cashReceived ?? ''}
+								oninput={(e) => (cart.cashReceived = e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+								onfocus={(e) => e.currentTarget.select()}
+							/>
+						</div>
+						<div class="grid grid-cols-4 gap-2">
+							{#each [100, 500, 1000, 2000] as a}
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-9 font-bold"
+									onclick={() => (cart.cashReceived = (cart.cashReceived ?? 0) + a)}>+{a}</Button>
+							{/each}
+						</div>
+					</div>
+				{:else if cart.paymentMethod === 'split'}
+					<div class="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+						<div class="grid grid-cols-2 gap-3">
+							<div class="space-y-1.5">
+								<Label class="text-xs font-semibold">Cash Part</Label>
+								<Input 
+									type="number" 
+									value={cart.cashAmount ?? ''} 
+									oninput={(e) => cart.cashAmount = e.currentTarget.value === '' ? null : Number(e.currentTarget.value)}
+									onfocus={(e) => e.currentTarget.select()}
+									class="font-bold"
+								/>
+							</div>
+							<div class="space-y-1.5">
+								<Label class="text-xs font-semibold">Card Part</Label>
+								<Input 
+									type="number" 
+									value={cart.cardAmount ?? ''} 
+									oninput={(e) => cart.cardAmount = e.currentTarget.value === '' ? null : Number(e.currentTarget.value)}
+									onfocus={(e) => e.currentTarget.select()}
+									class="font-bold"
+								/>
+							</div>
+						</div>
+						<div class="space-y-1.5 pt-1">
+							<div class="flex items-center justify-between">
+								<Label class="text-xs font-semibold">Cash Received</Label>
+								<button class="text-[10px] font-bold text-primary hover:underline" onclick={() => cart.exactAmount()}>Exact Amount</button>
+							</div>
+							<Input 
+								type="number" 
+								value={cart.cashReceived ?? ''} 
+								oninput={(e) => cart.cashReceived = e.currentTarget.value === '' ? null : Number(e.currentTarget.value)}
+								onfocus={(e) => e.currentTarget.select()}
+								class="h-11 font-bold border-primary/20"
+								placeholder="Amount received..."
+							/>
+						</div>
+					</div>
+				{:else if cart.paymentMethod === 'mobile'}
+					<div class="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+						<div class="grid grid-cols-3 gap-2">
+							{#each ['bkash', 'nagad', 'rocket'] as m}
+								<button 
+									onclick={() => cart.mobileMethod = m as any}
+									class="rounded-lg border py-2.5 text-xs font-bold transition-all {cart.mobileMethod === m ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary' : 'bg-background hover:bg-muted'}"
+								>
+									<span class="capitalize">{m}</span>
+								</button>
+							{/each}
+						</div>
+						<div class="space-y-1.5">
+							<Label class="text-xs font-semibold">Transaction ID (Optional)</Label>
+							<Input 
+								placeholder="Enter TrxID..." 
+								class="font-mono uppercase"
+								bind:value={() => cart.mobileTrxId, (v) => cart.mobileTrxId = v} 
+							/>
+						</div>
+					</div>
+				{:else}
+					<div class="flex flex-col items-center justify-center py-10 rounded-xl border-2 border-dashed bg-muted/30 animate-in fade-in slide-in-from-top-2 duration-200">
+						<CreditCard class="h-10 w-10 text-muted-foreground/40 mb-3" />
+						<p class="text-sm font-semibold text-muted-foreground">External Terminal</p>
+						<p class="text-[10px] text-muted-foreground/60 mt-1 text-center px-6">Process on your card machine then click complete.</p>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Change Result -->
+			{#if (cart.paymentMethod === 'cash' || cart.paymentMethod === 'split') && (cart.cashReceived ?? 0) > 0}
+				<div class="rounded-xl bg-emerald-50 border border-emerald-100 p-4 flex justify-between items-center animate-in zoom-in-95 duration-200">
+					<div class="flex items-center gap-3">
+						<div class="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+							<Banknote class="h-5 w-5 text-emerald-600" />
+						</div>
+						<span class="text-sm font-semibold text-emerald-700">Change to Return</span>
+					</div>
+					<span class="text-xl font-bold text-emerald-600">{formatCurrency(cart.changeAmount)}</span>
+				</div>
+			{/if}
+		</div>
+
+		<Dialog.Footer class="p-6 pt-0">
+			{#if isNative}
 				<Button
 					onclick={handleLocalCheckout}
-					class="h-14 w-full text-lg"
-					disabled={loading || (cart.paymentMethod === 'cash' && cart.cashReceived < cart.subtotal)}
-					>{#if loading}<Loader2 class="mr-2 h-4 w-4 animate-spin" />{/if}Complete Sale (Offline)</Button
+					class="h-12 w-full font-bold"
+					disabled={loading || (cart.paymentMethod === 'cash' && (cart.cashReceived ?? 0) < cart.subtotal) || (cart.paymentMethod === 'split' && (cart.cashReceived ?? 0) < (cart.cashAmount ?? 0))}
 				>
+					{#if loading}<Loader2 class="mr-2 h-4 w-4 animate-spin" />{/if}
+					Complete Sale
+				</Button>
 			{:else}
 				<form
 					method="POST"
@@ -632,23 +751,31 @@
 					}}
 					class="w-full"
 				>
-					<input type="hidden" name="cartItems" value={JSON.stringify(cart.items)} /><input
-						type="hidden"
-						name="customerId"
-						value={cart.customer?.id ?? ''}
-					/><input type="hidden" name="paymentMethod" value={cart.paymentMethod} /><input
-						type="hidden"
-						name="cashReceived"
-						value={cart.cashReceived}
-					/><input type="hidden" name="globalDiscount" value={cart.globalDiscount ?? 0} /><Button
+					<input type="hidden" name="cartItems" value={JSON.stringify(cart.items)} />
+					<input type="hidden" name="customerId" value={cart.customer?.id ?? ''} />
+					<input type="hidden" name="paymentMethod" value={cart.paymentMethod} />
+					<input type="hidden" name="cashReceived" value={cart.cashReceived} />
+					<input type="hidden" name="globalDiscount" value={cart.globalDiscount ?? 0} />
+					
+					{#if cart.paymentMethod === 'split'}
+						<input type="hidden" name="cashAmount" value={cart.cashAmount} />
+						<input type="hidden" name="cardAmount" value={cart.cardAmount} />
+					{:else if cart.paymentMethod === 'mobile'}
+						<input type="hidden" name="mobileMethod" value={cart.mobileMethod} />
+						<input type="hidden" name="mobileTrxId" value={cart.mobileTrxId} />
+					{/if}
+
+					<Button
 						type="submit"
-						class="h-14 w-full text-lg"
-						disabled={loading || (cart.paymentMethod === 'cash' && cart.cashReceived < cart.subtotal)}
-						>{loading ? 'Processing...' : 'Complete Sale'}</Button
+						class="h-12 w-full font-bold"
+						disabled={loading || (cart.paymentMethod === 'cash' && (cart.cashReceived ?? 0) < cart.subtotal) || (cart.paymentMethod === 'split' && (cart.cashReceived ?? 0) < (cart.cashAmount ?? 0))}
 					>
+						{#if loading}<Loader2 class="mr-2 h-4 w-4 animate-spin" />{/if}
+						Complete Sale
+					</Button>
 				</form>
-			{/if}</Dialog.Footer
-		>
+			{/if}
+		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
 
