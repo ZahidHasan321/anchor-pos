@@ -80,6 +80,8 @@ export class PowerSyncManager {
         this._connecting = true;
 
         try {
+            // Default to our production URL if not set
+            const isCapacitor = (window as any).Capacitor !== undefined;
             const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://anchorshop.cloud';
             const powersyncUrl = import.meta.env.VITE_POWERSYNC_URL || import.meta.env.POWERSYNC_URL || 'https://powersync.anchorshop.cloud';
 
