@@ -178,7 +178,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// CORS & Security Headers
 	const origin = event.request.headers.get('origin');
-	const isLocalOrigin = origin && (origin.startsWith('http://localhost') || origin.startsWith('app://'));
+	const isLocalOrigin = origin && (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin.startsWith('app://'));
 
 	if (event.request.method === 'OPTIONS' && isLocalOrigin) {
 			return new Response(null, {
