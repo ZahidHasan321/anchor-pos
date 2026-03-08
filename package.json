@@ -6,7 +6,7 @@
 		"email": "support@autopos.com"
 	},
 	"private": true,
-	"version": "1.0.0-alpha.1",
+	"version": "0.0.1",
 	"type": "module",
 	"main": "electron-main.cjs",
 	"scripts": {

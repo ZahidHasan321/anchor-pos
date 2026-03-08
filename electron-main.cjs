@@ -324,7 +324,7 @@ async function createWindow() {
                 if (mainWindow && !mainWindow.isVisible()) {
                     console.warn('Force showing window after timeout');
                     mainWindow.show();
-                    if (splashWindow) splashWindow.close();
+                    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
                 }
             }, 5000);
 
@@ -332,8 +332,10 @@ async function createWindow() {
                 clearTimeout(showTimeout);
                 // Give the server a moment to finish its first SSR render
                 setTimeout(() => {
-                    mainWindow.show();
-                    if (splashWindow) splashWindow.close();
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.show();
+                    }
+                    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
                 }, 500);
             });
             
@@ -671,9 +673,20 @@ if (!gotTheLock) {
         
         // --- Auto-Updater Logic ---
         if (app.isPackaged) {
-            autoUpdater.checkForUpdatesAndNotify();
-            
+            autoUpdater.on('error', (err) => {
+                log.error('Auto-updater error:', err);
+            });
+
+            try {
+                autoUpdater.checkForUpdatesAndNotify().catch(e => {
+                    log.error('Failed to check for updates:', e);
+                });
+            } catch (e) {
+                log.error('Update check exception:', e);
+            }
+
             autoUpdater.on('update-downloaded', () => {
+
                 dialog.showMessageBox({
                     type: 'info',
                     title: 'Update Ready',
