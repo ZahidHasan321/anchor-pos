@@ -44,9 +44,12 @@ jobs:
           PS_PUBLIC_KEY: ${{ secrets.POWERSYNC_PUBLIC_KEY }}
         run: |
           {
+            echo "BUILD_TARGET=electron"
             echo "POWERSYNC_URL=https://powersync.anchorshop.cloud"
+            echo "VITE_POWERSYNC_URL=https://powersync.anchorshop.cloud"
             echo "POWERSYNC_API_URL=https://anchorshop.cloud"
             echo "APP_SECRET_HEADER=auto-pos-secret-handshake-2026"
+            echo "VITE_APP_SECRET=auto-pos-secret-handshake-2026"
             printf 'POWERSYNC_PUBLIC_KEY=%s\n' "$PS_PUBLIC_KEY"
           } > .env
 
