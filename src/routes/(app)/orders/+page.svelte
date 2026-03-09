@@ -39,23 +39,63 @@
 			params.push(p, p, p, p);
 		}
 
-		const [countResult, orders] = await Promise.all([
-			powersync.db.get(`SELECT count(*) as count FROM orders o LEFT JOIN customers c ON o.customer_id = c.id ${where}`, params),
-			powersync.db.getAll(`
-				SELECT o.id, o.order_number as orderNumber, o.total_amount as totalAmount,
-					o.status, o.payment_method as paymentMethod, o.created_at as createdAt,
-					c.name as customerName, u.name as userName
-				FROM orders o
-				LEFT JOIN customers c ON o.customer_id = c.id
-				LEFT JOIN users u ON o.user_id = u.id
-				${where}
-				ORDER BY o.created_at DESC LIMIT ? OFFSET ?
-			`, [...params, perPage, offset])
-		]);
+		try {
+			// 1. Get synced orders from PowerSync tables
+			const [countResult, syncedOrders] = await Promise.all([
+				powersync.db.get(`SELECT count(*) as count FROM orders o LEFT JOIN customers c ON o.customer_id = c.id ${where}`, params),
+				powersync.db.getAll(`
+					SELECT o.id, o.order_number as orderNumber, o.total_amount as totalAmount,
+						o.status, o.payment_method as paymentMethod, o.created_at as createdAt,
+						c.name as customerName, u.name as userName
+					FROM orders o
+					LEFT JOIN customers c ON o.customer_id = c.id
+					LEFT JOIN users u ON o.user_id = u.id
+					${where}
+					ORDER BY o.created_at DESC LIMIT ? OFFSET ?
+				`, [...params, perPage, offset])
+			]);
 
-		const total = (countResult as any)?.count ?? 0;
-		nativeOrders = orders as any[];
-		nativePagination = { currentPage: page, totalPages: Math.ceil(total / perPage), totalOrders: total, perPage };
+			// 2. Get PENDING mutations from PowerSync's internal upload queue
+			// This ensures local-first visibility before the server syncs back
+			let pendingOrders: any[] = [];
+			try {
+				const uploadQueue = await powersync.getUploadQueue();
+				const pending = uploadQueue?.filter((m: any) => m.table === 'orders' && (m.op === 'PUT' || m.op === 'PATCH')) || [];
+				
+				pendingOrders = pending.map((m: any) => {
+					const data = m.data;
+					return {
+						id: data.id || m.id,
+						orderNumber: data.order_number || null,
+						totalAmount: data.total_amount,
+						status: 'syncing...',
+						paymentMethod: data.payment_method,
+						createdAt: data.created_at,
+						customerName: 'Pending...',
+						userName: data.user_id === data.user?.id ? data.user?.name : 'Local User'
+					};
+				});
+			} catch (e) {
+				console.warn('[Orders] Could not fetch upload queue:', e);
+			}
+
+			// 3. Merge and deduplicate (synced orders take priority)
+			const merged = [...pendingOrders];
+			const syncedIds = new Set(syncedOrders.map(o => o.id));
+			
+			for (const order of syncedOrders) {
+				merged.push(order);
+			}
+
+			// Re-sort by date
+			merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+			const total = (countResult as any)?.count ?? 0;
+			nativeOrders = merged.slice(0, perPage);
+			nativePagination = { currentPage: page, totalPages: Math.ceil((total + pendingOrders.length) / perPage), totalOrders: total + pendingOrders.length, perPage };
+		} catch (e) {
+			console.error('[Orders] Load failed:', e);
+		}
 	}
 
 	$effect(() => {

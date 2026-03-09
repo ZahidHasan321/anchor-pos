@@ -1,0 +1,32 @@
+12:50:31.750 › App starting...
+12:50:31.757 › [dotenv@17.3.1] injecting env (6) from dist-electron/linux-unpacked/.env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+12:50:31.758 › Loaded .env config from: /mnt/339cc06e-972e-45cf-aed0-2b21bc4f4d69/dev/autolinium/clothing-pos/dist-electron/linux-unpacked/.env
+12:50:31.758 › [dotenv@17.3.1] injecting env (6) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+12:50:31.759 › Loaded .env config from: /mnt/339cc06e-972e-45cf-aed0-2b21bc4f4d69/dev/autolinium/clothing-pos/.env
+12:50:31.759 › Checked for .env at (not found): /mnt/339cc06e-972e-45cf-aed0-2b21bc4f4d69/dev/autolinium/clothing-pos/dist-electron/linux-unpacked/resources/app.asar/.env
+12:50:31.760 › Checked for .env at (not found): /home/zahid/.config/clothing-pos/.env
+12:50:31.884 › Power sleep prevention started
+12:50:31.885 › DATABASE_URL not set, skipping Postgres migrations (Native Client Mode)
+12:50:31.886 › APPIMAGE env is not defined, current application is not an AppImage
+checkForUpdatesAndNotify called, downloadPromise is null
+12:50:32.011 › Using unpacked build at: /mnt/339cc06e-972e-45cf-aed0-2b21bc4f4d69/dev/autolinium/clothing-pos/dist-electron/linux-unpacked/resources/app.asar.unpacked/build/index.js
+12:50:32.011 › --- STARTING SVELTEKIT SERVER BOOT ---
+12:50:32.011 › [Boot] Port: 8000
+12:50:32.012 › [Boot] Origin: http://127.0.0.1:8000
+12:50:32.012 › [Boot] Importing SvelteKit server from: /mnt/339cc06e-972e-45cf-aed0-2b21bc4f4d69/dev/autolinium/clothing-pos/dist-electron/linux-unpacked/resources/app.asar.unpacked/build/index.js
+12:50:32.295 › [DB] No DATABASE_URL found. Running in offline-only mode.
+12:50:32.324 › [Boot] SvelteKit server imported successfully in 312ms
+12:50:32.325 › [Boot] Polling for server readiness at http://127.0.0.1:8000...
+12:50:32.331 › Listening on http://127.0.0.1:8000
+12:50:32.395 › [Boot] Poll attempt 1: Received status 302
+12:50:37.457 › Force showing window after timeout
+[173281:0309/125041.192714:ERROR:zygote_communication_linux.cc(290)] Failed to send GetTerminationStatus message to zygote
+[173281:0309/125041.197054:ERROR:network_service_instance_impl.cc(599)] Network service crashed, restarting service.
+[173281:0309/125041.208579:ERROR:gpu_process_host.cc(991)] GPU process launch failed: error_code=1002
+[173281:0309/125041.213388:ERROR:zygote_communication_linux.cc(290)] Failed to send GetTerminationStatus message to zygote
+[173281:0309/125041.214657:ERROR:gpu_process_host.cc(991)] GPU process launch failed: error_code=1002
+[173281:0309/125041.217552:ERROR:gpu_process_host.cc(991)] GPU process launch failed: error_code=1002
+[173281:0309/125041.219391:ERROR:gpu_process_host.cc(991)] GPU process launch failed: error_code=1002
+[173281:0309/125041.221028:ERROR:gpu_process_host.cc(991)] GPU process launch failed: error_code=1002
+[173281:0309/125041.222216:ERROR:gpu_process_host.cc(991)] GPU process launch failed: error_code=1002
+[173281:0309/125041.222236:FATAL:gpu_data_manager_impl_private.cc(448)] GPU process isn't usable. Goodbye.

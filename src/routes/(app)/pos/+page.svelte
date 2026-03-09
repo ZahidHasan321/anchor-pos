@@ -145,10 +145,13 @@
 	// Native-only logic (PowerSync)
 	async function handleLocalCheckout() {
 		loading = true;
+		console.log('[POS] Starting local checkout...');
 		try {
 			const orderId = crypto.randomUUID();
+			const now = new Date().toISOString(); // Match synced format: "2026-03-09T02:17:33.000Z"
 			
-			await powersync.db.execute(`
+			console.log(`[POS] Inserting order: ${orderId}, Time: ${now}`);
+			const orderResult = await powersync.db.execute(`
 				INSERT INTO orders (
 					id, customer_id, user_id, total_amount, payment_method, 
 					discount_amount, cash_received, change_given, 
@@ -171,30 +174,36 @@
 				cart.paymentMethod === 'mobile' ? cart.mobileMethod : null,
 				cart.paymentMethod === 'mobile' ? cart.mobileTrxId : null,
 				'completed', 
-				new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')
+				now
 			]);
+			console.log('[POS] Order inserted successfully:', orderResult);
 
 			for (const item of cart.items) {
 				const orderItemId = crypto.randomUUID();
+				console.log(`[POS] Inserting order item: ${orderItemId} for variant ${item.variantId}`);
 				await powersync.db.execute(`
 					INSERT INTO order_items (id, order_id, variant_id, quantity, price_at_sale, cost_at_sale, discount, product_name, variant_label, status)
 					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				`, [orderItemId, orderId, item.variantId, item.quantity, item.price, item.costPrice || 0, item.discount || 0, item.productName, `${item.size}${item.color ? ' / ' + item.color : ''}`, 'completed']);
 				
+				console.log(`[POS] Updating stock for variant: ${item.variantId}`);
 				await powersync.db.execute('UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.variantId]);
 
 				// Log stock change locally
+				console.log(`[POS] Logging stock change for variant: ${item.variantId}`);
 				await powersync.db.execute(`
 					INSERT INTO stock_logs (id, variant_id, change_amount, reason, user_id, created_at)
 					VALUES (?, ?, ?, ?, ?, ?)
-				`, [crypto.randomUUID(), item.variantId, -item.quantity, 'sale', data.user?.id, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
+				`, [crypto.randomUUID(), item.variantId, -item.quantity, 'sale', data.user?.id, now]);
 			}
 
 			// Add to cashbook locally
+			const cashbookId = crypto.randomUUID();
+			console.log(`[POS] Inserting cashbook entry: ${cashbookId}`);
 			await powersync.db.execute(`
 				INSERT INTO cashbook (id, amount, type, description, user_id, created_at)
 				VALUES (?, ?, ?, ?, ?, ?)
-			`, [crypto.randomUUID(), cart.subtotal, 'in', `Sale ${orderId.slice(0, 8).toUpperCase()}`, data.user?.id, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
+			`, [cashbookId, cart.subtotal, 'in', `Sale ${orderId.slice(0, 8).toUpperCase()}`, data.user?.id, now]);
 
 			completedOrder = {
 				orderId,
@@ -204,6 +213,7 @@
 				total: cart.subtotal,
 				cashReceived: cart.cashReceived
 			};
+			console.log('[POS] Checkout process complete.');
 			cart.clear();
 			checkoutOpen = false;
 			toast.success('Sale completed offline!');

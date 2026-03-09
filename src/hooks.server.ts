@@ -158,7 +158,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Global Route Guard
 	const isAuthRoute = event.url.pathname.startsWith('/login');
 	const isApiRoute = event.url.pathname.startsWith('/api');
-	const isRemoteAuthRoute = event.url.pathname.startsWith('/api/auth/remote-login') || event.url.pathname.startsWith('/api/auth/remote-powersync-token') || event.url.pathname.startsWith('/api/powersync/upload');
+	const isRemoteAuthRoute = event.url.pathname.startsWith('/api/auth/remote-login') || event.url.pathname.startsWith('/api/auth/remote-powersync-token') || event.url.pathname.startsWith('/api/powersync/upload') || event.url.pathname.startsWith('/api/powersync/token');
 	const isWellKnown = event.url.pathname.startsWith('/.well-known');
 
 	if (!event.locals.user && !isAuthRoute && !isRemoteAuthRoute && !isWellKnown) {

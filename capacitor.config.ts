@@ -9,7 +9,8 @@ const config: CapacitorConfig = {
 		url: 'https://anchorshop.cloud',
 		cleartext: true,
 		androidScheme: 'https',
-		errorPath: '/offline.html'
+		errorPath: 'offline.html', // Try without leading slash
+		allowNavigation: ['anchorshop.cloud', '*.anchorshop.cloud']
 	},
 	plugins: {
 		CapacitorThermalPrinter: {}

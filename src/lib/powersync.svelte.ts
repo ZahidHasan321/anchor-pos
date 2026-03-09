@@ -12,7 +12,7 @@ export class PowerSyncManager {
     isConnected = $state(false);
     /** Increments each time a sync completes — use as a dependency in $effect to re-query */
     dataVersion = $state(0);
-    connectionStatus = $state<'online' | 'offline' | 'syncing'>('offline');
+    connectionStatus = $state<'online' | 'offline' | 'syncing' | 'unreachable'>('offline');
     private _readyResolve: (() => void) | null = null;
     private _readyPromise: Promise<void>;
     private _lastToastTime = 0;
@@ -92,8 +92,16 @@ export class PowerSyncManager {
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                         try {
                             const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
-                            const res = await fetch(`${baseUrl}/api/powersync/token`, {
-                                credentials: isStandardWeb ? 'include' : 'omit'
+                            // Always fetch from local server to use local session cookie
+                            const appSecret = import.meta.env.VITE_APP_SECRET || 'auto-pos-secret-handshake-2026';
+                            const userId = this._currentUserId || providedUserId || '';
+
+                            const res = await fetch(`/api/powersync/token`, {
+                                credentials: isStandardWeb ? 'include' : 'omit',
+                                headers: {
+                                    'x-app-secret': appSecret,
+                                    'x-user-id': userId
+                                }
                             });
                             if (!res.ok) {
                                 const body = await res.text().catch(() => '');
@@ -127,8 +135,21 @@ export class PowerSyncManager {
 
                     const appSecret = import.meta.env.VITE_APP_SECRET || 'auto-pos-secret-handshake-2026';
                     const mutationCount = transaction.crud?.length ?? 0;
-                    const tables = [...new Set((transaction.crud || []).map((m: any) => m.table))];
+                    
+                    // The PowerSync CrudEntry has properties like: table, op, id, opData
+                    // But we should double check if it's 'table' or 'tx_table' in this context
+                    const mutations = transaction.crud.map((m: any) => ({
+                        table: m.table,
+                        op: m.op,
+                        id: m.id,
+                        opData: m.opData
+                    }));
+
+                    const tables = [...new Set(mutations.map((m: any) => m.table))];
                     console.log(`[PowerSync] Uploading ${mutationCount} mutations for tables: ${tables.join(', ')}`);
+                    if (mutationCount > 0) {
+                        console.log('[PowerSync] First mutation sample:', JSON.stringify(mutations[0]));
+                    }
 
                     try {
                         const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
@@ -153,24 +174,28 @@ export class PowerSyncManager {
                             console.log(`[PowerSync] Uploading using user ID: ${userId}`);
                         }
 
-                        const res = await fetch(`${baseUrl}/api/powersync/upload`, {
+                        // Always upload to local server to use local session cookie and bypass CORS
+                        const res = await fetch(`/api/powersync/upload`, {
                             method: 'POST',
                             headers: { 
                                 'Content-Type': 'application/json',
                                 'x-app-secret': appSecret,
                                 'x-user-id': userId
                             },
-                            credentials: isStandardWeb ? 'include' : 'omit',
-                            body: JSON.stringify({ mutations: transaction.crud })
+                            credentials: isStandardWeb ? 'include' : 'omit'
+,
+                            body: JSON.stringify({ mutations })
                         });
 
                         if (res.ok) {
+                            const result = await res.json().catch(() => ({}));
+                            console.log(`[PowerSync] Upload successful (${mutationCount} mutations). Proxy response:`, result);
                             await transaction.complete();
-                            console.log(`[PowerSync] Upload successful (${mutationCount} mutations)`);
                             return;
                         }
 
                         const body = await res.text().catch(() => '');
+                        console.error(`[PowerSync] Upload failed: ${res.status}`, body);
                         throw new Error(`Upload failed: ${res.status} ${body}`);
                     } catch (e) {
                         // Throw so PowerSync uses its own exponential backoff.
@@ -351,6 +376,22 @@ export class PowerSyncManager {
     waitForReady(): Promise<void> {
         if (this.ready) return Promise.resolve();
         return this._readyPromise;
+    }
+
+    async getUploadQueue() {
+        if (!this.db) return [];
+        try {
+            const result = await this.db.getAll('SELECT * FROM ps_crud ORDER BY id ASC');
+            return result.map((row: any) => ({
+                id: row.id,
+                table: row.tx_table, // ps_crud uses tx_table
+                op: row.tx_op,
+                data: JSON.parse(row.tx_data)
+            }));
+        } catch (e) {
+            console.warn('[PowerSync] Failed to fetch upload queue:', e);
+            return [];
+        }
     }
 
     watchQuery<T = any>(sql: string, params: any[] = []): { current: T[]; stop: () => void } {
