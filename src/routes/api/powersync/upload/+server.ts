@@ -11,6 +11,7 @@ import type { RequestHandler } from './$types';
  */
 function toCamel(obj: Record<string, any>): Record<string, any> {
     const result: Record<string, any> = {};
+    if (!obj) return result;
     for (const [key, value] of Object.entries(obj)) {
         let finalKey: string;
         if (key === 'mobile_trx_id') {
@@ -20,7 +21,6 @@ function toCamel(obj: Record<string, any>): Record<string, any> {
         }
 
         // Convert ISO strings back to Date objects for Drizzle timestamps
-        // Matches strings like 2026-03-07T12:34:56.789Z
         if (typeof value === 'string' && value.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(value)) {
             const d = new Date(value);
             if (!isNaN(d.getTime())) {
@@ -73,14 +73,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
                 }
                 const vpsBody = await res.text().catch(() => '');
                 console.error(`[PowerSync] VPS upload returned ${res.status}: ${vpsBody}`);
-                // Return 503 so PowerSync retries — do NOT return 200
                 return json({ error: 'VPS upload failed', detail: vpsBody }, { status: 503 });
             } catch (e) {
                 console.error('[PowerSync] VPS unreachable:', e);
                 return json({ error: 'VPS unreachable' }, { status: 503 });
             }
         }
-        // No DB and not Electron — nothing we can do
         return json({ error: 'No database connection' }, { status: 503 });
     }
 
@@ -88,69 +86,83 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         await db.transaction(async (tx: any) => {
             console.log(`[PowerSync] Processing ${mutations.length} mutations from user ${userId}`);
             for (const mutation of mutations) {
-                const { table, op, id, opData } = mutation;
-                const data = toCamel(opData || {});
+                // Support both Web SDK {type, data} and our proxy {table, opData}
+                const table = mutation.table || mutation.type;
+                const op = mutation.op;
+                const id = mutation.id;
+                const opData = mutation.opData || mutation.data;
                 
+                const data = toCamel(opData || {});
                 console.log(`[PowerSync] -> ${op} on ${table} (${id})`);
 
                 if (table === 'orders') {
-                    if (op === 'PUT') {
-                        await tx.insert(orders).values({ ...data, id, userId }).onConflictDoUpdate({
+                    if (op === 'PUT' || op === 'PATCH') {
+                        const existing = op === 'PATCH' ? (await tx.select().from(orders).where(eq(orders.id, id)).limit(1))[0] : {};
+                        const mergedData = { ...existing, ...data, id, userId };
+                        await tx.insert(orders).values(mergedData).onConflictDoUpdate({
                             target: orders.id,
-                            set: data
+                            set: mergedData
                         });
                     } else if (op === 'DELETE') {
                         await tx.delete(orders).where(eq(orders.id, id));
                     }
                 } else if (table === 'order_items') {
-                    if (op === 'PUT') {
-                        await tx.insert(orderItems).values({ ...data, id }).onConflictDoUpdate({
+                    if (op === 'PUT' || op === 'PATCH') {
+                        const existing = op === 'PATCH' ? (await tx.select().from(orderItems).where(eq(orderItems.id, id)).limit(1))[0] : {};
+                        const mergedData = { ...existing, ...data, id };
+                        await tx.insert(orderItems).values(mergedData).onConflictDoUpdate({
                             target: orderItems.id,
-                            set: data
+                            set: mergedData
                         });
                     } else if (op === 'DELETE') {
                         await tx.delete(orderItems).where(eq(orderItems.id, id));
                     }
                 } else if (table === 'product_variants') {
-                    if (op === 'PUT') {
-                        await tx.insert(productVariants).values({ ...data, id }).onConflictDoUpdate({
+                    if (op === 'PUT' || op === 'PATCH') {
+                        const existing = op === 'PATCH' ? (await tx.select().from(productVariants).where(eq(productVariants.id, id)).limit(1))[0] : {};
+                        const mergedData = { ...existing, ...data, id };
+                        await tx.insert(productVariants).values(mergedData).onConflictDoUpdate({
                             target: productVariants.id,
-                            set: data
+                            set: mergedData
                         });
                     } else if (op === 'DELETE') {
                         await tx.delete(productVariants).where(eq(productVariants.id, id));
                     }
                 } else if (table === 'stock_logs') {
-                    if (op === 'PUT') {
-                        await tx.insert(stockLogs).values({ ...data, id, userId }).onConflictDoUpdate({
+                    if (op === 'PUT' || op === 'PATCH') {
+                        const existing = op === 'PATCH' ? (await tx.select().from(stockLogs).where(eq(stockLogs.id, id)).limit(1))[0] : {};
+                        const mergedData = { ...existing, ...data, id, userId };
+                        await tx.insert(stockLogs).values(mergedData).onConflictDoUpdate({
                             target: stockLogs.id,
-                            set: data
+                            set: mergedData
                         });
                     }
                 } else if (table === 'customers') {
-                    if (op === 'PUT') {
-                        // Handle customer conflicts on phone as well as id
+                    if (op === 'PUT' || op === 'PATCH') {
                         if (data.phone) {
-                            const existing = await tx.select().from(customers).where(eq(customers.phone, data.phone)).limit(1);
-                            if (existing.length > 0 && existing[0].id !== id) {
-                                await tx.update(customers)
-                                    .set({ ...data, id })
-                                    .where(eq(customers.phone, data.phone));
+                            const existingPhone = await tx.select().from(customers).where(eq(customers.phone, data.phone)).limit(1);
+                            if (existingPhone.length > 0 && existingPhone[0].id !== id) {
+                                const merged = { ...existingPhone[0], ...data, id };
+                                await tx.update(customers).set(merged).where(eq(customers.phone, data.phone));
                                 continue;
                             }
                         }
-                        await tx.insert(customers).values({ ...data, id }).onConflictDoUpdate({
+                        const existing = op === 'PATCH' ? (await tx.select().from(customers).where(eq(customers.id, id)).limit(1))[0] : {};
+                        const mergedData = { ...existing, ...data, id };
+                        await tx.insert(customers).values(mergedData).onConflictDoUpdate({
                             target: customers.id,
-                            set: data
+                            set: mergedData
                         });
                     } else if (op === 'DELETE') {
                         await tx.delete(customers).where(eq(customers.id, id));
                     }
                 } else if (table === 'cashbook') {
-                    if (op === 'PUT') {
-                        await tx.insert(cashbook).values({ ...data, id, userId }).onConflictDoUpdate({
+                    if (op === 'PUT' || op === 'PATCH') {
+                        const existing = op === 'PATCH' ? (await tx.select().from(cashbook).where(eq(cashbook.id, id)).limit(1))[0] : {};
+                        const mergedData = { ...existing, ...data, id, userId };
+                        await tx.insert(cashbook).values(mergedData).onConflictDoUpdate({
                             target: cashbook.id,
-                            set: data
+                            set: mergedData
                         });
                     }
                 }

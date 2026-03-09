@@ -81,7 +81,7 @@
 
 			// 3. Merge and deduplicate (synced orders take priority)
 			const merged = [...pendingOrders];
-			const syncedIds = new Set(syncedOrders.map(o => o.id));
+			const syncedIds = new Set(syncedOrders.map((o: any) => o.id));
 			
 			for (const order of syncedOrders) {
 				merged.push(order);
