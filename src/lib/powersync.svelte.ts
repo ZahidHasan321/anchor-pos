@@ -15,8 +15,6 @@ export class PowerSyncManager {
     connectionStatus = $state<'online' | 'offline' | 'syncing' | 'unreachable'>('offline');
     private _readyResolve: (() => void) | null = null;
     private _readyPromise: Promise<void>;
-    private _lastToastTime = 0;
-    private _lastToastType = '';
 
     constructor() {
         this._readyPromise = new Promise((resolve) => {
@@ -225,47 +223,15 @@ export class PowerSyncManager {
         }
     }
 
-    private _fireToast(type: string, fn: () => void) {
-        const now = Date.now();
-        if (type === this._lastToastType && now - this._lastToastTime < 3000) return;
-        this._lastToastType = type;
-        this._lastToastTime = now;
-        fn();
-    }
-
-    private async _checkUploadQueueAndToast() {
-        try {
-            const result = await this.db.get('SELECT COUNT(*) as cnt FROM ps_crud') as { cnt: number } | null;
-            if (result && result.cnt > 0) {
-                this._fireToast('upload-pending', () =>
-                    toast.warning(`${result.cnt} changes pending upload. Check your connection.`)
-                );
-            } else {
-                this._fireToast('synced', () =>
-                    toast.success('Data synced successfully')
-                );
-            }
-        } catch {
-            // ps_crud might not exist — just show success
-            this._fireToast('synced', () =>
-                toast.success('Data synced successfully')
-            );
-        }
-    }
-
     private _listenForSyncChanges() {
         let lastConnected = false;
         let lastDownloading = false;
-        let lastUploading = false;
         let initialSync = true;
 
         // Also listen for browser online/offline events
         if (browser) {
             window.addEventListener('offline', () => {
                 this.connectionStatus = 'offline';
-                this._fireToast('offline', () =>
-                    toast.warning('You are offline. Changes will sync when reconnected.')
-                );
             });
             window.addEventListener('online', () => {
                 // PowerSync will reconnect automatically; mark syncing
@@ -293,30 +259,6 @@ export class PowerSyncManager {
                     this.connectionStatus = 'online';
                 }
 
-                // Toast: went offline
-                if (!connected && lastConnected) {
-                    this._fireToast('offline', () =>
-                        toast.warning('You are offline. Changes will sync when reconnected.')
-                    );
-                }
-
-                // Toast: came back online
-                if (connected && !lastConnected && !initialSync) {
-                    this._fireToast('reconnect', () =>
-                        toast.info('Back online. Syncing...')
-                    );
-                }
-
-                // Toast: sync completed (only when BOTH download and upload are idle)
-                if (connected && !initialSync && !isSyncing) {
-                    const downloadFinished = !downloading && lastDownloading;
-                    const uploadFinished = !uploading && lastUploading;
-                    if (downloadFinished || uploadFinished) {
-                        // Check if there are still pending uploads before declaring success
-                        this._checkUploadQueueAndToast();
-                    }
-                }
-
                 // Detect when downloading completes (transition from downloading to idle)
                 if (connected && downloading === false && lastConnected) {
                     this.dataVersion++;
@@ -325,7 +267,6 @@ export class PowerSyncManager {
 
                 lastConnected = connected;
                 lastDownloading = downloading;
-                lastUploading = uploading;
                 initialSync = false;
             }
         });

@@ -216,7 +216,7 @@
 			console.log('[POS] Checkout process complete.');
 			cart.clear();
 			checkoutOpen = false;
-			toast.success('Sale completed offline!');
+			toast.success('Sale completed!');
 		} catch (e: any) {
 			toast.error('Local checkout failed: ' + e.message);
 		} finally {
@@ -238,7 +238,7 @@
 			await powersync.db.execute('INSERT INTO customers (id, name, phone) VALUES (?, ?, ?)', [id, name, phone]);
 			cart.setCustomer({ id, name, phone });
 			customerDialogOpen = false;
-			toast.success('Customer added locally');
+			toast.success('Customer added!');
 		} finally {
 			loading = false;
 		}
