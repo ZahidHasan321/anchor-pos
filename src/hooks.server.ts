@@ -178,7 +178,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// CORS & Security Headers
 	const origin = event.request.headers.get('origin');
-	const isLocalOrigin = origin && (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin.startsWith('app://'));
+	const isLocalOrigin = origin && (
+		origin.startsWith('http://localhost') || 
+		origin.startsWith('http://127.0.0.1') || 
+		origin.startsWith('app://') ||
+		origin.includes('anchorshop.cloud')
+	);
 
 	if (origin) {
 		console.log(`[CORS Check] Path: ${event.url.pathname}, Origin: ${origin}, Allowed: ${isLocalOrigin}`);

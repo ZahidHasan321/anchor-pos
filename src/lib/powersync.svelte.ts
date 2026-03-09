@@ -90,12 +90,13 @@ export class PowerSyncManager {
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                         try {
                             const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
+                            const isCapacitor = (window as any).Capacitor !== undefined;
                             // Always fetch from local server to use local session cookie
                             const appSecret = import.meta.env.VITE_APP_SECRET || 'auto-pos-secret-handshake-2026';
                             const userId = this._currentUserId || providedUserId || '';
 
                             const res = await fetch(`/api/powersync/token`, {
-                                credentials: isStandardWeb ? 'include' : 'omit',
+                                credentials: (isStandardWeb || isCapacitor) ? 'include' : 'omit',
                                 headers: {
                                     'x-app-secret': appSecret,
                                     'x-user-id': userId
@@ -150,6 +151,7 @@ export class PowerSyncManager {
 
                     try {
                         const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
+                        const isCapacitor = (window as any).Capacitor !== undefined;
                         // Use stored ID, then provided ID, then fallback to cookie scraping
                         let userId = this._currentUserId || providedUserId || '';
                         
@@ -179,7 +181,7 @@ export class PowerSyncManager {
                                 'x-app-secret': appSecret,
                                 'x-user-id': userId
                             },
-                            credentials: isStandardWeb ? 'include' : 'omit'
+                            credentials: (isStandardWeb || isCapacitor) ? 'include' : 'omit'
 ,
                             body: JSON.stringify({ mutations })
                         });

@@ -130,10 +130,13 @@ export async function invalidateSession(sessionId: string): Promise<void> {
 }
 
 export function setSessionTokenCookie(event: RequestEvent, token: string, expiresAt: Date): void {
+	const origin = event.request.headers.get('origin') || '';
+	const sameSite = (origin.includes('anchorshop.cloud') && !origin.includes('localhost')) ? 'lax' : 'none';
+	
 	event.cookies.set('session', token, {
 		httpOnly: true,
-		sameSite: 'none', // Allow cross-origin for Electron
-		secure: true,     // Required for sameSite: 'none'
+		sameSite: sameSite, // Use Lax for production web, None for cross-origin/Electron
+		secure: true,       // Always secure as we're on HTTPS
 		expires: expiresAt,
 		path: '/'
 	});
