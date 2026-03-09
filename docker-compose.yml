@@ -62,6 +62,8 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       APP_SECRET_HEADER: ${APP_SECRET_HEADER:-auto-pos-secret-handshake-2026}
+      POWERSYNC_API_URL: https://anchorshop.cloud
+      POWERSYNC_URL: https://powersync.anchorshop.cloud
       POWERSYNC_PRIVATE_KEY: ${POWERSYNC_PRIVATE_KEY}
       POWERSYNC_PUBLIC_KEY: ${POWERSYNC_PUBLIC_KEY}
     healthcheck:
