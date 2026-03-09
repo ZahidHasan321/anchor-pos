@@ -96,7 +96,7 @@ export class PowerSyncManager {
                             const userId = this._currentUserId || providedUserId || '';
 
                             const res = await fetch(`/api/powersync/token`, {
-                                credentials: (isStandardWeb || isCapacitor) ? 'include' : 'omit',
+                                credentials: isStandardWeb ? 'include' : 'omit',
                                 headers: {
                                     'x-app-secret': appSecret,
                                     'x-user-id': userId
@@ -181,7 +181,7 @@ export class PowerSyncManager {
                                 'x-app-secret': appSecret,
                                 'x-user-id': userId
                             },
-                            credentials: (isStandardWeb || isCapacitor) ? 'include' : 'omit'
+                            credentials: isStandardWeb ? 'include' : 'omit'
 ,
                             body: JSON.stringify({ mutations })
                         });
