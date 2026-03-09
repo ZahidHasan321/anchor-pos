@@ -205,7 +205,7 @@
 						<Package class="h-3.5 w-3.5 text-blue-600" />
 					</div>
 				</div>
-				<div class="mt-1.5 text-xl font-black sm:mt-2 sm:text-2xl">
+				<div class="mt-1.5 text-xl font-black break-all sm:mt-2 sm:text-2xl">
 					{nativeData.stats.totalProducts}
 				</div>
 			</div>
@@ -217,7 +217,7 @@
 						<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
 					</div>
 				</div>
-				<div class="mt-1.5 text-xl font-black text-emerald-600 sm:mt-2 sm:text-2xl">
+				<div class="mt-1.5 text-xl font-black break-all text-emerald-600 sm:mt-2 sm:text-2xl">
 					{formatCurrency(nativeData.stats.totalRetailValue)}
 				</div>
 			</div>
@@ -229,7 +229,7 @@
 						<Package class="h-3.5 w-3.5 text-indigo-600" />
 					</div>
 				</div>
-				<div class="mt-1.5 text-xl font-black text-indigo-600 sm:mt-2 sm:text-2xl">
+				<div class="mt-1.5 text-xl font-black break-all text-indigo-600 sm:mt-2 sm:text-2xl">
 					{formatCurrency(nativeData.stats.totalCostValue)}
 				</div>
 			</div>
@@ -244,7 +244,7 @@
 						<AlertTriangle class="h-3.5 w-3.5 text-amber-600" />
 					</div>
 				</div>
-				<div class="mt-1.5 text-xl font-black text-amber-600 sm:mt-2 sm:text-2xl">
+				<div class="mt-1.5 text-xl font-black break-all text-amber-600 sm:mt-2 sm:text-2xl">
 					{nativeData.stats.lowStockVariants}
 				</div>
 			</button>
@@ -259,7 +259,7 @@
 						<PackageX class="h-3.5 w-3.5 text-red-600" />
 					</div>
 				</div>
-				<div class="mt-1.5 text-xl font-black text-red-600 sm:mt-2 sm:text-2xl">
+				<div class="mt-1.5 text-xl font-black break-all text-red-600 sm:mt-2 sm:text-2xl">
 					{nativeData.stats.outOfStockVariants}
 				</div>
 			</button>
@@ -276,7 +276,7 @@
 							<Package class="h-3.5 w-3.5 text-blue-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-xl font-black sm:mt-2 sm:text-2xl">
+					<div class="mt-1.5 text-xl font-black break-all sm:mt-2 sm:text-2xl">
 						{streamed.stats.totalProducts}
 					</div>
 				</div>
@@ -288,7 +288,7 @@
 							<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-xl font-black text-emerald-600 sm:mt-2 sm:text-2xl">
+					<div class="mt-1.5 text-xl font-black break-all text-emerald-600 sm:mt-2 sm:text-2xl">
 						{formatCurrency(streamed.stats.totalRetailValue)}
 					</div>
 				</div>
@@ -300,7 +300,7 @@
 							<Package class="h-3.5 w-3.5 text-indigo-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-xl font-black text-indigo-600 sm:mt-2 sm:text-2xl">
+					<div class="mt-1.5 text-xl font-black break-all text-indigo-600 sm:mt-2 sm:text-2xl">
 						{formatCurrency(streamed.stats.totalCostValue)}
 					</div>
 				</div>
@@ -315,7 +315,7 @@
 							<AlertTriangle class="h-3.5 w-3.5 text-amber-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-xl font-black text-amber-600 sm:mt-2 sm:text-2xl">
+					<div class="mt-1.5 text-xl font-black break-all text-amber-600 sm:mt-2 sm:text-2xl">
 						{streamed.stats.lowStockVariants}
 					</div>
 				</button>
@@ -330,7 +330,7 @@
 							<PackageX class="h-3.5 w-3.5 text-red-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-xl font-black text-red-600 sm:mt-2 sm:text-2xl">
+					<div class="mt-1.5 text-xl font-black break-all text-red-600 sm:mt-2 sm:text-2xl">
 						{streamed.stats.outOfStockVariants}
 					</div>
 				</button>
@@ -421,7 +421,7 @@
 										>
 									</div>
 								</Table.Cell>
-								<Table.Cell><span class="font-semibold">{getPriceRange(product)}</span></Table.Cell>
+								<Table.Cell><span class="font-semibold break-all">{getPriceRange(product)}</span></Table.Cell>
 								<Table.Cell>
 									{@const total = product.variants.reduce(
 										(s: number, v: { stockQuantity: number }) => s + v.stockQuantity,
@@ -523,7 +523,7 @@
 											>
 										</div>
 									</Table.Cell>
-									<Table.Cell><span class="font-semibold">{getPriceRange(product)}</span></Table.Cell>
+									<Table.Cell><span class="font-semibold break-all">{getPriceRange(product)}</span></Table.Cell>
 									<Table.Cell>
 										{@const total = product.variants.reduce(
 											(s: number, v: { stockQuantity: number }) => s + v.stockQuantity,

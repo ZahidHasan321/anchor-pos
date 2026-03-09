@@ -305,7 +305,7 @@
 							<ShoppingBag class="h-3.5 w-3.5 text-indigo-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-lg font-bold sm:mt-2 sm:text-2xl">{summaries.itemsSold}</div>
+					<div class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl">{summaries.itemsSold}</div>
 					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
 						Avg {formatCurrency(summaries.salesSummary.avgOrder)}/order
 					</p>
@@ -329,7 +329,7 @@
 						</div>
 					</div>
 					<div
-						class="mt-1.5 text-lg font-bold sm:mt-2 sm:text-2xl {summaries.grossProfit >= 0
+						class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl {summaries.grossProfit >= 0
 							? 'text-emerald-600'
 							: 'text-red-600'}"
 					>
@@ -358,7 +358,7 @@
 						</div>
 					</div>
 					<div
-						class="mt-1.5 text-lg font-bold sm:mt-2 sm:text-2xl {(summaries.netProfit ?? 0) >= 0
+						class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl {(summaries.netProfit ?? 0) >= 0
 							? 'text-emerald-600'
 							: 'text-red-600'}"
 					>
@@ -378,7 +378,7 @@
 							<Plus class="h-3.5 w-3.5 text-emerald-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-lg font-bold text-emerald-600 sm:mt-2 sm:text-2xl">
+					<div class="mt-1.5 text-lg font-bold break-all text-emerald-600 sm:mt-2 sm:text-2xl">
 						{summaries.totalStocked}
 					</div>
 					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">Units added</p>
@@ -391,7 +391,7 @@
 							<Percent class="h-3.5 w-3.5 text-amber-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-lg font-bold text-amber-600 sm:mt-2 sm:text-2xl">
+					<div class="mt-1.5 text-lg font-bold break-all text-amber-600 sm:mt-2 sm:text-2xl">
 						{formatCurrency(summaries.salesSummary.totalDiscount)}
 					</div>
 					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
@@ -429,7 +429,7 @@
 							<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-xl font-black text-emerald-600 sm:mt-2 sm:text-2xl">
+					<div class="mt-1.5 text-xl font-black break-all text-emerald-600 sm:mt-2 sm:text-2xl">
 						{formatCurrency(summaries.inventoryRetailValue)}
 					</div>
 					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
@@ -446,7 +446,7 @@
 							<Package class="h-3.5 w-3.5 text-indigo-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-xl font-black text-indigo-600 sm:mt-2 sm:text-2xl">
+					<div class="mt-1.5 text-xl font-black break-all text-indigo-600 sm:mt-2 sm:text-2xl">
 						{formatCurrency(summaries.inventoryCostValue)}
 					</div>
 					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
@@ -463,7 +463,7 @@
 							<TrendingUp class="h-3.5 w-3.5 text-blue-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-xl font-black text-blue-600 sm:mt-2 sm:text-2xl">
+					<div class="mt-1.5 text-xl font-black break-all text-blue-600 sm:mt-2 sm:text-2xl">
 						{formatCurrency(summaries.inventoryRetailValue - summaries.inventoryCostValue)}
 					</div>
 					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
@@ -752,7 +752,7 @@
 									>
 										<Table.Cell class="pl-6 font-medium">{p.productName}</Table.Cell>
 										<Table.Cell class="text-right">{p.totalQty}</Table.Cell>
-										<Table.Cell class="pr-6 text-right font-semibold"
+										<Table.Cell class="pr-6 text-right font-semibold break-all"
 											>{formatCurrency(p.totalRevenue)}</Table.Cell
 									>
 								</Table.Row>
