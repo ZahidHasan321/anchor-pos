@@ -282,6 +282,8 @@ export class PowerSyncManager {
                 const connected = !!status?.connected;
                 const isSyncing = connected && (downloading || uploading);
 
+                console.log(`[PowerSync] Status: connected=${connected}, downloading=${downloading}, uploading=${uploading}, isSyncing=${isSyncing}`);
+
                 // Update connection status
                 if (!connected) {
                     this.connectionStatus = 'offline';
