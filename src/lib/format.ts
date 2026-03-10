@@ -20,8 +20,8 @@ function getCurrencyFormatter(): Intl.NumberFormat {
 	return cachedFormatter;
 }
 
-export function formatCurrency(amount: number): string {
-	return getCurrencyFormatter().format(amount);
+export function formatCurrency(amount: number | null | undefined): string {
+	return getCurrencyFormatter().format(amount ?? 0);
 }
 
 // Get just the currency symbol (e.g. "৳", "$", "€") — cached

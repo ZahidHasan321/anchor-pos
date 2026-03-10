@@ -201,9 +201,9 @@
 			const cashbookId = crypto.randomUUID();
 			console.log(`[POS] Inserting cashbook entry: ${cashbookId}`);
 			await powersync.db.execute(`
-				INSERT INTO cashbook (id, amount, type, description, user_id, created_at)
-				VALUES (?, ?, ?, ?, ?, ?)
-			`, [cashbookId, cart.subtotal, 'in', `Sale ${orderId.slice(0, 8).toUpperCase()}`, data.user?.id, now]);
+				INSERT INTO cashbook (id, amount, type, category, description, user_id, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+			`, [cashbookId, cart.subtotal, 'in', 'sale', `Sale ${orderId.slice(0, 8).toUpperCase()}`, data.user?.id, now]);
 
 			completedOrder = {
 				orderId,

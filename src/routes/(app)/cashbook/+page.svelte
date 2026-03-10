@@ -129,9 +129,9 @@
 	async function handleNativeAddExpense(description: string, amount: number) {
 		if (!data.user) return;
 		await powersync.db.execute(`
-			INSERT INTO cashbook (id, amount, type, description, user_id, created_at)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, [crypto.randomUUID(), amount, 'out', description, data.user.id, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
+			INSERT INTO cashbook (id, amount, type, category, description, user_id, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, [crypto.randomUUID(), amount, 'out', 'expense', description, data.user.id, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
 		// Reload data
 		loadNativeData();
 	}

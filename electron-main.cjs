@@ -364,7 +364,7 @@ async function createWindow() {
                     "default-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' http://127.0.0.1:* http://localhost:* https://anchorshop.cloud https://*.anchorshop.cloud ws://* wss://*; " +
                     "connect-src 'self' http://127.0.0.1:* http://localhost:* https://anchorshop.cloud https://*.anchorshop.cloud ws://* wss://*; " +
                     "img-src 'self' data: blob: https:; " +
-                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' http://127.0.0.1:* http://localhost:*; " +
+                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' http://127.0.0.1:* http://localhost:* https://cdnjs.cloudflare.com; " +
                     "frame-src 'self'; " +
                     "worker-src 'self' blob:;"
                 ];
@@ -583,6 +583,26 @@ ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
     }
 });
 
+// IPC handler: detect COM ports (Windows)
+ipcMain.handle('get-com-ports', async () => {
+    try {
+        const { execSync } = require('child_process');
+        if (process.platform === 'win32') {
+            // Use WMIC to list COM ports with descriptions
+            const output = execSync('powershell -Command "Get-CimInstance -ClassName Win32_PnPEntity | Where-Object { $_.Name -match \'COM\\d+\' } | ForEach-Object { $n = [regex]::Match($_.Name, \'\\(COM\\d+\\)\').Value.Trim(\'()\'); Write-Output \\"$n|$($_.Name)\\" }"', { encoding: 'utf8', timeout: 5000 });
+            const ports = output.trim().split('\n').filter(Boolean).map(line => {
+                const [name, description] = line.trim().split('|');
+                return { name: name || 'Unknown', description: description || name || '' };
+            }).filter(p => p.name.startsWith('COM'));
+            return ports;
+        }
+        return [];
+    } catch (e) {
+        log.error('Failed to detect COM ports:', e);
+        return [];
+    }
+});
+
 // IPC handler: list available printers
 ipcMain.handle('get-printers', async () => {
     if (!mainWindow) return [];
@@ -597,60 +617,102 @@ ipcMain.handle('get-printers', async () => {
 // IPC handler: print to a specific device (returns success/error)
 ipcMain.handle('print-to-device', async (event, html, deviceName, silent = true) => {
     return new Promise((resolve) => {
+        // Write HTML to a temp file for reliable loading (data: URLs block external scripts)
+        const tmpPath = path.join(app.getPath('temp'), `pos-receipt-${Date.now()}.html`);
+        try {
+            fs.writeFileSync(tmpPath, html, 'utf8');
+        } catch (e) {
+            log.error('Failed to write temp receipt file:', e);
+            resolve({ success: false, error: 'Failed to create temp file: ' + e.message });
+            return;
+        }
+
         let printWindow = new BrowserWindow({
             show: false,
-            webPreferences: { offscreen: true }
+            webPreferences: { nodeIntegration: false, contextIsolation: true }
         });
 
-        printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+        // Timeout: don't hang forever if loading fails
+        const timeout = setTimeout(() => {
+            log.error('Print timed out after 15s');
+            try { printWindow.close(); } catch {}
+            try { fs.unlinkSync(tmpPath); } catch {}
+            resolve({ success: false, error: 'Print timed out' });
+        }, 15000);
+
+        printWindow.webContents.on('did-fail-load', (ev, code, desc) => {
+            clearTimeout(timeout);
+            log.error('Print window failed to load:', code, desc);
+            try { printWindow.close(); } catch {}
+            try { fs.unlinkSync(tmpPath); } catch {}
+            resolve({ success: false, error: 'Failed to load receipt: ' + desc });
+        });
 
         printWindow.webContents.on('did-finish-load', () => {
-            const printOptions = {
-                silent,
-                printBackground: true,
-                margins: { marginType: 'none' }
-            };
-            if (deviceName) {
-                printOptions.deviceName = deviceName;
-            }
-
-            printWindow.webContents.print(printOptions, (success, failureReason) => {
-                printWindow.close();
-                if (!success) {
-                    const reason = failureReason || 'Unknown error';
-                    if (reason !== 'Cancelled') {
-                        log.error('Print failed:', reason);
-                    }
-                    resolve({ success: false, error: reason });
-                } else {
-                    resolve({ success: true });
+            // Small delay to let QR code script render
+            setTimeout(() => {
+                const printOptions = {
+                    silent,
+                    printBackground: true,
+                    margins: { marginType: 'none' }
+                };
+                if (deviceName) {
+                    printOptions.deviceName = deviceName;
                 }
-            });
+
+                printWindow.webContents.print(printOptions, (success, failureReason) => {
+                    clearTimeout(timeout);
+                    try { printWindow.close(); } catch {}
+                    try { fs.unlinkSync(tmpPath); } catch {}
+                    if (!success) {
+                        const reason = failureReason || 'Unknown error';
+                        if (reason !== 'Cancelled') {
+                            log.error('Print failed:', reason);
+                        }
+                        resolve({ success: false, error: reason });
+                    } else {
+                        resolve({ success: true });
+                    }
+                });
+            }, 500);
         });
+
+        printWindow.loadFile(tmpPath);
     });
 });
 
 // IPC listener for native printing (legacy — kept for backward compatibility)
 ipcMain.on('print-native', (event, html, preview = false) => {
+    const tmpPath = path.join(app.getPath('temp'), `pos-receipt-native-${Date.now()}.html`);
+    try {
+        fs.writeFileSync(tmpPath, html, 'utf8');
+    } catch (e) {
+        log.error('Failed to write temp receipt file (native):', e);
+        return;
+    }
+
     let printWindow = new BrowserWindow({
         show: false,
-        webPreferences: { offscreen: true }
+        webPreferences: { nodeIntegration: false, contextIsolation: true }
     });
-
-    printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
     printWindow.webContents.on('did-finish-load', () => {
-        printWindow.webContents.print({
-            silent: !preview,
-            printBackground: true,
-            margins: { marginType: 'none' }
-        }, (success, failureReason) => {
-            if (!success && failureReason !== 'Cancelled') {
-                console.error('Print failed:', failureReason);
-            }
-            printWindow.close();
-        });
+        setTimeout(() => {
+            printWindow.webContents.print({
+                silent: !preview,
+                printBackground: true,
+                margins: { marginType: 'none' }
+            }, (success, failureReason) => {
+                if (!success && failureReason !== 'Cancelled') {
+                    console.error('Print failed:', failureReason);
+                }
+                try { printWindow.close(); } catch {}
+                try { fs.unlinkSync(tmpPath); } catch {}
+            });
+        }, 500);
     });
+
+    printWindow.loadFile(tmpPath);
 });
 
 // --- Single Instance Lock ---

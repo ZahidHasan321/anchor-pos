@@ -319,6 +319,12 @@
 			>
 				{#if collapsed}<ChevronRight class="h-5 w-5" />{:else}<ChevronLeft class="h-5 w-5" />{/if}
 			</button>
+
+			{#if !collapsed}
+				<div class="px-3 pb-2 text-center text-[10px] text-muted-foreground opacity-50">
+					v{data.version || '0.0.3'}
+				</div>
+			{/if}
 		</div>
 	</aside>
 

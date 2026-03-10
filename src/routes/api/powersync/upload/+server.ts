@@ -93,6 +93,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
                 const opData = mutation.opData || mutation.data;
                 
                 const data = toCamel(opData || {});
+                // Strip undefined/null values so Postgres defaults kick in for NOT NULL cols
+                for (const k of Object.keys(data)) {
+                    if (data[k] === undefined) delete data[k];
+                }
                 console.log(`[PowerSync] -> ${op} on ${table} (${id})`);
 
                 if (table === 'orders') {
@@ -159,6 +163,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
                 } else if (table === 'cashbook') {
                     if (op === 'PUT' || op === 'PATCH') {
                         const existing = op === 'PATCH' ? (await tx.select().from(cashbook).where(eq(cashbook.id, id)).limit(1))[0] : {};
+                        // Ensure category is never null — old clients may omit it
+                        if (!data.category) data.category = data.type === 'in' ? 'sale' : 'expense';
                         const mergedData = { ...existing, ...data, id, userId };
                         await tx.insert(cashbook).values(mergedData).onConflictDoUpdate({
                             target: cashbook.id,

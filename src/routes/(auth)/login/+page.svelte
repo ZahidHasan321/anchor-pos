@@ -50,10 +50,10 @@
 						class="h-9 w-9 cursor-pointer rounded-full bg-background/50 shadow-sm backdrop-blur-md"
 					>
 						<Sun
-							class="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0"
+							class="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90"
 						/>
 						<Moon
-							class="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100"
+							class="absolute h-[1.2rem] w-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0"
 						/>
 						<span class="sr-only">Toggle theme</span>
 					</Button>
@@ -113,6 +113,15 @@
 							// Special handling for JSON redirect (Native App)
 							if (result.type === 'success' && result.data?.redirect) {
 								goto(result.data.redirect as string);
+								return;
+							}
+
+							// Capacitor Android WebView: use hard navigation after login.
+							// Android WebView has a race where cookies set via fetch() Set-Cookie
+							// aren't immediately available for subsequent fetch() calls. A hard
+							// navigation guarantees the session cookie is sent with the request.
+							if (result.type === 'redirect' && browser && (window as any).Capacitor) {
+								window.location.href = result.location;
 								return;
 							}
 
@@ -206,7 +215,8 @@
 		</Card.Root>
 
 		<p class="text-center text-xs text-muted-foreground">
-			&copy; {new Date().getFullYear()} {APP_NAME}. All rights reserved.
+			&copy; {new Date().getFullYear()}
+			{APP_NAME}. All rights reserved.
 		</p>
 	</div>
 </div>

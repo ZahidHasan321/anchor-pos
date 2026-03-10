@@ -192,6 +192,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (event.request.method === 'OPTIONS' && isLocalOrigin) {
 			return new Response(null, {
 					headers: {
+							'Access-Control-Allow-Origin': origin!,
 							'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 							'Access-Control-Allow-Headers': 'Content-Type, x-app-secret, x-user-id',
 							'Access-Control-Allow-Credentials': 'true'
@@ -199,6 +200,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 			});
 	}
 	const response = await resolve(event);
+
+	// Add CORS headers to actual responses for cross-origin callers (Electron app://)
+	if (isLocalOrigin) {
+		response.headers.set('Access-Control-Allow-Origin', origin!);
+		response.headers.set('Access-Control-Allow-Credentials', 'true');
+	}
 
 	response.headers.set(
 		'Content-Security-Policy',

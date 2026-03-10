@@ -58,6 +58,7 @@
 	let thermalCharacterSet = $state('PC437_USA');
 	let thermalConnectionType = $state('usb_share');
 	let testingThermal = $state(false);
+	let detectedComPorts: Array<{ name: string; description: string }> = $state([]);
 
 	// --- Bluetooth Printer Settings (Mobile/Web/Capacitor) ---
 	let btSupported = $state(false);
@@ -130,6 +131,17 @@
 		} catch (e) {
 			console.error('Failed to get printers:', e);
 			printerList = [];
+		}
+		// Also detect COM ports for USB direct / Bluetooth
+		try {
+			// @ts-ignore
+			if (window.electron?.getComPorts) {
+				// @ts-ignore
+				detectedComPorts = await window.electron.getComPorts();
+			}
+		} catch (e) {
+			console.error('Failed to detect COM ports:', e);
+			detectedComPorts = [];
 		}
 		loadingPrinters = false;
 	}
@@ -646,6 +658,16 @@
 
 						{#if useThermalPrinter}
 							<div class="space-y-4 animate-in duration-200 fade-in slide-in-from-top-1 rounded-lg border bg-muted/20 p-4">
+								<div class="flex justify-end">
+									<Button variant="ghost" size="sm" class="cursor-pointer text-xs h-7" onclick={refreshPrinters} disabled={loadingPrinters}>
+										{#if loadingPrinters}
+											<Loader2 class="mr-1 h-3 w-3 animate-spin" />
+										{:else}
+											<Search class="mr-1 h-3 w-3" />
+										{/if}
+										Refresh Devices
+									</Button>
+								</div>
 								<!-- Connection Type -->
 								<div class="space-y-2">
 									<Label>Connection Type</Label>
@@ -673,29 +695,96 @@
 								<div class="space-y-2">
 									<Label for="thermal_interface">Printer Interface</Label>
 									{#if thermalConnectionType === 'usb_share'}
+										{#if printerList.length > 0}
+											<div class="rounded-md border divide-y max-h-36 overflow-y-auto">
+												{#each printerList as printer}
+													{@const sharePath = `//localhost/${printer.name}`}
+													<button
+														type="button"
+														class="flex w-full items-center justify-between gap-2 p-2.5 text-left hover:bg-muted/50 transition-colors cursor-pointer {thermalPrinterInterface === sharePath ? 'bg-primary/10 border-l-2 border-l-primary' : ''}"
+														onclick={() => { thermalPrinterInterface = sharePath; saveThermalSettings(); }}
+													>
+														<div class="min-w-0">
+															<div class="text-sm font-medium truncate">{printer.name}</div>
+															<div class="text-[10px] text-muted-foreground font-mono">{sharePath}</div>
+														</div>
+														{#if thermalPrinterInterface === sharePath}
+															<div class="text-xs font-bold text-primary shrink-0">Selected</div>
+														{:else if printer.isDefault}
+															<div class="text-[10px] text-muted-foreground shrink-0">Default</div>
+														{/if}
+													</button>
+												{/each}
+											</div>
+											<p class="text-[10px] text-muted-foreground">Select your thermal printer above, or type manually below. Make sure the printer is shared in Windows (Printer Settings &gt; Right-click &gt; Properties &gt; Sharing).</p>
+										{:else}
+											<p class="text-[10px] text-muted-foreground">No printers detected. Share your USB printer in Windows first, then click Refresh.</p>
+										{/if}
 										<Input
 											id="thermal_interface"
 											placeholder="//localhost/XPrinter"
 											bind:value={thermalPrinterInterface}
 											onblur={saveThermalSettings}
 										/>
-										<p class="text-[10px] text-muted-foreground">Share your USB printer in Windows, then enter <code class="bg-muted px-1 rounded">//localhost/ShareName</code>. To find the share name: Printer Settings &gt; Right-click printer &gt; Properties &gt; Sharing tab.</p>
 									{:else if thermalConnectionType === 'usb_direct'}
+										{#if detectedComPorts.length > 0}
+											<div class="rounded-md border divide-y max-h-36 overflow-y-auto">
+												{#each detectedComPorts as port}
+													{@const comPath = `\\\\.\\${port.name}`}
+													<button
+														type="button"
+														class="flex w-full items-center justify-between gap-2 p-2.5 text-left hover:bg-muted/50 transition-colors cursor-pointer {thermalPrinterInterface === comPath ? 'bg-primary/10 border-l-2 border-l-primary' : ''}"
+														onclick={() => { thermalPrinterInterface = comPath; saveThermalSettings(); }}
+													>
+														<div class="min-w-0">
+															<div class="text-sm font-medium truncate">{port.name}</div>
+															<div class="text-[10px] text-muted-foreground truncate">{port.description}</div>
+														</div>
+														{#if thermalPrinterInterface === comPath}
+															<div class="text-xs font-bold text-primary shrink-0">Selected</div>
+														{/if}
+													</button>
+												{/each}
+											</div>
+										{/if}
 										<Input
 											id="thermal_interface"
 											placeholder="\\.\COM3"
 											bind:value={thermalPrinterInterface}
 											onblur={saveThermalSettings}
 										/>
-										<p class="text-[10px] text-muted-foreground">Enter the COM port (e.g. <code class="bg-muted px-1 rounded">\\.\COM3</code>). Check Device Manager &gt; Ports to find your printer's COM port number.</p>
+										<p class="text-[10px] text-muted-foreground">Select a detected port above or type manually. Check Device Manager &gt; Ports for your printer's COM port.</p>
 									{:else}
+										{#if detectedComPorts.length > 0}
+											<div class="rounded-md border divide-y max-h-36 overflow-y-auto">
+												{#each detectedComPorts.filter(p => p.description.toLowerCase().includes('bluetooth') || p.description.toLowerCase().includes('serial')) as port}
+													{@const comPath = `\\\\.\\${port.name}`}
+													<button
+														type="button"
+														class="flex w-full items-center justify-between gap-2 p-2.5 text-left hover:bg-muted/50 transition-colors cursor-pointer {thermalPrinterInterface === comPath ? 'bg-primary/10 border-l-2 border-l-primary' : ''}"
+														onclick={() => { thermalPrinterInterface = comPath; saveThermalSettings(); }}
+													>
+														<div class="min-w-0">
+															<div class="text-sm font-medium truncate">{port.name}</div>
+															<div class="text-[10px] text-muted-foreground truncate">{port.description}</div>
+														</div>
+														{#if thermalPrinterInterface === comPath}
+															<div class="text-xs font-bold text-primary shrink-0">Selected</div>
+														{/if}
+													</button>
+												{/each}
+												{#if detectedComPorts.filter(p => p.description.toLowerCase().includes('bluetooth') || p.description.toLowerCase().includes('serial')).length === 0}
+													<div class="p-2.5 text-sm text-muted-foreground">No Bluetooth serial ports found. Pair your printer first.</div>
+												{/if}
+											</div>
+										{/if}
 										<Input
 											id="thermal_interface"
 											placeholder="\\.\COM5"
 											bind:value={thermalPrinterInterface}
 											onblur={saveThermalSettings}
 										/>
-										<p class="text-[10px] text-muted-foreground">Pair your Bluetooth printer first, then enter its COM port (e.g. <code class="bg-muted px-1 rounded">\\.\COM5</code>). Check Device Manager &gt; Ports (COM & LPT) for the Bluetooth serial port.</p>
+										<p class="text-[10px] text-muted-foreground">Pair your Bluetooth printer in Windows first. Select the detected port above or type manually.</p>
 									{/if}
 								</div>
 

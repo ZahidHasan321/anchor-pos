@@ -1,13 +1,14 @@
 import type { LayoutServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { storeSettings } from '$lib/server/db/schema';
+import pkg from '../../package.json';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const isElectron = process.env.BUILD_TARGET === 'electron';
 
 	// In Electron mode, settings are loaded client-side from PowerSync
 	if (isElectron) {
-		return { user: locals.user, storeSettings: {} };
+		return { user: locals.user, storeSettings: {}, version: pkg.version };
 	}
 
 	const settings: Record<string, string> = {};
@@ -24,6 +25,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 
 	return {
 		user: locals.user,
-		storeSettings: settings
+		storeSettings: settings,
+		version: pkg.version
 	};
 };

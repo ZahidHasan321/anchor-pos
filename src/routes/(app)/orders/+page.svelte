@@ -11,7 +11,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import * as Table from '$lib/components/ui/table';
 	import { formatCurrency, formatDate } from '$lib/format';
-	import { ChevronLeft, ChevronRight, Eye, Search, X } from '@lucide/svelte';
+	import { ChevronLeft, ChevronRight, Search, X } from '@lucide/svelte';
 	import { powersync } from '$lib/powersync.svelte';
 	import { browser } from '$app/environment';
 
@@ -295,13 +295,13 @@
 								<DatePicker
 									bind:value={dateFrom}
 									onchange={applyFilters}
-									class="w-[140px]"
+									class="w-[160px]"
 								/>
 								<span class="text-[10px] font-bold text-muted-foreground/50 uppercase">to</span>
 								<DatePicker
 									bind:value={dateTo}
 									onchange={applyFilters}
-									class="w-[140px]"
+									class="w-[160px]"
 								/>
 							</div>
 						</div>
@@ -376,11 +376,10 @@
 								<Table.Head>Payment</Table.Head>
 								<Table.Head>Amount</Table.Head>
 								<Table.Head>Status</Table.Head>
-								<Table.Head class="text-right">Actions</Table.Head>
-							</Table.Row>
-						</Table.Header>
-						<Table.Body>
-							{#each nativeOrders as order}
+								</Table.Row>
+								</Table.Header>
+								<Table.Body>
+								{#each nativeOrders as order}
 								<Table.Row
 									class="cursor-pointer group"
 									onclick={() => goto(`/orders/${order.id}`)}
@@ -410,14 +409,10 @@
 											{order.status}
 										</Badge>
 									</Table.Cell>
-									<Table.Cell class="text-right">
-										<Button variant="ghost" size="icon" href="/orders/{order.id}" class="opacity-0 group-hover:opacity-100 transition-opacity">
-											<Eye class="h-4 w-4" />
-										</Button>
-									</Table.Cell>
 								</Table.Row>
-							{/each}
-						</Table.Body>
+								{/each}
+								</Table.Body>
+
 					</Table.Root>
 					{#if nativeOrders.length === 0}
 						<div class="flex h-48 items-center justify-center text-muted-foreground italic">
@@ -460,7 +455,6 @@
 									<Table.Head>Payment</Table.Head>
 									<Table.Head>Amount</Table.Head>
 									<Table.Head>Status</Table.Head>
-									<Table.Head class="text-right">Actions</Table.Head>
 								</Table.Row>
 							</Table.Header>
 							<Table.Body>
@@ -493,11 +487,6 @@
 											>
 												{order.status}
 											</Badge>
-										</Table.Cell>
-										<Table.Cell class="text-right">
-											<Button variant="ghost" size="icon" href="/orders/{order.id}" class="opacity-0 group-hover:opacity-100 transition-opacity">
-												<Eye class="h-4 w-4" />
-											</Button>
 										</Table.Cell>
 									</Table.Row>
 								{/each}

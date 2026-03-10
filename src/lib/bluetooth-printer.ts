@@ -100,6 +100,28 @@ async function getCapPlugin(): Promise<any> {
 
 export async function scanDevices(): Promise<void> {
 	const plugin = await getCapPlugin();
+
+	if (isCapacitorNative()) {
+		try {
+			// Capacitor 3+ automatically adds checkPermissions/requestPermissions to plugins
+			// with the @CapacitorPlugin annotation.
+			const status = await plugin.checkPermissions();
+			const needsPermission =
+				status.BLUETOOTH_SCAN === 'prompt' ||
+				status.BLUETOOTH_SCAN === 'prompt-with-rationale' ||
+				status.BLUETOOTH_CONNECT === 'prompt' ||
+				status.BLUETOOTH_CONNECT === 'prompt-with-rationale' ||
+				status.ACCESS_FINE_LOCATION === 'prompt' ||
+				status.ACCESS_FINE_LOCATION === 'prompt-with-rationale';
+
+			if (needsPermission) {
+				await plugin.requestPermissions();
+			}
+		} catch (e) {
+			console.warn('[Bluetooth] Permission check/request failed:', e);
+		}
+	}
+
 	capDiscoveredDevices = [];
 	await plugin.startScan();
 }
@@ -132,6 +154,18 @@ export async function connectToDevice(
 ): Promise<{ success: boolean; name?: string; error?: string }> {
 	try {
 		const plugin = await getCapPlugin();
+
+		if (isCapacitorNative()) {
+			try {
+				const status = await plugin.checkPermissions();
+				if (status.BLUETOOTH_CONNECT === 'prompt' || status.BLUETOOTH_CONNECT === 'prompt-with-rationale') {
+					await plugin.requestPermissions();
+				}
+			} catch (e) {
+				console.warn('[Bluetooth] Permission check/request failed:', e);
+			}
+		}
+
 		const device = await plugin.connect({ address });
 		if (device) {
 			capConnectedFlag = true;

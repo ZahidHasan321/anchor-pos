@@ -447,8 +447,8 @@ export async function addCustomerLocal(name: string, phone?: string) {
 export async function addExpenseLocal(description: string, amount: number, userId: string) {
 	const id = generateId();
 	await powersync.db.execute(`
-		INSERT INTO cashbook (id, amount, type, description, user_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, [id, amount, 'out', description, userId, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
+		INSERT INTO cashbook (id, amount, type, category, description, user_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, [id, amount, 'out', 'expense', description, userId, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
 	return { id };
 }
