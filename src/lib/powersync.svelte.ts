@@ -135,12 +135,13 @@ export class PowerSyncManager {
                     const appSecret = import.meta.env.VITE_APP_SECRET || 'auto-pos-secret-handshake-2026';
                     const mutationCount = transaction.crud?.length ?? 0;
                     
-                    // The PowerSync CrudEntry in Web SDK uses: type, op, id, data
+                    // PowerSync CrudEntry v1.x uses: table, op, id, opData (class properties)
+                    // Note: toJSON() uses 'type' and 'data', but transaction.crud has CrudEntry instances
                     const mutations = transaction.crud.map((m: any) => ({
-                        table: m.type, // Map 'type' to 'table' for our VPS handler
+                        table: m.table,
                         op: m.op,
                         id: m.id,
-                        opData: m.data // Map 'data' to 'opData' for our VPS handler
+                        opData: m.opData
                     }));
 
                     const tables = [...new Set(mutations.map((m: any) => m.table))];

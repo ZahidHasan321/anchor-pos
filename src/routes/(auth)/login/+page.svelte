@@ -116,11 +116,11 @@
 								return;
 							}
 
-							// Capacitor Android WebView: use hard navigation after login.
-							// Android WebView has a race where cookies set via fetch() Set-Cookie
-							// aren't immediately available for subsequent fetch() calls. A hard
-							// navigation guarantees the session cookie is sent with the request.
+							// Capacitor Android WebView: cookies from fetch() Set-Cookie may
+							// not be immediately available. Add a small delay to allow the
+							// WebView to flush cookies to the store before hard navigation.
 							if (result.type === 'redirect' && browser && (window as any).Capacitor) {
+								await new Promise((r) => setTimeout(r, 150));
 								window.location.href = result.location;
 								return;
 							}
