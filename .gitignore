@@ -27,8 +27,8 @@ Thumbs.db
 /ssl/cloudflare/
 
 # Capacitor
-/android/
-/ios/
+# /android/
+# /ios/
 
 # Vite
 vite.config.js.timestamp-*
