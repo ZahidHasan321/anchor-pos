@@ -42,14 +42,14 @@ jobs:
         shell: bash
         env:
           PS_PUBLIC_KEY: ${{ secrets.POWERSYNC_PUBLIC_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET_HEADER }}
         run: |
           {
             echo "BUILD_TARGET=electron"
             echo "POWERSYNC_URL=https://powersync.anchorshop.cloud"
             echo "VITE_POWERSYNC_URL=https://powersync.anchorshop.cloud"
             echo "POWERSYNC_API_URL=https://anchorshop.cloud"
-            echo "APP_SECRET_HEADER=auto-pos-secret-handshake-2026"
-            echo "VITE_APP_SECRET=auto-pos-secret-handshake-2026"
+            printf 'APP_SECRET_HEADER=%s\n' "$APP_SECRET"
             printf 'POWERSYNC_PUBLIC_KEY=%s\n' "$PS_PUBLIC_KEY"
           } > .env
 

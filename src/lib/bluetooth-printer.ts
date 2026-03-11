@@ -50,11 +50,13 @@ export type BluetoothReceiptData = {
 	orderId: string;
 	date: string;
 	cashier: string;
-	items: Array<{ name: string; variant: string; qty: number; total: number }>;
+	items: Array<{ name: string; variant: string; qty: number; total: number; status?: string }>;
 	total: number;
+	originalTotal?: number;
 	cashReceived: number;
 	changeGiven: number;
 	isReprint?: boolean;
+	status?: string;
 };
 
 export type DiscoveredDevice = { name: string; address: string };
@@ -100,28 +102,8 @@ async function getCapPlugin(): Promise<any> {
 
 export async function scanDevices(): Promise<void> {
 	const plugin = await getCapPlugin();
-
-	if (isCapacitorNative()) {
-		try {
-			// Capacitor 3+ automatically adds checkPermissions/requestPermissions to plugins
-			// with the @CapacitorPlugin annotation.
-			const status = await plugin.checkPermissions();
-			const needsPermission =
-				status.BLUETOOTH_SCAN === 'prompt' ||
-				status.BLUETOOTH_SCAN === 'prompt-with-rationale' ||
-				status.BLUETOOTH_CONNECT === 'prompt' ||
-				status.BLUETOOTH_CONNECT === 'prompt-with-rationale' ||
-				status.ACCESS_FINE_LOCATION === 'prompt' ||
-				status.ACCESS_FINE_LOCATION === 'prompt-with-rationale';
-
-			if (needsPermission) {
-				await plugin.requestPermissions();
-			}
-		} catch (e) {
-			console.warn('[Bluetooth] Permission check/request failed:', e);
-		}
-	}
-
+	// The plugin's native bluetoothCheck() handles permission requests internally
+	// and re-invokes the method after granting, so no JS-side permission logic needed.
 	capDiscoveredDevices = [];
 	await plugin.startScan();
 }
@@ -156,14 +138,11 @@ export async function connectToDevice(
 		const plugin = await getCapPlugin();
 
 		if (isCapacitorNative()) {
-			try {
-				const status = await plugin.checkPermissions();
-				if (status.BLUETOOTH_CONNECT === 'prompt' || status.BLUETOOTH_CONNECT === 'prompt-with-rationale') {
-					await plugin.requestPermissions();
-				}
-			} catch (e) {
-				console.warn('[Bluetooth] Permission check/request failed:', e);
+			// Disconnect existing connection before connecting to a new device
+			if (capConnectedFlag) {
+				await capDisconnect();
 			}
+			// The plugin's native bluetoothCheck() handles permission requests internally.
 		}
 
 		const device = await plugin.connect({ address });
@@ -225,7 +204,7 @@ async function printReceiptNative(
 			}
 		}
 
-		const pw = localStorage.getItem('pos-bt-printer-width') === '80' ? 48 : 32;
+		const pw = localStorage.getItem('pos-bt-printer-width') === '58' ? 32 : 48;
 		const s = data.storeSettings;
 
 		plugin.begin();
@@ -244,6 +223,22 @@ async function printReceiptNative(
 		if (s.store_tax_id) plugin.text('VAT: ' + s.store_tax_id + '\n');
 		if (s.store_bin) plugin.text('BIN: ' + s.store_bin + '\n');
 
+		// Refund banners
+		const hasRefunds = data.items.some((i) => i.status === 'refunded') || data.status === 'refunded';
+		if (data.status === 'refunded') {
+			plugin.text('-'.repeat(pw) + '\n');
+			plugin.align('center');
+			plugin.bold(true);
+			plugin.text('*** FULL REFUND ***\n');
+			plugin.bold(false);
+		} else if (hasRefunds) {
+			plugin.text('-'.repeat(pw) + '\n');
+			plugin.align('center');
+			plugin.bold(true);
+			plugin.text('*** PARTIAL REFUND ***\n');
+			plugin.bold(false);
+		}
+
 		plugin.text('-'.repeat(pw) + '\n');
 		plugin.align('left');
 		plugin.text('Order: ' + data.orderId + (data.isReprint ? ' (REPRINT)' : '') + '\n');
@@ -258,11 +253,14 @@ async function printReceiptNative(
 
 		// Items
 		for (const item of data.items) {
+			const prefix = item.status === 'refunded' ? '[R] ' : '';
+			const sign = item.status === 'refunded' ? '-' : '';
 			const qtyStr = item.qty.toString().padStart(3);
-			const totalStr = item.total.toFixed(2).padStart(8);
+			const totalStr = (sign + item.total.toFixed(2)).padStart(8);
 			const right = qtyStr + totalStr;
 			const maxName = pw - right.length - 1;
-			const name = item.name.length > maxName ? item.name.substring(0, maxName) : item.name;
+			const itemName = prefix + item.name;
+			const name = itemName.length > maxName ? itemName.substring(0, maxName) : itemName;
 			plugin.text(leftRightStr(name, right, pw) + '\n');
 			if (item.variant) {
 				plugin.text('  ' + item.variant + '\n');
@@ -272,8 +270,13 @@ async function printReceiptNative(
 		plugin.text('-'.repeat(pw) + '\n');
 
 		// Totals
+		const refundAmount = data.originalTotal ? data.originalTotal - data.total : 0;
+		if (data.originalTotal && data.originalTotal !== data.total) {
+			plugin.text(leftRightStr('ORIGINAL TOTAL', data.originalTotal.toFixed(2), pw) + '\n');
+			plugin.text(leftRightStr('TOTAL REFUND', '-' + refundAmount.toFixed(2), pw) + '\n');
+		}
 		plugin.bold(true);
-		plugin.text(leftRightStr('TOTAL', data.total.toFixed(2), pw) + '\n');
+		plugin.text(leftRightStr('NET TOTAL', data.total.toFixed(2), pw) + '\n');
 		plugin.bold(false);
 
 		if (data.cashReceived) {
@@ -319,7 +322,7 @@ async function testPrintNative(): Promise<{ success: boolean; error?: string }> 
 		const connected = await capIsConnected();
 		if (!connected) return { success: false, error: 'Printer not connected' };
 
-		const pw = localStorage.getItem('pos-bt-printer-width') === '80' ? 48 : 32;
+		const pw = localStorage.getItem('pos-bt-printer-width') === '58' ? 32 : 48;
 
 		plugin.begin();
 		plugin.align('center');
@@ -493,7 +496,8 @@ class EscPosBuilder {
 	private buffer: number[] = [];
 
 	init(): this {
-		this.buffer.push(ESC, 0x40);
+		this.buffer.push(ESC, 0x40); // ESC @ — initialize printer
+		this.buffer.push(ESC, 0x74, 0); // ESC t 0 — select character code table (PC437 USA)
 		return this;
 	}
 
@@ -575,21 +579,36 @@ async function webBtPrintReceipt(
 			try {
 				const server = await webBt.device.gatt.connect();
 				webBt.server = server;
+				let writeChar: BluetoothRemoteGATTCharacteristic | null = null;
 				for (const serviceUuid of PRINTER_SERVICE_UUIDS) {
 					try {
 						const service = await server.getPrimaryService(serviceUuid);
 						const chars = await service.getCharacteristics();
-						const wc =
-							chars.find(
-								(c: any) => c.properties.writeWithoutResponse || c.properties.write
-							) ?? null;
-						if (wc) {
-							webBt.writeCharacteristic = wc;
-							break;
+
+						// Try known printer write characteristic UUIDs first
+						for (const charUuid of PRINTER_WRITE_CHAR_UUIDS) {
+							const found = chars.find((c: any) => c.uuid === charUuid);
+							if (found && (found.properties.write || found.properties.writeWithoutResponse)) {
+								writeChar = found;
+								break;
+							}
 						}
+
+						// Fallback: any writable characteristic
+						if (!writeChar) {
+							writeChar =
+								chars.find(
+									(c: any) => c.properties.writeWithoutResponse || c.properties.write
+								) ?? null;
+						}
+
+						if (writeChar) break;
 					} catch {
 						continue;
 					}
+				}
+				if (writeChar) {
+					webBt.writeCharacteristic = writeChar;
 				}
 			} catch {
 				return { success: false, error: 'Printer disconnected. Please reconnect in Settings.' };
@@ -617,6 +636,22 @@ async function webBtPrintReceipt(
 	if (s.store_tax_id) b.println('VAT: ' + s.store_tax_id);
 	if (s.store_bin) b.println('BIN: ' + s.store_bin);
 
+	// Refund banners
+	const hasRefundsBle = data.items.some((i) => i.status === 'refunded') || data.status === 'refunded';
+	if (data.status === 'refunded') {
+		b.drawLine(paperWidth);
+		b.alignCenter();
+		b.bold(true);
+		b.println('*** FULL REFUND ***');
+		b.bold(false);
+	} else if (hasRefundsBle) {
+		b.drawLine(paperWidth);
+		b.alignCenter();
+		b.bold(true);
+		b.println('*** PARTIAL REFUND ***');
+		b.bold(false);
+	}
+
 	b.drawLine(paperWidth);
 	b.alignLeft();
 	b.println('Order: ' + data.orderId + (data.isReprint ? ' (REPRINT)' : ''));
@@ -629,18 +664,26 @@ async function webBtPrintReceipt(
 	b.bold(false);
 
 	for (const item of data.items) {
+		const prefix = item.status === 'refunded' ? '[R] ' : '';
+		const sign = item.status === 'refunded' ? '-' : '';
 		const qtyStr = item.qty.toString().padStart(3);
-		const totalStr = item.total.toFixed(2).padStart(8);
+		const totalStr = (sign + item.total.toFixed(2)).padStart(8);
 		const right = qtyStr + totalStr;
 		const maxName = paperWidth - right.length - 1;
-		const name = item.name.length > maxName ? item.name.substring(0, maxName) : item.name;
+		const itemName = prefix + item.name;
+		const name = itemName.length > maxName ? itemName.substring(0, maxName) : itemName;
 		b.leftRight(name, right, paperWidth);
 		if (item.variant) b.println('  ' + item.variant);
 	}
 
 	b.drawLine(paperWidth);
+	const refundAmountBle = data.originalTotal ? data.originalTotal - data.total : 0;
+	if (data.originalTotal && data.originalTotal !== data.total) {
+		b.leftRight('ORIGINAL TOTAL', data.originalTotal.toFixed(2), paperWidth);
+		b.leftRight('TOTAL REFUND', '-' + refundAmountBle.toFixed(2), paperWidth);
+	}
 	b.bold(true);
-	b.leftRight('TOTAL', data.total.toFixed(2), paperWidth);
+	b.leftRight('NET TOTAL', data.total.toFixed(2), paperWidth);
 	b.bold(false);
 
 	if (data.cashReceived) {
@@ -739,9 +782,9 @@ export async function connectPrinter(): Promise<{
 	return webBtConnect();
 }
 
-export function disconnectPrinter() {
+export async function disconnectPrinter() {
 	if (isCapacitorNative()) {
-		capDisconnect();
+		await capDisconnect();
 		localStorage.removeItem('pos-bt-printer-name');
 		localStorage.removeItem('pos-bt-printer-address');
 		return;

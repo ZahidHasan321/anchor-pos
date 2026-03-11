@@ -1,5 +1,6 @@
 import { getCurrencySymbol } from './format';
 import { isConnected as isBtConnected, printBluetoothReceipt, isCapacitorNative, connectPrinter } from './bluetooth-printer';
+import qrcodeMinJs from './vendor/qrcode.min.js?raw';
 
 export type ReceiptData = {
 	storeSettings: {
@@ -208,7 +209,7 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 		</div>
 		<div class="feed-cut"></div>
 	</div>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+	<script>${qrcodeMinJs}</script>
 	<script>
 		window.onload = function() {
 			try {

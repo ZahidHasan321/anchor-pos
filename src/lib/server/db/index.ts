@@ -26,9 +26,10 @@ let dbInstance: any = null;
 let client: any = null;
 
 if (connectionString) {
-    client = (globalThis as any).__POS_DB_CLIENT__ || postgres(connectionString, { 
+    client = (globalThis as any).__POS_DB_CLIENT__ || postgres(connectionString, {
         prepare: false,
-        idle_timeout: 10
+        idle_timeout: 30,
+        max: 10
     });
 
     if (dev) {

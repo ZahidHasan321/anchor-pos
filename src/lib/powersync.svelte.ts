@@ -78,10 +78,10 @@ export class PowerSyncManager {
         this._connecting = true;
 
         try {
-            // Default to our production URL if not set
-            const isCapacitor = (window as any).Capacitor !== undefined;
-            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://anchorshop.cloud';
-            const powersyncUrl = import.meta.env.VITE_POWERSYNC_URL || import.meta.env.POWERSYNC_URL || 'https://powersync.anchorshop.cloud';
+            const powersyncUrl = import.meta.env.VITE_POWERSYNC_URL || import.meta.env.POWERSYNC_URL;
+            if (!powersyncUrl) {
+                throw new Error('PowerSync URL not configured. Set VITE_POWERSYNC_URL in your environment.');
+            }
 
             const connector: any = {
                 fetchCredentials: async () => {
@@ -90,17 +90,9 @@ export class PowerSyncManager {
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                         try {
                             const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
-                            const isCapacitor = (window as any).Capacitor !== undefined;
-                            // Always fetch from local server to use local session cookie
-                            const appSecret = import.meta.env.VITE_APP_SECRET || 'auto-pos-secret-handshake-2026';
-                            const userId = this._currentUserId || providedUserId || '';
 
                             const res = await fetch(`/api/powersync/token`, {
-                                credentials: isStandardWeb ? 'include' : 'omit',
-                                headers: {
-                                    'x-app-secret': appSecret,
-                                    'x-user-id': userId
-                                }
+                                credentials: isStandardWeb ? 'include' : 'omit'
                             });
                             if (!res.ok) {
                                 const body = await res.text().catch(() => '');
@@ -132,7 +124,6 @@ export class PowerSyncManager {
                     const transaction = await database.getNextCrudTransaction();
                     if (!transaction) return;
 
-                    const appSecret = import.meta.env.VITE_APP_SECRET || 'auto-pos-secret-handshake-2026';
                     const mutationCount = transaction.crud?.length ?? 0;
                     
                     // PowerSync CrudEntry v1.x uses: table, op, id, opData (class properties)
@@ -145,51 +136,22 @@ export class PowerSyncManager {
                     }));
 
                     const tables = [...new Set(mutations.map((m: any) => m.table))];
-                    console.log(`[PowerSync] Uploading ${mutationCount} mutations for tables: ${tables.join(', ')}`);
-                    if (mutationCount > 0) {
-                        console.log('[PowerSync] First mutation sample:', JSON.stringify(mutations[0]));
-                    }
 
                     try {
                         const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
-                        const isCapacitor = (window as any).Capacitor !== undefined;
-                        // Use stored ID, then provided ID, then fallback to cookie scraping
-                        let userId = this._currentUserId || providedUserId || '';
-                        
-                        if (!userId && browser) {
-                            // Last resort fallback
-                            const sessionCookie = document.cookie.split('; ').find(row => row.startsWith('session='));
-                            if (sessionCookie) {
-                                try {
-                                    const token = sessionCookie.split('=')[1];
-                                    const payload = JSON.parse(atob(token.split('.')[1]));
-                                    userId = payload.sub;
-                                } catch(e) {}
-                            }
-                        }
 
-                        if (!userId) {
-                            console.warn('[PowerSync] No user ID found for upload. Request will likely fail 401.');
-                        } else {
-                            console.log(`[PowerSync] Uploading using user ID: ${userId}`);
-                        }
-
-                        // Always upload to local server to use local session cookie and bypass CORS
+                        // Upload to local server — session cookie provides auth
                         const res = await fetch(`/api/powersync/upload`, {
                             method: 'POST',
-                            headers: { 
-                                'Content-Type': 'application/json',
-                                'x-app-secret': appSecret,
-                                'x-user-id': userId
+                            headers: {
+                                'Content-Type': 'application/json'
                             },
-                            credentials: isStandardWeb ? 'include' : 'omit'
-,
+                            credentials: isStandardWeb ? 'include' : 'omit',
                             body: JSON.stringify({ mutations })
                         });
 
                         if (res.ok) {
-                            const result = await res.json().catch(() => ({}));
-                            console.log(`[PowerSync] Upload successful (${mutationCount} mutations). Proxy response:`, result);
+                            await res.json().catch(() => ({}));
                             await transaction.complete();
                             return;
                         }
@@ -251,8 +213,6 @@ export class PowerSyncManager {
                 const connected = !!status?.connected;
                 const isSyncing = connected && (downloading || uploading);
 
-                console.log(`[PowerSync] Status: connected=${connected}, downloading=${downloading}, uploading=${uploading}, isSyncing=${isSyncing}`);
-
                 // Update connection status
                 if (!connected) {
                     this.connectionStatus = 'offline';
@@ -265,7 +225,6 @@ export class PowerSyncManager {
                 // Detect when downloading completes (transition from downloading to idle)
                 if (connected && downloading === false && lastConnected) {
                     this.dataVersion++;
-                    console.log('PowerSync: sync completed, dataVersion =', this.dataVersion);
                 }
 
                 lastConnected = connected;

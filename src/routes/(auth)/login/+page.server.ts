@@ -12,6 +12,7 @@ import {
 import { logAuditEvent } from '$lib/server/audit';
 import { getDefaultRedirect } from '$lib/server/permissions';
 import { cacheCredentials, attemptOfflineLogin } from '$lib/server/offline-auth';
+import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (locals.user) {
@@ -30,20 +31,20 @@ export const actions: Actions = {
 			return fail(400, { error: 'Username and password required', username });
 		}
 
-		const isElectron = process.env.BUILD_TARGET === 'electron';
-
-		if (isElectron) {
+		if (env.IS_ELECTRON) {
 			// In Electron: try VPS first, fall back to offline cached credentials
 			try {
-				const vpsUrl = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
+				if (!env.POWERSYNC_API_URL) {
+					return fail(500, { error: 'env.POWERSYNC_API_URL not configured. Check your .env file.', username });
+				}
 				const controller = new AbortController();
 				const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-				const res = await fetch(`${vpsUrl}/api/auth/remote-login`, {
+				const res = await fetch(`${env.POWERSYNC_API_URL}/api/auth/remote-login`, {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json',
-						'x-app-secret': process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026',
+						'x-app-secret': env.APP_SECRET_HEADER,
 						'User-Agent': 'AutoPOS-Electron/1.0',
 					},
 					body: JSON.stringify({ username, password }),

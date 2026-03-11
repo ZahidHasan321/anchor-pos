@@ -308,8 +308,8 @@
 		btConnecting = false;
 	}
 
-	function handleBtDisconnect() {
-		disconnectPrinter();
+	async function handleBtDisconnect() {
+		await disconnectPrinter();
 		btConnected = false;
 		btPrinterName = '';
 		toast.success('Printer disconnected');

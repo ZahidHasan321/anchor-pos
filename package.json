@@ -66,6 +66,12 @@
 			"node_modules/**/*",
 			"build/**/*"
 		],
+		"extraFiles": [
+			{
+				"from": ".env",
+				"to": ".env"
+			}
+		],
 		"linux": {
 			"target": [
 				"AppImage"
@@ -75,17 +81,11 @@
 			"synopsis": "A modern Point of Sale system for clothing stores",
 			"description": "A robust POS system built with SvelteKit and Electron for modern retail management.",
 			"maintainer": "Auto POS <support@autopos.com>",
-			"icon": "resources/icons",
-			"extraFiles": [
-				".env"
-			]
+			"icon": "resources/icons"
 		},
 		"win": {
 			"target": "nsis",
-			"icon": "resources/icon.ico",
-			"extraFiles": [
-				".env"
-			]
+			"icon": "resources/icon.ico"
 		},
 		"nsis": {
 			"installerIcon": "resources/icon.ico",

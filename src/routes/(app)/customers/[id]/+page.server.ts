@@ -3,13 +3,14 @@ import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { customers, orders } from '$lib/server/db/schema';
 import { eq, desc, sql, and } from 'drizzle-orm';
+import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ params, url, locals }) => {
 	if (!locals.user) {
 		redirect(302, '/login');
 	}
 
-	const isElectron = process.env.BUILD_TARGET === 'electron';
+	const isElectron = env.IS_ELECTRON;
 	if (isElectron || !db) {
 		return {
 			customer: null,

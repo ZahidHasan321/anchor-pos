@@ -3,6 +3,7 @@ import type { PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { orders, customers, users } from '$lib/server/db/schema';
 import { eq, and, gte, lte, desc, sql, like, or } from 'drizzle-orm';
+import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
 	if (!locals.user) {
@@ -18,7 +19,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const dateTo = url.searchParams.get('to') ?? '';
 	const statusFilter = url.searchParams.get('status') ?? '';
 	const search = url.searchParams.get('search') ?? '';
-	const isElectron = process.env.BUILD_TARGET === 'electron';
+	const isElectron = env.IS_ELECTRON;
 
 	const conditions: any[] = [];
 	if (dateFrom) conditions.push(gte(orders.createdAt, new Date(dateFrom + 'T00:00:00')));

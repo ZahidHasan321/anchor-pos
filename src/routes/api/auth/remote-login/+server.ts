@@ -4,14 +4,23 @@ import { users } from '$lib/server/db/schema.js';
 import { eq } from 'drizzle-orm';
 import { SignJWT, importJWK } from 'jose';
 import { verifyPassword } from '$lib/server/auth.js';
+import { rateLimit, getClientIp } from '$lib/server/rate-limit';
+import env from '$lib/server/env';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
+  // Rate limit: 5 login attempts per minute per IP
+  const ip = getClientIp(request);
+  const limit = rateLimit(`remote-login:${ip}`, { maxRequests: 5, windowMs: 60_000 });
+  if (!limit.allowed) {
+    throw error(429, 'Too many login attempts. Please try again later.');
+  }
+
   // Validate the app secret header so only your Electron app can call this
   const secret = request.headers.get('x-app-secret');
-  const expectedSecret = process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026';
-  
-  if (secret !== expectedSecret) {
+  const expectedSecret = env.APP_SECRET_HEADER;
+
+  if (!expectedSecret || secret !== expectedSecret) {
     throw error(403, 'Forbidden');
   }
 
@@ -34,7 +43,7 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   // Sign a JWT — Electron validates this locally without needing Postgres
-  const privateKeyRaw = process.env.POWERSYNC_PRIVATE_KEY;
+  const privateKeyRaw = env.POWERSYNC_PRIVATE_KEY;
   if (!privateKeyRaw) {
     throw error(500, 'Server configuration error: Private key missing');
   }
@@ -59,8 +68,8 @@ export const POST: RequestHandler = async ({ request }) => {
     .setAudience(['pos-electron'])
     .sign(privateKey);
 
-  return json({ 
-    token, 
-    expiresAt: expiresAt.toISOString() 
+  return json({
+    token,
+    expiresAt: expiresAt.toISOString()
   });
 };

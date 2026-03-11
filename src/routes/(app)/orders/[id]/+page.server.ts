@@ -14,13 +14,14 @@ import {
 import { eq, sql, and } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
+import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	if (!locals.user) {
 		redirect(302, '/login');
 	}
 
-	const isElectron = process.env.BUILD_TARGET === 'electron';
+	const isElectron = env.IS_ELECTRON;
 	if (isElectron || !db) {
 		return {
 			order: null,

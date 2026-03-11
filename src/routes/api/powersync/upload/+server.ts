@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { orders, orderItems, productVariants, stockLogs, cashbook, customers } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
+import env from '$lib/server/env';
 import type { RequestHandler } from './$types';
 
 /**
@@ -35,13 +36,15 @@ function toCamel(obj: Record<string, any>): Record<string, any> {
 }
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-    // Allow Electron clients to authenticate via app secret header (for proxied uploads)
+    // Authenticate: session first, then app-secret for server-to-server proxy calls only
     let userId = locals.user?.id;
     if (!userId) {
         const appSecret = request.headers.get('x-app-secret');
-        const expectedSecret = process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026';
+        const expectedSecret = env.APP_SECRET_HEADER;
         const headerUserId = request.headers.get('x-user-id');
-        if (appSecret === expectedSecret && headerUserId) {
+        // Only accept header auth if a real secret is configured (not the default)
+        // and the request is from an internal service (the Electron proxy on VPS)
+        if (expectedSecret && appSecret === expectedSecret && headerUserId) {
             userId = headerUserId;
         } else {
             return json({ error: 'Unauthorized' }, { status: 401 });
@@ -52,27 +55,25 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
     if (!db) {
         // In Electron mode: proxy upload to the VPS which has Postgres
-        const isElectron = process.env.BUILD_TARGET === 'electron';
-        if (isElectron) {
+        if (env.IS_ELECTRON) {
             try {
-                const vpsUrl = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
-                const appSecret = process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026';
-                console.log(`[PowerSync] Proxying upload to VPS for user ${userId} (${mutations.length} mutations)`);
-                const res = await fetch(`${vpsUrl}/api/powersync/upload`, {
+                if (!env.POWERSYNC_API_URL || !env.APP_SECRET_HEADER) {
+                    return json({ error: 'Server not configured for proxy mode' }, { status: 500 });
+                }
+                // Proxy upload to VPS
+                const res = await fetch(`${env.POWERSYNC_API_URL}/api/powersync/upload`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'x-app-secret': appSecret,
+                        'x-app-secret': env.APP_SECRET_HEADER,
                         'x-user-id': userId!,
                     },
                     body: JSON.stringify({ mutations })
                 });
                 if (res.ok) {
-                    console.log(`[PowerSync] VPS upload succeeded (${mutations.length} mutations)`);
                     return json({ success: true });
                 }
                 const vpsBody = await res.text().catch(() => '');
-                console.error(`[PowerSync] VPS upload returned ${res.status}: ${vpsBody}`);
                 return json({ error: 'VPS upload failed', detail: vpsBody }, { status: 503 });
             } catch (e) {
                 console.error('[PowerSync] VPS unreachable:', e);
@@ -84,7 +85,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
     try {
         await db.transaction(async (tx: any) => {
-            console.log(`[PowerSync] Processing ${mutations.length} mutations from user ${userId}`);
             for (const mutation of mutations) {
                 // Support both Web SDK {type, data} and our proxy {table, opData}
                 const table = mutation.table || mutation.type;
@@ -97,7 +97,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
                 for (const k of Object.keys(data)) {
                     if (data[k] === undefined) delete data[k];
                 }
-                console.log(`[PowerSync] -> ${op} on ${table} (${id})`);
+                // Process mutation
 
                 if (table === 'orders') {
                     if (op === 'PUT' || op === 'PATCH') {
@@ -175,7 +175,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
             }
         });
 
-        console.log(`[PowerSync] Transaction committed successfully for ${mutations.length} mutations`);
         return json({ success: true });
     } catch (e: any) {
         console.error('[PowerSync] Transaction failed:', e);

@@ -2,6 +2,11 @@
 const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog, powerSaveBlocker, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
+// Force IPv4-first DNS resolution — Node.js undici (used by SvelteKit's fetch)
+// tries IPv6 first by default. On many Linux systems IPv6 is unreachable,
+// and undici does NOT gracefully fall back to IPv4, causing "fetch failed" errors.
+require('dns').setDefaultResultOrder('ipv4first');
+
 // Disable hardware acceleration on Linux to prevent GPU crashes on VMs/Wayland
 if (process.platform === 'linux') {
     app.disableHardwareAcceleration();
@@ -9,8 +14,6 @@ if (process.platform === 'linux') {
 
 // Custom User Agent to hide Electron and look like a standard browser
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-// Secret header to bypass Cloudflare WAF (Make sure to add this to your Cloudflare Custom Rules)
-const APP_SECRET_HEADER = process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026';
 
 const path = require('path');
 const fs = require('fs');
@@ -132,14 +135,25 @@ for (const envPath of envPaths) {
     }
 }
 
-// Fallback defaults for packaged build — ensure app can always reach the VPS if .env is missing
+// Public URLs can have fallbacks (not secrets), but warn if missing
 if (!process.env.POWERSYNC_URL) {
     process.env.POWERSYNC_URL = 'https://powersync.anchorshop.cloud';
+    log.warn('POWERSYNC_URL not set, using default. Configure .env for custom deployments.');
 }
 if (!process.env.POWERSYNC_API_URL) {
     process.env.POWERSYNC_API_URL = 'https://anchorshop.cloud';
+    log.warn('POWERSYNC_API_URL not set, using default. Configure .env for custom deployments.');
+}
+if (!process.env.APP_SECRET_HEADER) {
+    log.warn('APP_SECRET_HEADER not set — WAF bypass and remote auth will not work. Ensure .env is configured.');
 }
 process.env.BUILD_TARGET = 'electron';
+
+// Diagnostic: confirm critical env vars are available
+log.info('[Env] BUILD_TARGET:', process.env.BUILD_TARGET);
+log.info('[Env] POWERSYNC_API_URL:', process.env.POWERSYNC_API_URL ? 'SET' : 'MISSING');
+log.info('[Env] APP_SECRET_HEADER:', process.env.APP_SECRET_HEADER ? 'SET' : 'MISSING');
+log.info('[Env] POWERSYNC_PUBLIC_KEY:', process.env.POWERSYNC_PUBLIC_KEY ? 'SET' : 'MISSING');
 process.env.ELECTRON_USER_DATA = app.getPath('userData');
 
 let mainWindow;
@@ -219,7 +233,7 @@ async function createWindow() {
 
     // Inject Secret Handshake Header into all outgoing requests to bypass Cloudflare challenges
     session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-        details.requestHeaders['x-app-secret'] = APP_SECRET_HEADER;
+        details.requestHeaders['x-app-secret'] = process.env.APP_SECRET_HEADER || '';
         callback({ cancel: false, requestHeaders: details.requestHeaders });
     });
 
@@ -267,7 +281,6 @@ async function createWindow() {
             process.env.ORIGIN = `http://127.0.0.1:${port}`;
             process.env.HOST = '127.0.0.1'; 
             process.env.BUILD_TARGET = 'electron';
-            process.env.APP_SECRET_HEADER = APP_SECRET_HEADER;
             
             console.log(`[Boot] Port: ${port}`);
             console.log(`[Boot] Origin: ${process.env.ORIGIN}`);
@@ -339,15 +352,17 @@ async function createWindow() {
                 }, 500);
             });
             
-            // Allow opening DevTools in production with F12 or Ctrl+Shift+I
+            // Keyboard shortcuts (DevTools only in dev mode)
             mainWindow.webContents.on('before-input-event', (event, input) => {
-                const isDevTools = (input.key === 'F12' && input.type === 'keyDown') || 
-                                  (input.control && input.shift && input.key.toLowerCase() === 'i' && input.type === 'keyDown');
-                
-                if (isDevTools) {
-                    mainWindow.webContents.toggleDevTools();
+                // Only allow DevTools in development
+                if (isDev) {
+                    const isDevTools = (input.key === 'F12' && input.type === 'keyDown') ||
+                                      (input.control && input.shift && input.key.toLowerCase() === 'i' && input.type === 'keyDown');
+                    if (isDevTools) {
+                        mainWindow.webContents.toggleDevTools();
+                    }
                 }
-                
+
                 // Shortcut to open the log file folder (Ctrl+Shift+L)
                 if (input.control && input.shift && input.key.toLowerCase() === 'l' && input.type === 'keyDown') {
                     const { shell } = require('electron');
@@ -359,43 +374,38 @@ async function createWindow() {
             // --- Content Security & Permissions Fixes ---
             session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
                 const headers = details.responseHeaders || {};
-                // Relax CSP for VPS communication and PowerSync WebSockets
                 headers['content-security-policy'] = [
-                    "default-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' http://127.0.0.1:* http://localhost:* https://anchorshop.cloud https://*.anchorshop.cloud ws://* wss://*; " +
-                    "connect-src 'self' http://127.0.0.1:* http://localhost:* https://anchorshop.cloud https://*.anchorshop.cloud ws://* wss://*; " +
+                    "default-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' http://127.0.0.1:*; " +
+                    "connect-src 'self' http://127.0.0.1:* https://anchorshop.cloud https://*.anchorshop.cloud wss://powersync.anchorshop.cloud ws://127.0.0.1:*; " +
                     "img-src 'self' data: blob: https:; " +
-                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' http://127.0.0.1:* http://localhost:* https://cdnjs.cloudflare.com; " +
+                    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' http://127.0.0.1:*; " +
                     "frame-src 'self'; " +
                     "worker-src 'self' blob:;"
                 ];
                 callback({ responseHeaders: headers });
             });
 
-            // Set global permission handler
+            // Only allow specific permissions the app actually needs
+            const ALLOWED_PERMISSIONS = ['clipboard-read', 'clipboard-sanitized-write', 'pointerLock'];
             session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-                callback(true); // Approve all for internal tool
+                callback(ALLOWED_PERMISSIONS.includes(permission));
             });
 
         } catch (err) {
             console.error('Failed to start server:', err);
             
-            // Build a detailed diagnostic message
+            // Build a diagnostic message (no sensitive env values)
             const diagnosticInfo = [
                 `Error: ${err.message}`,
-                `Stack: ${err.stack}`,
                 '',
                 'Environment:',
                 `NODE_ENV: ${process.env.NODE_ENV}`,
-                `DATABASE_URL: ${process.env.DATABASE_URL ? 'PRESENT' : 'MISSING'}`,
-                `POWERSYNC_URL: ${process.env.POWERSYNC_URL}`,
-                `userData: ${app.getPath('userData')}`,
-                `resourcesPath: ${process.resourcesPath}`,
-                `cwd: ${process.cwd()}`,
+                `DATABASE_URL: ${process.env.DATABASE_URL ? 'CONFIGURED' : 'NOT SET'}`,
+                `POWERSYNC_URL: ${process.env.POWERSYNC_URL ? 'CONFIGURED' : 'NOT SET'}`,
                 '',
-                'Common Issues:',
+                'Troubleshooting:',
                 '1. Check if PostgreSQL is running if DATABASE_URL is set.',
-                '2. Ensure .env is present in the install directory (next to the .exe).',
-                '3. Press Ctrl+Shift+L to open the log folder for full details.'
+                '2. Press Ctrl+Shift+L to open the log folder for full details.'
             ].join('\n');
 
             dialog.showErrorBox('Server Start Failed', diagnosticInfo);
@@ -500,6 +510,22 @@ ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
         if (s.store_tax_id) printer.println('VAT: ' + s.store_tax_id);
         if (s.store_bin) printer.println('BIN: ' + s.store_bin);
 
+        // Refund banners
+        const hasRefunds = (data.items || []).some(i => i.status === 'refunded') || data.status === 'refunded';
+        if (data.status === 'refunded') {
+            printer.drawLine();
+            printer.alignCenter();
+            printer.bold(true);
+            printer.println('*** FULL REFUND ***');
+            printer.bold(false);
+        } else if (hasRefunds) {
+            printer.drawLine();
+            printer.alignCenter();
+            printer.bold(true);
+            printer.println('*** PARTIAL REFUND ***');
+            printer.bold(false);
+        }
+
         printer.drawLine();
         printer.alignLeft();
         printer.println('Order: ' + data.orderId + (data.isReprint ? ' (REPRINT)' : ''));
@@ -516,10 +542,12 @@ ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
         ]);
 
         for (const item of data.items) {
+            const prefix = item.status === 'refunded' ? '[REFUND] ' : '';
+            const sign = item.status === 'refunded' ? '-' : '';
             printer.tableCustom([
-                { text: item.name, align: "LEFT", width: 0.5 },
+                { text: prefix + item.name, align: "LEFT", width: 0.5 },
                 { text: item.qty.toString(), align: "CENTER", width: 0.15 },
-                { text: item.total.toFixed(2), align: "RIGHT", width: 0.35 }
+                { text: sign + item.total.toFixed(2), align: "RIGHT", width: 0.35 }
             ]);
             if (item.variant) {
                 printer.println('  Size: ' + item.variant);
@@ -528,8 +556,21 @@ ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
 
         printer.drawLine();
 
+        // Show original total and refund amount if applicable
+        const refundAmount = data.originalTotal ? data.originalTotal - data.total : 0;
+        if (data.originalTotal && data.originalTotal !== data.total) {
+            printer.tableCustom([
+                { text: "ORIGINAL TOTAL", align: "LEFT", width: 0.5 },
+                { text: data.originalTotal.toFixed(2), align: "RIGHT", width: 0.5 }
+            ]);
+            printer.tableCustom([
+                { text: "TOTAL REFUND", align: "LEFT", width: 0.5 },
+                { text: '-' + refundAmount.toFixed(2), align: "RIGHT", width: 0.5 }
+            ]);
+        }
+
         printer.tableCustom([
-            { text: "TOTAL", align: "LEFT", width: 0.5, bold: true },
+            { text: "NET TOTAL", align: "LEFT", width: 0.5, bold: true },
             { text: data.total.toFixed(2), align: "RIGHT", width: 0.5, bold: true }
         ]);
 

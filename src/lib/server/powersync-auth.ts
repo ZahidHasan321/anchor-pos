@@ -1,6 +1,6 @@
 import { SignJWT, importJWK, exportJWK, generateKeyPair } from 'jose';
-import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
+import env from '$lib/server/env';
 
 // In production, you should set POWERSYNC_PRIVATE_KEY in your environment.
 // For dev, we can generate one if missing.
@@ -17,7 +17,7 @@ async function getKeys() {
         // We also need the public key for the JWKS endpoint
         const publicJwk = JSON.parse(env.POWERSYNC_PUBLIC_KEY || '{}');
         publicKey = await importJWK(publicJwk, 'RS256');
-    } else if (dev || env.BUILD_TARGET === 'electron' || process.env.BUILD_TARGET === 'electron') {
+    } else if (dev || env.IS_ELECTRON) {
         // Generate for dev or electron
         console.warn('POWERSYNC_PRIVATE_KEY not set. Generating temporary key pair.');
         const keys = await generateKeyPair('RS256');
@@ -31,28 +31,37 @@ async function getKeys() {
 }
 
 export async function fetchRemotePowerSyncToken(userId: string) {
-    const vpsUrl = process.env.POWERSYNC_API_URL || 'https://anchorshop.cloud';
+    if (!env.POWERSYNC_API_URL) throw new Error('POWERSYNC_API_URL is not configured');
+    if (!env.APP_SECRET_HEADER) throw new Error('APP_SECRET_HEADER is not configured');
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const res = await fetch(`${vpsUrl}/api/auth/remote-powersync-token`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-app-secret': process.env.APP_SECRET_HEADER || 'auto-pos-secret-handshake-2026',
-        },
-        body: JSON.stringify({ userId }),
-        signal: controller.signal
-    });
+    try {
+        const res = await fetch(`${env.POWERSYNC_API_URL}/api/auth/remote-powersync-token`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-app-secret': env.APP_SECRET_HEADER,
+            },
+            body: JSON.stringify({ userId }),
+            signal: controller.signal
+        });
 
-    clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
 
-    if (!res.ok) {
-        throw new Error(`Failed to fetch remote token: ${await res.text()}`);
+        if (!res.ok) {
+            throw new Error(`Failed to fetch remote token: ${await res.text()}`);
+        }
+
+        const { token } = await res.json();
+        return token;
+    } catch (e: any) {
+        clearTimeout(timeoutId);
+        // Log the underlying cause for network errors (DNS, TLS, connection refused, etc.)
+        const cause = e.cause ? ` [cause: ${e.cause.message || e.cause}]` : '';
+        throw new Error(`Remote PowerSync token fetch failed: ${e.message}${cause}`);
     }
-
-    const { token } = await res.json();
-    return token;
 }
 
 export async function createPowerSyncToken(userId: string) {

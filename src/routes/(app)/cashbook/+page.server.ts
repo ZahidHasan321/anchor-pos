@@ -6,6 +6,7 @@ import { eq, sql, gte, lt, and, desc } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
+import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ url, locals, parent }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'cashbook'))) {
@@ -15,7 +16,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 	const storeTimezone = 'Asia/Dhaka';
 	const view = url.searchParams.get('view') || 'daily';
 	const dateStr = url.searchParams.get('date');
-	const isElectron = process.env.BUILD_TARGET === 'electron';
+	const isElectron = env.IS_ELECTRON;
 
 	let date: Date;
 	const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: storeTimezone }).format(new Date());

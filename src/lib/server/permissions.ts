@@ -2,12 +2,17 @@ import { db } from './db';
 import { rolePermissions } from './db/schema';
 import { eq } from 'drizzle-orm';
 
+// Default permissions per role when DB is unavailable (Electron offline mode)
+const OFFLINE_ROLE_PERMISSIONS: Record<string, string[]> = {
+	admin: ['dashboard', 'inventory', 'pos', 'orders', 'customers', 'cashbook', 'reports'],
+	manager: ['dashboard', 'inventory', 'pos', 'orders', 'customers', 'cashbook', 'reports'],
+	sales: ['pos', 'orders']
+};
+
 export async function getUserPermissions(role: string): Promise<string[]> {
 	if (role === 'admin') {
-		return ['dashboard', 'inventory', 'pos', 'orders', 'customers', 'cashbook', 'reports'];
+		return OFFLINE_ROLE_PERMISSIONS.admin;
 	}
-	
-	const isElectron = process.env.BUILD_TARGET === 'electron';
 
 	if (db) {
 		try {
@@ -18,15 +23,12 @@ export async function getUserPermissions(role: string): Promise<string[]> {
 
 			return results.map((r: { resource: string }) => r.resource);
 		} catch {
-			return [];
+			// DB query failed — fall through to offline defaults
 		}
-	} else if (isElectron) {
-		// In Electron mode, permissions are checked client-side via PowerSync
-		// Return all permissions for now - the client will enforce them
-		return ['dashboard', 'inventory', 'pos', 'orders', 'customers', 'cashbook', 'reports'];
 	}
-	
-	return [];
+
+	// Electron offline or DB failure: use role-based defaults (not full admin)
+	return OFFLINE_ROLE_PERMISSIONS[role] || [];
 }
 
 export async function getDefaultRedirect(role: string): Promise<string> {

@@ -33,6 +33,6 @@ export default defineConfig({
 		chunkSizeWarningLimit: 1000
 	},
 	server: {
-		allowedHosts: true
+		allowedHosts: ['localhost', '127.0.0.1', 'anchorshop.cloud']
 	}
 });

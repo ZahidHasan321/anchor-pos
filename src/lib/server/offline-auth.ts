@@ -9,11 +9,10 @@ import { SignJWT, importJWK, exportJWK, generateKeyPair, jwtVerify } from 'jose'
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-
-const IS_ELECTRON = process.env.BUILD_TARGET === 'electron';
+import env from '$lib/server/env';
 
 function getUserDataPath(): string | null {
-	return process.env.ELECTRON_USER_DATA || null;
+	return env.ELECTRON_USER_DATA || null;
 }
 
 function getCachePath(): string | null {
@@ -74,27 +73,30 @@ function writeCache(cache: CredentialCache) {
 }
 
 /**
- * Hash a password for local cache comparison using SHA-256.
+ * Hash a password for local cache comparison using HMAC-SHA256 with a per-user salt.
  * This is NOT the same as the server-side scrypt hash — it's just for
  * quick local verification of "did they type the same password as last time?"
  */
-function hashForCache(password: string): string {
-	return createHash('sha256').update(password).digest('hex');
+function hashForCache(password: string, salt?: string): string {
+	const { createHmac } = require('node:crypto');
+	const useSalt = salt || createHash('sha256').update(password).digest('hex').slice(0, 16);
+	return useSalt + ':' + createHmac('sha256', useSalt).update(password).digest('hex');
 }
 
 /**
  * Cache user credentials after a successful VPS login.
  */
 export function cacheCredentials(username: string, password: string, userPayload: CachedUser['payload']) {
-	if (!IS_ELECTRON) return;
+	if (!env.IS_ELECTRON) return;
 	const cache = readCache();
+	// Generate a random salt for this cache entry
+	const salt = require('node:crypto').randomBytes(16).toString('hex');
 	cache.users[username] = {
-		passwordHash: hashForCache(password),
+		passwordHash: hashForCache(password, salt),
 		payload: userPayload,
 		cachedAt: new Date().toISOString()
 	};
 	writeCache(cache);
-	console.log('[offline-auth] Cached credentials for:', username);
 }
 
 /**
@@ -104,7 +106,19 @@ function validateCachedCredentials(username: string, password: string): CachedUs
 	const cache = readCache();
 	const cached = cache.users[username];
 	if (!cached) return null;
-	if (cached.passwordHash !== hashForCache(password)) return null;
+	// Extract salt from stored hash (format: salt:hash)
+	const storedSalt = cached.passwordHash.split(':')[0];
+	if (!storedSalt) return null;
+	const { timingSafeEqual } = require('node:crypto');
+	const computed = hashForCache(password, storedSalt);
+	// Use timing-safe comparison to prevent timing attacks
+	try {
+		const a = Buffer.from(cached.passwordHash);
+		const b = Buffer.from(computed);
+		if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+	} catch {
+		return null;
+	}
 	if (!cached.payload.is_active) return null;
 	return cached.payload;
 }
@@ -159,14 +173,14 @@ async function getOrCreateLocalKeys() {
  * Attempt offline login. Returns { token, expiresAt } or null if failed.
  */
 export async function attemptOfflineLogin(username: string, password: string): Promise<{ token: string; expiresAt: Date } | null> {
-	if (!IS_ELECTRON) return null;
+	if (!env.IS_ELECTRON) return null;
 
 	const userPayload = validateCachedCredentials(username, password);
 	if (!userPayload) return null;
 
 	try {
 		const { privateKey } = await getOrCreateLocalKeys();
-		const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+		const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days (offline tokens are shorter-lived)
 
 		const token = await new SignJWT({
 			...userPayload,
@@ -190,7 +204,7 @@ export async function attemptOfflineLogin(username: string, password: string): P
  * Get the local public key for JWT verification in hooks.server.ts
  */
 export async function getLocalPublicKey(): Promise<any> {
-	if (!IS_ELECTRON) return null;
+	if (!env.IS_ELECTRON) return null;
 	const keyPath = getKeyPath();
 	if (!keyPath || !fs.existsSync(keyPath)) return null;
 

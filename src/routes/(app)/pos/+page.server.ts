@@ -15,6 +15,7 @@ import { eq, sql, inArray, and, gt } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import { queryVariants } from '$lib/server/pos-query';
+import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) {
@@ -23,7 +24,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 	const search = url.searchParams.get('search') || '';
 	const category = url.searchParams.get('category') || 'All';
-	const isElectron = process.env.BUILD_TARGET === 'electron';
+	const isElectron = env.IS_ELECTRON;
 
 	// Immediate return, deferred streaming for everything else
 	return {
@@ -109,7 +110,7 @@ interface DBVariant {
 export const actions: Actions = {
 	checkout: async ({ request, locals }) => {
 		if (!locals.user) return fail(401);
-		const isElectron = process.env.BUILD_TARGET === 'electron';
+		const isElectron = env.IS_ELECTRON;
 
 		const data = await request.formData();
 		const cartItemsRaw = data.get('cartItems') as string;

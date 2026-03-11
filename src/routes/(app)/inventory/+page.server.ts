@@ -5,6 +5,7 @@ import { products, productVariants, storeSettings } from '$lib/server/db/schema'
 import { eq, sql, desc, and } from 'drizzle-orm';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
 import { logAuditEvent } from '$lib/server/audit';
+import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
@@ -18,7 +19,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const categoryFilter = url.searchParams.get('category') ?? '';
 	const search = url.searchParams.get('q') ?? '';
 	const stockStatus = url.searchParams.get('stock') ?? '';
-	const isElectron = process.env.BUILD_TARGET === 'electron';
+	const isElectron = env.IS_ELECTRON;
 
 	const emptyResult = {
 		stats: {

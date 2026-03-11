@@ -35,15 +35,19 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
         }
     }
 
-    // Legacy Argon2 check (Safe fallback: fail if library missing, since we removed it)
-	if (hash.startsWith('$argon2')) {
-        console.warn('Argon2 hash detected but library removed for portability. Please reset password.');
-		return false;
-	}
+    // Legacy hash formats — reject and require password reset
+    if (hash.startsWith('$argon2')) {
+        console.warn('Argon2 hash detected but library removed. Password reset required.');
+        return false;
+    }
 
-	// Fallback for legacy SHA-256 hashes (using node:crypto for robustness)
-    const legacyHash = createHash('sha256').update(password).digest('hex');
-	return legacyHash === hash;
+    // Reject bare SHA-256 hashes (insecure, no salt)
+    if (/^[a-f0-9]{64}$/.test(hash)) {
+        console.warn('Legacy unsalted SHA-256 hash detected. Password reset required.');
+        return false;
+    }
+
+    return false;
 }
 
 export async function createSession(token: string, userId: string) {

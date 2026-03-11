@@ -5,18 +5,17 @@ import { users } from '$lib/server/db/schema';
 import { hashPassword } from '$lib/server/auth';
 import { generateId } from '$lib/utils';
 import { eq } from 'drizzle-orm';
-import { env } from '$env/dynamic/private';
+import { env as privateEnv } from '$env/dynamic/private';
 import { jwtVerify, importJWK } from 'jose';
 import { getLocalPublicKey } from '$lib/server/offline-auth';
 import { cleanupAuditLogs } from '$lib/server/audit';
-
-const IS_ELECTRON = process.env.BUILD_TARGET === 'electron';
+import env from '$lib/server/env';
 
 // Cache for public key used in offline JWT validation
 let _publicKey: any = null;
 async function getPublicKey() {
 	if (_publicKey) return _publicKey;
-	const jwkRaw = process.env.POWERSYNC_PUBLIC_KEY;
+	const jwkRaw = env.POWERSYNC_PUBLIC_KEY;
 	if (!jwkRaw) return null;
 	try {
 		const jwk = JSON.parse(jwkRaw);
@@ -31,9 +30,9 @@ async function getPublicKey() {
 // 0. Bootstrap Admin User (Runs once on first load)
 let isBootstrapped = false;
 async function bootstrapAdmin() {
-	if (isBootstrapped || IS_ELECTRON) return;
-	const username = env.ADMIN_USERNAME || 'admin';
-	const password = env.ADMIN_PASSWORD;
+	if (isBootstrapped || env.IS_ELECTRON) return;
+	const username = privateEnv.ADMIN_USERNAME || 'admin';
+	const password = privateEnv.ADMIN_PASSWORD;
 
 	if (!password || !db) return;
 
@@ -52,7 +51,7 @@ async function bootstrapAdmin() {
 		}
 
 		// Perform maintenance tasks on start (infrequent)
-		const retentionDays = parseInt(env.AUDIT_LOG_RETENTION_DAYS || '365');
+		const retentionDays = parseInt(privateEnv.AUDIT_LOG_RETENTION_DAYS || '365');
 		const deletedCount = await cleanupAuditLogs(retentionDays);
 		if (deletedCount > 0) {
 			console.log(`[Maintenance] Cleaned up ${deletedCount} old audit logs.`);
@@ -88,7 +87,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (!token) {
 		event.locals.user = null;
 		event.locals.session = null;
-	} else if (IS_ELECTRON) {
+	} else if (env.IS_ELECTRON) {
 		// OFFLINE-SAFE JWT VALIDATION FOR ELECTRON
 		// Tries VPS public key first, then local offline key
 		let payload: any = null;
@@ -178,16 +177,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// CORS & Security Headers
 	const origin = event.request.headers.get('origin');
+	const ALLOWED_ORIGINS = ['https://anchorshop.cloud', 'app://-'];
 	const isLocalOrigin = origin && (
-		origin.startsWith('http://localhost') || 
-		origin.startsWith('http://127.0.0.1') || 
+		origin.startsWith('http://localhost') ||
+		origin.startsWith('http://127.0.0.1') ||
 		origin.startsWith('app://') ||
-		origin.includes('anchorshop.cloud')
+		origin === 'https://anchorshop.cloud'
 	);
-
-	if (origin) {
-		console.log(`[CORS Check] Path: ${event.url.pathname}, Origin: ${origin}, Allowed: ${isLocalOrigin}`);
-	}
 
 	if (event.request.method === 'OPTIONS' && isLocalOrigin) {
 			return new Response(null, {
@@ -210,14 +206,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 	response.headers.set(
 		'Content-Security-Policy',
 		"default-src 'self'; " +
-			"script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; " +
+			"script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; " +
 			"style-src 'self' 'unsafe-inline'; " +
 			"img-src 'self' data: blob: https:; " +
 			"font-src 'self' data:; " +
-			"connect-src 'self' https://* wss://* http://localhost:* http://127.0.0.1:* ws://*; " +
+			"connect-src 'self' https://anchorshop.cloud https://*.anchorshop.cloud wss://powersync.anchorshop.cloud" +
+			(env.IS_ELECTRON ? " http://127.0.0.1:* ws://127.0.0.1:*" : "") + "; " +
 			"worker-src 'self' blob:; " +
 			"frame-ancestors 'none';" +
-			(IS_ELECTRON ? '' : ' upgrade-insecure-requests;')
+			(env.IS_ELECTRON ? '' : ' upgrade-insecure-requests;')
 	);
 
 	response.headers.set('X-Frame-Options', 'DENY');

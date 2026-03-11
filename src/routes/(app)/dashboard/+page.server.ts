@@ -11,6 +11,7 @@ import {
 } from '$lib/server/db/schema';
 import { eq, sql, gte, and, desc, lte, gt } from 'drizzle-orm';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
+import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'dashboard'))) {
@@ -20,7 +21,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const today = new Date();
 	today.setHours(0, 0, 0, 0);
 	const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-	const isElectron = process.env.BUILD_TARGET === 'electron';
+	const isElectron = env.IS_ELECTRON;
 
 	const emptyStats = {
 		todaySales: { count: 0, total: 0 },
