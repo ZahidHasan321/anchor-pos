@@ -32,7 +32,7 @@
 
 	let { data, form } = $props();
 
-	const isNative = $derived(browser && !!(window as any).electron);
+	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
 	const isAdmin = $derived(data.user?.role === 'admin');
 
 	$effect(() => {

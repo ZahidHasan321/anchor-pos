@@ -5,8 +5,8 @@ const config: CapacitorConfig = {
 	appName: 'Auto POS',
 	webDir: 'build/client',
 	server: {
-		// The Capacitor app loads your web app from this URL
-		url: 'https://anchorshop.cloud',
+		// App loads from local device assets (no remote server URL).
+		// This prevents the offline.html loop on mobile network hiccups.
 		androidScheme: 'https',
 		errorPath: 'offline.html',
 		allowNavigation: ['anchorshop.cloud', '*.anchorshop.cloud']

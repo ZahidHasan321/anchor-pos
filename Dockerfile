@@ -5,6 +5,8 @@ COPY pnpm-lock.yaml package.json ./
 RUN pnpm install
 COPY . .
 ENV BUILD_TARGET=node
+# VITE_ vars are inlined into the client bundle at build time
+ENV VITE_POWERSYNC_URL=https://powersync.anchorshop.cloud
 RUN pnpm build
 
 FROM node:22-slim

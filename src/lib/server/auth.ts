@@ -130,13 +130,15 @@ export async function validateSessionToken(token: string) {
 }
 
 export async function invalidateSession(sessionId: string): Promise<void> {
+	if (!db) return; // Electron: JWT-based auth, no server-side session to invalidate
 	await db.delete(sessions).where(eq(sessions.id, sessionId));
 }
 
 export function setSessionTokenCookie(event: RequestEvent, token: string, expiresAt: Date): void {
 	const origin = event.request.headers.get('origin') || '';
-	// Use 'none' for Electron (app:// protocol), 'lax' for everything else (standard web/Android)
-	const sameSite = origin.startsWith('app://') ? 'none' : 'lax';
+	// 'none' for Electron (app://) and Capacitor (https://localhost) — both make cross-origin requests.
+	// 'lax' for everything else (standard web).
+	const sameSite = (origin.startsWith('app://') || origin === 'https://localhost') ? 'none' : 'lax';
 	
 	event.cookies.set('session', token, {
 		httpOnly: true,

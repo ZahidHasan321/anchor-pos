@@ -36,7 +36,7 @@
 
 	let { data, form } = $props();
 
-	const isNative = $derived(browser && !!(window as any).electron);
+	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
 
 	// Electron: client-side PowerSync data
 	let nativeDailyData = $state<any>(null);

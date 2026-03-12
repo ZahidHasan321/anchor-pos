@@ -157,10 +157,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Global Route Guard
 	const isAuthRoute = event.url.pathname.startsWith('/login');
 	const isApiRoute = event.url.pathname.startsWith('/api');
-	const isRemoteAuthRoute = event.url.pathname.startsWith('/api/auth/remote-login') || event.url.pathname.startsWith('/api/auth/remote-powersync-token') || event.url.pathname.startsWith('/api/powersync/upload') || event.url.pathname.startsWith('/api/powersync/token');
+	const isRemoteAuthRoute = event.url.pathname.startsWith('/api/auth/remote-login') || event.url.pathname.startsWith('/api/auth/remote-powersync-token') || event.url.pathname.startsWith('/api/auth/mobile-login') || event.url.pathname.startsWith('/api/auth/mobile-logout') || event.url.pathname.startsWith('/api/powersync/upload') || event.url.pathname.startsWith('/api/powersync/token');
 	const isWellKnown = event.url.pathname.startsWith('/.well-known');
 
-	if (!event.locals.user && !isAuthRoute && !isRemoteAuthRoute && !isWellKnown) {
+	// In Capacitor static builds, the adapter-static server calls hooks for fallback page generation.
+	// Skip the route guard — auth is handled client-side in the SPA.
+	if (!env.IS_CAPACITOR && !event.locals.user && !isAuthRoute && !isRemoteAuthRoute && !isWellKnown) {
 		if (isApiRoute) {
 			return new Response(JSON.stringify({ error: 'Unauthorized' }), {
 				status: 401,
@@ -182,6 +184,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		origin.startsWith('http://localhost') ||
 		origin.startsWith('http://127.0.0.1') ||
 		origin.startsWith('app://') ||
+		origin === 'https://localhost' ||      // Capacitor Android (androidScheme: 'https')
 		origin === 'https://anchorshop.cloud'
 	);
 

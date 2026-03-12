@@ -17,7 +17,7 @@
 
 	let { data, form } = $props();
 
-	const isNative = $derived(browser && !!(window as any).electron);
+	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
 
 	let nativeOrder = $state<any>(null);
 	let nativeItems = $state<any[]>([]);

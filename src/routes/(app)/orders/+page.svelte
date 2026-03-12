@@ -16,7 +16,7 @@
 	import { browser } from '$app/environment';
 
 	let { data } = $props();
-	const isNative = $derived(browser && !!(window as any).electron);
+	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
 
 	// Electron: client-side PowerSync data
 	let nativeOrders = $state<any[]>([]);

@@ -20,7 +20,7 @@
 
 	let { data } = $props();
 
-	const isNative = $derived(browser && !!(window as any).electron);
+	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
 
 	// Electron: client-side PowerSync reactive data
 	let nativeStats = $state<any>(null);

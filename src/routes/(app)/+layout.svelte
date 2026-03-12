@@ -25,6 +25,7 @@
 	import { setMode, resetMode } from 'mode-watcher';
 	import { browser } from '$app/environment';
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { navigating } from '$app/stores';
 	import { confirmState } from '$lib/confirm.svelte';
@@ -50,6 +51,7 @@
 
 	let logoutForm: HTMLFormElement;
 	let mobileLogoutForm: HTMLFormElement;
+	let logoutInProgress = $state(false);
 
 	const user = $derived(data.user);
 	const permissions = $derived(data.permissions ?? []);
@@ -110,6 +112,10 @@
 	}
 
 	async function handleLogout(e: Event, form: HTMLFormElement) {
+		// Guard against double-trigger: onSelect fires handleLogout, which calls form.requestSubmit(),
+		// which re-fires the submit event, which re-triggers handleLogout via onsubmit.
+		// When logoutInProgress is true, the second call is the re-triggered one — skip the dialog.
+		if (logoutInProgress) return;
 		e.preventDefault();
 		const confirmed = await confirmState.confirm({
 			title: 'Logout',
@@ -117,7 +123,20 @@
 			confirmText: 'Logout',
 			variant: 'destructive'
 		});
-		if (confirmed) form.requestSubmit();
+		if (!confirmed) return;
+
+		if (import.meta.env.VITE_BUILD_TARGET === 'capacitor') {
+			// Capacitor: call VPS logout endpoint, clear local state, navigate to login
+			await fetch('https://anchorshop.cloud/api/auth/mobile-logout', {
+				method: 'POST',
+				credentials: 'include'
+			}).catch(() => {});
+			localStorage.removeItem('cap_user');
+			goto('/login');
+		} else {
+			logoutInProgress = true;
+			form.requestSubmit();
+		}
 	}
 </script>
 

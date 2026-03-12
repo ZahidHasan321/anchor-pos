@@ -24,6 +24,7 @@ const env = {
 	get BUILD_TARGET() { return get('BUILD_TARGET'); },
 	get ELECTRON_USER_DATA() { return get('ELECTRON_USER_DATA'); },
 	get IS_ELECTRON() { return get('BUILD_TARGET') === 'electron'; },
+	get IS_CAPACITOR() { return get('BUILD_TARGET') === 'capacitor'; },
 };
 
 export default env;

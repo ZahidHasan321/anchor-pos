@@ -36,10 +36,19 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const customFrom = url.searchParams.get('from');
 	const customTo = url.searchParams.get('to');
 
-	// Helper to get date in store timezone
+	// Helper to get date in store timezone using formatToParts (avoids ICU narrow-space AM/PM parsing issues)
 	const getStoreDate = (d: Date = new Date()) => {
-		const str = d.toLocaleString('en-US', { timeZone: storeTimezone });
-		return new Date(str);
+		const parts = new Intl.DateTimeFormat('en-US', {
+			timeZone: storeTimezone,
+			year: 'numeric', month: '2-digit', day: '2-digit',
+			hour: '2-digit', minute: '2-digit', second: '2-digit',
+			hour12: false
+		}).formatToParts(d).reduce((acc, p) => ({ ...acc, [p.type]: p.value }), {} as Record<string, string>);
+		const h = parseInt(parts.hour);
+		return new Date(
+			parseInt(parts.year), parseInt(parts.month) - 1, parseInt(parts.day),
+			h === 24 ? 0 : h, parseInt(parts.minute), parseInt(parts.second)
+		);
 	};
 
 	const nowInStore = getStoreDate();

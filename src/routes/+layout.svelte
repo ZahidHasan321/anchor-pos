@@ -22,12 +22,13 @@
 		}
 	});
 
-	// Initialize PowerSync in Electron mode
+	// Initialize PowerSync in Electron and Capacitor modes
 	let lastConnectedUserId = $state<string | null>(null);
 	$effect(() => {
 		const isElectron = import.meta.env.BUILD_TARGET === 'electron' || (browser && (window as any).electron);
-		if (!browser || !isElectron) return;
-		
+		const isCapacitor = import.meta.env.VITE_BUILD_TARGET === 'capacitor';
+		if (!browser || (!isElectron && !isCapacitor)) return;
+
 		const currentUserId = data.user?.id;
 		if (currentUserId && currentUserId !== lastConnectedUserId) {
 			lastConnectedUserId = currentUserId;
@@ -35,10 +36,11 @@
 		}
 	});
 
-	// In Electron mode, load store settings from PowerSync once ready
+	// In Electron/Capacitor mode, load store settings from PowerSync once ready
 	$effect(() => {
 		const isElectron = import.meta.env.BUILD_TARGET === 'electron' || (browser && (window as any).electron);
-		if (browser && isElectron && powersync.ready) {
+		const isCapacitor = import.meta.env.VITE_BUILD_TARGET === 'capacitor';
+		if (browser && (isElectron || isCapacitor) && powersync.ready) {
 			powersync.db.getAll('SELECT * FROM store_settings').then((rows: any[]) => {
 				const settings: Record<string, string> = {};
 				for (const row of rows) {

@@ -1,18 +1,30 @@
-name: Build and Release
+name: Build and Deploy
+
+# Triggered by version tags (e.g. v1.2.3) or manually.
+# - Electron: builds Windows installer, uploads to VPS /downloads/, creates GitHub Release
+# - Web: SSHs into VPS and runs deploy.sh (git pull + docker compose)
+# - Capacitor/Android: still built locally via build-android.sh (needs Android SDK + keystore)
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
+    inputs:
+      skip_electron:
+        description: 'Skip Electron build (web deploy only)'
+        type: boolean
+        default: false
 
 jobs:
-  build:
-    name: Build Electron App
+  # ── Electron (Windows) ──────────────────────────────────────────────────────
+  build-electron:
+    name: Build Electron (Windows)
     runs-on: windows-latest
+    if: ${{ github.event_name == 'push' || !inputs.skip_electron }}
 
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install PNPM
@@ -20,16 +32,16 @@ jobs:
         with:
           version: 9
 
-      - name: Install Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Cache Electron Binaries
+      - name: Cache Electron binaries
         uses: actions/cache@v4
         with:
           path: |
@@ -38,7 +50,22 @@ jobs:
           key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-electron-
 
-      - name: Create Electron .env
+      # Sync package.json version from the git tag (e.g. v1.2.3 → 1.2.3)
+      # Without this, latest.yml always says 0.0.1 and auto-update never fires.
+      - name: Set version from tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '$VERSION';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, '\t') + '\n');
+          "
+          echo "Built version: $VERSION"
+
+      - name: Create .env
         shell: bash
         env:
           PS_PUBLIC_KEY: ${{ secrets.POWERSYNC_PUBLIC_KEY }}
@@ -53,7 +80,7 @@ jobs:
             printf 'POWERSYNC_PUBLIC_KEY=%s\n' "$PS_PUBLIC_KEY"
           } > .env
 
-      - name: Build and Package
+      - name: Build and package
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 20
@@ -62,7 +89,7 @@ jobs:
         env:
           BUILD_TARGET: electron
 
-      - name: Upload Artifacts
+      - name: Upload artifacts (CI)
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
@@ -70,26 +97,62 @@ jobs:
             dist-electron/*.exe
             dist-electron/*.blockmap
             dist-electron/latest.yml
-          retention-days: 7
+          retention-days: 14
 
-  deploy:
-    name: Deploy to VPS
-    needs: build
+  # ── Deploy Electron artifacts to VPS + create GitHub Release ────────────────
+  deploy-electron:
+    name: Deploy Electron to VPS
+    needs: build-electron
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: windows-installer
           path: dist-electron
 
-      - name: Upload to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "dist-electron/*.exe,dist-electron/*.blockmap,dist-electron/latest.yml"
-          target: "/root/anchor-pos/downloads/"
-          strip_components: 1
+      - name: Setup SSH key
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/vps_key
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vps_key
+          echo "StrictHostKeyChecking no" >> ~/.ssh/config
+
+      - name: Upload to VPS downloads/
+        run: |
+          scp -i ~/.ssh/vps_key \
+            dist-electron/*.exe \
+            dist-electron/*.blockmap \
+            dist-electron/latest.yml \
+            root@${{ secrets.VPS_HOST }}:/root/anchor-pos/downloads/
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --generate-notes \
+            dist-electron/*.exe \
+            dist-electron/*.blockmap \
+            dist-electron/latest.yml
+
+  # ── Web Deploy (VPS) ─────────────────────────────────────────────────────────
+  # Runs in parallel with the Electron build — no dependency between them.
+  deploy-web:
+    name: Deploy Web to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/vps_key
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vps_key
+          echo "StrictHostKeyChecking no" >> ~/.ssh/config
+
+      - name: SSH into VPS and run deploy.sh
+        run: |
+          ssh -i ~/.ssh/vps_key -o ConnectTimeout=10 \
+            root@${{ secrets.VPS_HOST }} \
+            "cd /root/anchor-pos && bash deploy.sh"

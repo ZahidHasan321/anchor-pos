@@ -26,25 +26,58 @@
 	let { form } = $props();
 	let loading = $state(false);
 	let showPassword = $state(false);
-	let isCapacitor = $state(false);
+	let capacitorError = $state('');
 
-	$effect(() => {
-		if (browser) isCapacitor = !!(window as any).Capacitor;
-	});
+	// Build-time constant: true when compiled for Capacitor (local asset serving, no SSR server)
+	const IS_CAPACITOR = import.meta.env.VITE_BUILD_TARGET === 'capacitor';
 
 	function setTheme(theme: 'light' | 'dark' | 'system') {
 		if (theme === 'system') resetMode();
 		else setMode(theme);
 	}
 
-	// Capacitor: native form submission handles Set-Cookie reliably in Android WebView.
-	// fetch()-based enhance can silently drop cookies in some WebView versions.
-	function handleCapacitorSubmit(e: SubmitEvent) {
-		if (!isCapacitor) return; // let use:enhance handle it
+	// Capacitor: no local SvelteKit server — call the VPS mobile-login endpoint directly.
+	// The session cookie is set with SameSite=None so it's sent cross-origin on subsequent API calls.
+	async function handleCapacitorSubmit(e: SubmitEvent) {
+		if (!IS_CAPACITOR) return; // let use:enhance handle it for web
 		e.preventDefault();
+		capacitorError = '';
 		loading = true;
 		const formEl = e.target as HTMLFormElement;
-		formEl.submit(); // native POST — browser handles Set-Cookie + 303 redirect
+		const data = new FormData(formEl);
+		const username = (data.get('username') as string)?.trim();
+		const password = data.get('password') as string;
+
+		try {
+			const res = await fetch('https://anchorshop.cloud/api/auth/mobile-login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ username, password }),
+				credentials: 'include' // stores the session cookie for cross-origin requests
+			});
+
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({ message: 'Login failed' }));
+				capacitorError = body.message || 'Invalid username or password';
+				loading = false;
+				return;
+			}
+
+			const { user } = await res.json();
+			// Store user info for client-side route guard in (app)/+layout.ts
+			localStorage.setItem('cap_user', JSON.stringify(user));
+
+			// Client-side navigation — no server round-trip needed
+			const roleDefaultRoutes: Record<string, string> = {
+				admin: '/dashboard',
+				manager: '/dashboard',
+				sales: '/pos'
+			};
+			goto(roleDefaultRoutes[user.role] ?? '/dashboard');
+		} catch {
+			capacitorError = 'Network error. Check your connection and try again.';
+			loading = false;
+		}
 	}
 </script>
 
@@ -115,6 +148,7 @@
 					method="POST"
 					onsubmit={handleCapacitorSubmit}
 					use:enhance={() => {
+						if (IS_CAPACITOR) return; // handled by handleCapacitorSubmit
 						loading = true;
 						return async ({ result, update }) => {
 							loading = false;
@@ -134,7 +168,15 @@
 					}}
 					class="space-y-4"
 				>
-					{#if form?.error}
+					{#if capacitorError}
+						<div
+							in:slide={{ duration: 200 }}
+							class="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm font-medium text-destructive"
+						>
+							<AlertCircle class="h-4 w-4 shrink-0" />
+							<p>{capacitorError}</p>
+						</div>
+					{:else if form?.error}
 						<div
 							in:slide={{ duration: 200 }}
 							class="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm font-medium text-destructive"

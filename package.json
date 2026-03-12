@@ -32,7 +32,7 @@
 		"db:bootstrap": "pnpm tsx scripts/bootstrap-admin.ts",
 		"cap:sync": "npx cap sync android",
 		"cap:open": "npx cap open android",
-		"build:android": "rm -rf build android/app/src/main/assets/public && cross-env CAPACITOR_BUILD=true pnpm run build && npx cap sync android && find android/app/src/main/assets/public -name \"*.gz\" -delete"
+		"build:android": "rm -rf build android/app/src/main/assets/public && cross-env BUILD_TARGET=capacitor VITE_BUILD_TARGET=capacitor pnpm run build && npx cap sync android && find android/app/src/main/assets/public -name \"*.gz\" -delete"
 	},
 	"build": {
 		"npmRebuild": true,
@@ -101,6 +101,7 @@
 		"@lucide/svelte": "^0.561.0",
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/adapter-node": "^5.5.3",
+		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.50.2",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
 		"@tailwindcss/forms": "^0.5.11",

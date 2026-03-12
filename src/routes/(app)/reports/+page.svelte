@@ -28,10 +28,153 @@
 	import { formatCurrency, getCurrencySymbol, formatDate, formatDateTime } from '$lib/format';
 	import { globalSettings } from '$lib/settings.svelte';
 	import { goto } from '$app/navigation';
+	import { powersync } from '$lib/powersync.svelte';
+	import { browser } from '$app/environment';
 	import { Chart, registerables } from 'chart.js';
 	Chart.register(...registerables);
 
 	let { data } = $props();
+
+	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
+
+	// Native state for Electron/Capacitor (PowerSync SQLite)
+	let nativeSummaries = $state<any>(null);
+	let nativeTopProducts = $state<any[] | null>(null);
+	let nativeCategoryBreakdown = $state<any[] | null>(null);
+	let nativePaymentBreakdown = $state<any[] | null>(null);
+	let nativeRefundSummary = $state<any[] | null>(null);
+	let nativeExpenseBreakdown = $state<any[] | null>(null);
+	let nativeStockUpdates = $state<any[] | null>(null);
+	let nativeChartData = $state<any[] | null>(null);
+
+	$effect(() => {
+		if (!isNative || !powersync.ready) return;
+		powersync.dataVersion;
+
+		const startDate = data.startDate;
+		const endDate = data.endDate;
+		const chartGrouping = data.chartGrouping;
+
+		// Reset to loading state when period changes
+		nativeSummaries = null;
+		nativeTopProducts = null;
+		nativeCategoryBreakdown = null;
+		nativePaymentBreakdown = null;
+		nativeRefundSummary = null;
+		nativeExpenseBreakdown = null;
+		nativeStockUpdates = null;
+		nativeChartData = null;
+
+		const startIso = `${startDate} 00:00:00+00`;
+		const endIso = `${endDate} 23:59:59+00`;
+
+		// Summaries
+		Promise.all([
+			powersync.db.get(`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total, coalesce(avg(total_amount), 0) as avg_order, coalesce(sum(discount_amount), 0) as total_discount FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ?`, [startIso, endIso]),
+			powersync.db.get(`SELECT coalesce(sum(amount), 0) as total FROM cashbook WHERE type = 'out' AND category = 'expense' AND created_at >= ? AND created_at <= ?`, [startIso, endIso]),
+			powersync.db.get(`SELECT coalesce(sum(oi.quantity), 0) as total_qty, coalesce(sum(oi.cost_at_sale * oi.quantity), 0) as total_cost FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id WHERE o.status = 'completed' AND oi.status = 'completed' AND o.created_at >= ? AND o.created_at <= ?`, [startIso, endIso]),
+			powersync.db.get(`SELECT coalesce(sum(coalesce(nullif(pv.cost_price, 0), p.cost_price, 0) * pv.stock_quantity), 0) as total_cost, coalesce(sum(pv.price * pv.stock_quantity), 0) as total_retail FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id`, []),
+			powersync.db.get(`SELECT coalesce(sum(change_amount), 0) as total_stocked FROM stock_logs WHERE change_amount > 0 AND created_at >= ? AND created_at <= ?`, [startIso, endIso])
+		]).then(([sales, expenses, items, inventory, stockSum]) => {
+			const s = sales as any;
+			const e = expenses as any;
+			const i = items as any;
+			const inv = inventory as any;
+			const grossProfit = (s?.total ?? 0) - (i?.total_cost ?? 0);
+			nativeSummaries = {
+				salesSummary: { count: s?.count ?? 0, total: s?.total ?? 0, avgOrder: s?.avg_order ?? 0, totalDiscount: s?.total_discount ?? 0 },
+				expenseSummary: { total: e?.total ?? 0 },
+				itemsSold: i?.total_qty ?? 0,
+				grossProfit,
+				netProfit: grossProfit - (e?.total ?? 0),
+				inventoryRetailValue: inv?.total_retail ?? 0,
+				inventoryCostValue: inv?.total_cost ?? 0,
+				totalStocked: (stockSum as any)?.total_stocked ?? 0
+			};
+		});
+
+		// Top products
+		powersync.db.getAll(`SELECT p.id as product_id, oi.product_name, sum(oi.quantity) as total_qty, sum(oi.price_at_sale * oi.quantity * (1 - oi.discount / 100)) as total_revenue FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id LEFT JOIN product_variants pv ON oi.variant_id = pv.id LEFT JOIN products p ON pv.product_id = p.id WHERE oi.status = 'completed' AND o.created_at >= ? AND o.created_at <= ? GROUP BY oi.product_name, p.id ORDER BY total_qty DESC LIMIT 10`, [startIso, endIso])
+			.then((res: any) => { nativeTopProducts = (res as any[]).map((r: any) => ({ productId: r.product_id, productName: r.product_name, totalQty: r.total_qty, totalRevenue: r.total_revenue })); });
+
+		// Category breakdown
+		powersync.db.getAll(`SELECT coalesce(p.category, 'Unknown') as category, sum(oi.quantity) as total_qty, sum(oi.price_at_sale * oi.quantity * (1 - oi.discount / 100)) as total_revenue FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id LEFT JOIN product_variants pv ON oi.variant_id = pv.id LEFT JOIN products p ON pv.product_id = p.id WHERE o.status = 'completed' AND oi.status = 'completed' AND o.created_at >= ? AND o.created_at <= ? GROUP BY p.category ORDER BY total_revenue DESC LIMIT 10`, [startIso, endIso])
+			.then((res: any) => { nativeCategoryBreakdown = (res as any[]).map((r: any) => ({ category: r.category, totalQty: r.total_qty, totalRevenue: r.total_revenue })); });
+
+		// Payment breakdown
+		Promise.all([
+			powersync.db.get(`SELECT 'cash' as method, count(*) as count, coalesce(sum(coalesce(cash_amount, CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END)), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? AND (coalesce(cash_amount, 0) > 0 OR payment_method = 'cash')`, [startIso, endIso]),
+			powersync.db.get(`SELECT 'card' as method, count(*) as count, coalesce(sum(coalesce(card_amount, CASE WHEN payment_method = 'card' THEN total_amount ELSE 0 END)), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? AND (coalesce(card_amount, 0) > 0 OR payment_method = 'card')`, [startIso, endIso]),
+			powersync.db.get(`SELECT 'mobile' as method, count(*) as count, coalesce(sum(coalesce(mobile_amount, CASE WHEN payment_method = 'mobile' THEN total_amount ELSE 0 END)), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? AND (coalesce(mobile_amount, 0) > 0 OR payment_method = 'mobile')`, [startIso, endIso])
+		]).then(([cash, card, mobile]) => {
+			nativePaymentBreakdown = [cash, card, mobile].filter(Boolean) as any[];
+		});
+
+		// Refund summary
+		powersync.db.getAll(`SELECT status, count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status IN ('refunded', 'void') AND created_at >= ? AND created_at <= ? GROUP BY status`, [startIso, endIso])
+			.then((res: any) => { nativeRefundSummary = res as any[]; });
+
+		// Expense breakdown
+		powersync.db.getAll(`SELECT description, coalesce(sum(amount), 0) as total, count(*) as count FROM cashbook WHERE type = 'out' AND created_at >= ? AND created_at <= ? GROUP BY description ORDER BY total DESC LIMIT 10`, [startIso, endIso])
+			.then((res: any) => { nativeExpenseBreakdown = res as any[]; });
+
+		// Stock updates
+		powersync.db.getAll(`SELECT sl.id, p.id as product_id, p.name as product_name, pv.size, sl.change_amount, sl.reason, u.name as user_name, sl.created_at FROM stock_logs sl INNER JOIN product_variants pv ON sl.variant_id = pv.id INNER JOIN products p ON pv.product_id = p.id INNER JOIN users u ON sl.user_id = u.id WHERE sl.reason != 'sale' AND sl.created_at >= ? AND sl.created_at <= ? ORDER BY sl.created_at DESC LIMIT 10`, [startIso, endIso])
+			.then((res: any) => { nativeStockUpdates = (res as any[]).map((r: any) => ({ id: r.id, productId: r.product_id, productName: r.product_name, size: r.size, changeAmount: r.change_amount, reason: r.reason, userName: r.user_name, createdAt: r.created_at })); });
+
+		// Chart data
+		const groupingFmt: Record<string, string> = {
+			hour: "strftime('%Y-%m-%d %H', created_at)",
+			day: "strftime('%Y-%m-%d', created_at)",
+			month: "strftime('%Y-%m', created_at)",
+			year: "strftime('%Y', created_at)"
+		};
+		const chartExpr = groupingFmt[chartGrouping] ?? groupingFmt.day;
+		powersync.db.getAll(`SELECT ${chartExpr} as date, coalesce(sum(total_amount), 0) as amount, count(*) as count FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? GROUP BY ${chartExpr} ORDER BY date`, [startIso, endIso])
+			.then((res: any) => { nativeChartData = res as any[]; });
+	});
+
+	// Effective data: native (PowerSync SQLite) in Electron, server (PostgreSQL) on web
+	const effectiveSummaries = $derived(
+		isNative
+			? (nativeSummaries !== null ? Promise.resolve(nativeSummaries) : new Promise<any>(() => {}))
+			: data.summaries
+	);
+	const effectiveTopProducts = $derived(
+		isNative
+			? (nativeTopProducts !== null ? Promise.resolve(nativeTopProducts) : new Promise<any>(() => {}))
+			: data.topProducts
+	);
+	const effectiveCategoryBreakdown = $derived(
+		isNative
+			? (nativeCategoryBreakdown !== null ? Promise.resolve(nativeCategoryBreakdown) : new Promise<any>(() => {}))
+			: data.categoryBreakdown
+	);
+	const effectivePaymentBreakdown = $derived(
+		isNative
+			? (nativePaymentBreakdown !== null ? Promise.resolve(nativePaymentBreakdown) : new Promise<any>(() => {}))
+			: data.paymentBreakdown
+	);
+	const effectiveRefundSummary = $derived(
+		isNative
+			? (nativeRefundSummary !== null ? Promise.resolve(nativeRefundSummary) : new Promise<any>(() => {}))
+			: data.refundSummary
+	);
+	const effectiveExpenseBreakdown = $derived(
+		isNative
+			? (nativeExpenseBreakdown !== null ? Promise.resolve(nativeExpenseBreakdown) : new Promise<any>(() => {}))
+			: data.expenseBreakdown
+	);
+	const effectiveStockUpdates = $derived(
+		isNative
+			? (nativeStockUpdates !== null ? Promise.resolve(nativeStockUpdates) : new Promise<any>(() => {}))
+			: data.stockUpdates
+	);
+	const effectiveChartData = $derived(
+		isNative
+			? (nativeChartData !== null ? Promise.resolve(nativeChartData) : new Promise<any>(() => {}))
+			: data.chartData
+	);
 
 	// Dialog states
 	let detailType = $state<'products' | 'staff' | 'customers' | 'inventory' | 'expenses' | null>(
@@ -129,7 +272,7 @@
 	}
 
 	$effect(() => {
-		data.chartData.then((cd: any[]) => {
+		effectiveChartData.then((cd: any[]) => {
 			if (cd && cd.length > 0) updateChart(cd);
 		});
 		return () => {
@@ -262,7 +405,7 @@
 			Sales Overview
 		</h2>
 		<div class="flex flex-wrap gap-2.5 sm:gap-3">
-			{#await data.summaries}
+			{#await effectiveSummaries}
 				{#each Array(3) as _}
 					<div class="min-w-[180px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
@@ -412,7 +555,7 @@
 			Current Inventory Assets
 		</h2>
 		<div class="flex flex-wrap gap-2.5 sm:gap-3">
-			{#await data.summaries}
+			{#await effectiveSummaries}
 				{#each Array(2) as _}
 					<div class="min-w-[200px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
@@ -486,7 +629,7 @@
 			</Card.Title>
 		</Card.Header>
 		<Card.Content class="px-3 sm:px-6">
-			{#await data.chartData}
+			{#await effectiveChartData}
 				<div class="flex h-[180px] flex-col items-center justify-end gap-2 pb-4 sm:h-[240px]">
 					<div class="flex w-full items-end justify-between gap-2 px-4">
 						{#each Array(12) as _, i}
@@ -517,7 +660,7 @@
 				<Card.Title class="text-sm sm:text-base">Payment Methods</Card.Title>
 			</Card.Header>
 			<Card.Content class="space-y-3 px-3 sm:space-y-4 sm:px-6">
-				{#await Promise.all([data.summaries, data.paymentBreakdown])}
+				{#await Promise.all([effectiveSummaries, effectivePaymentBreakdown])}
 					{#each Array(3) as _}
 						<div class="space-y-2">
 							<div class="flex justify-between">
@@ -582,7 +725,7 @@
 			<Card.Header class="px-3 pb-3 sm:px-6">
 				<div class="flex items-center justify-between">
 					<Card.Title class="text-sm sm:text-base">Expenses</Card.Title>
-					{#await data.summaries}
+					{#await effectiveSummaries}
 						<Skeleton class="h-6 w-20" />
 					{:then summaries}
 						<span class="text-base font-bold text-orange-600 sm:text-lg">
@@ -592,7 +735,7 @@
 				</div>
 			</Card.Header>
 			<Card.Content class="px-3 sm:px-6">
-				{#await data.expenseBreakdown}
+				{#await effectiveExpenseBreakdown}
 					<div class="space-y-4">
 						{#each Array(3) as _}<Skeleton class="h-4 w-full" />{/each}
 					</div>
@@ -629,7 +772,7 @@
 				<Card.Title class="text-sm sm:text-base">Refunds & Voids</Card.Title>
 			</Card.Header>
 			<Card.Content class="px-3 sm:px-6">
-				{#await data.refundSummary}
+				{#await effectiveRefundSummary}
 					<div class="grid grid-cols-2 gap-2">
 						<Skeleton class="h-16 w-full" />
 						<Skeleton class="h-16 w-full" />
@@ -683,7 +826,7 @@
 				</Card.Title>
 			</Card.Header>
 			<Card.Content class="px-3 sm:px-6">
-				{#await data.categoryBreakdown}
+				{#await effectiveCategoryBreakdown}
 					<div class="space-y-4">
 						{#each Array(4) as _}<Skeleton class="h-8 w-full" />{/each}
 					</div>
@@ -730,7 +873,7 @@
 				</div>
 			</Card.Header>
 			<Card.Content class="p-0">
-				{#await data.topProducts}
+				{#await effectiveTopProducts}
 					<div class="space-y-3 p-4">
 						{#each Array(5) as _}<Skeleton class="h-6 w-full" />{/each}
 					</div>
@@ -778,7 +921,7 @@
 			</Card.Title>
 		</Card.Header>
 		<Card.Content class="p-0">
-			{#await data.stockUpdates}
+			{#await effectiveStockUpdates}
 				<div class="space-y-3 p-4">
 					{#each Array(3) as _}<Skeleton class="h-10 w-full" />{/each}
 				</div>
@@ -825,7 +968,7 @@
 
 <!-- Simplified Print Layout -->
 <div class="print-report">
-	{#await data.summaries}
+	{#await effectiveSummaries}
 		<p>Loading report data for printing...</p>
 	{:then summaries}
 		<div class="print-header">

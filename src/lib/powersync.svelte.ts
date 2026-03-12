@@ -83,16 +83,19 @@ export class PowerSyncManager {
                 throw new Error('PowerSync URL not configured. Set VITE_POWERSYNC_URL in your environment.');
             }
 
+            // In Capacitor, the app is served from https://localhost (local assets).
+            // API calls must use the absolute VPS URL since there is no local server.
+            const isCapacitor = import.meta.env.VITE_BUILD_TARGET === 'capacitor';
+            const apiBase = isCapacitor ? 'https://anchorshop.cloud' : '';
+
             const connector: any = {
                 fetchCredentials: async () => {
                     console.log('[PowerSync] Fetching credentials...');
                     const maxAttempts = 3;
                     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                         try {
-                            const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
-
-                            const res = await fetch(`/api/powersync/token`, {
-                                credentials: isStandardWeb ? 'include' : 'omit'
+                            const res = await fetch(`${apiBase}/api/powersync/token`, {
+                                credentials: 'include'
                             });
                             if (!res.ok) {
                                 const body = await res.text().catch(() => '');
@@ -125,7 +128,7 @@ export class PowerSyncManager {
                     if (!transaction) return;
 
                     const mutationCount = transaction.crud?.length ?? 0;
-                    
+
                     // PowerSync CrudEntry v1.x uses: table, op, id, opData (class properties)
                     // Note: toJSON() uses 'type' and 'data', but transaction.crud has CrudEntry instances
                     const mutations = transaction.crud.map((m: any) => ({
@@ -138,15 +141,13 @@ export class PowerSyncManager {
                     const tables = [...new Set(mutations.map((m: any) => m.table))];
 
                     try {
-                        const isStandardWeb = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
-
-                        // Upload to local server — session cookie provides auth
-                        const res = await fetch(`/api/powersync/upload`, {
+                        // Upload to VPS — session cookie provides auth (credentials: 'include' for cross-origin Capacitor)
+                        const res = await fetch(`${apiBase}/api/powersync/upload`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
                             },
-                            credentials: isStandardWeb ? 'include' : 'omit',
+                            credentials: 'include',
                             body: JSON.stringify({ mutations })
                         });
 

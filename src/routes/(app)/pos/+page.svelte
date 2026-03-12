@@ -41,7 +41,7 @@
 	import { powersync } from '$lib/powersync.svelte';
 
 	let { data, form } = $props();
-	const isNative = $derived(browser && (window as any).electron);
+	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
 
 	let searchQuery = $state('');
 	let selectedCategory = $state('All');
