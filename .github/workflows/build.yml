@@ -109,9 +109,12 @@ jobs:
           } > .env
 
       - name: Build Web Assets
-        run: pnpm build
+        run: CAPACITOR_BUILD=true pnpm build
         env:
           BUILD_TARGET: capacitor
+
+      - name: Remove .gz files (not supported by Android asset packager)
+        run: find build/client -name "*.gz" -delete
 
       - name: Sync Capacitor
         run: npx cap sync android
@@ -119,7 +122,7 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Setup Android SDK
