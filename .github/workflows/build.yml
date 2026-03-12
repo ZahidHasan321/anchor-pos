@@ -104,6 +104,8 @@ jobs:
     name: Deploy Electron to VPS
     needs: build-electron
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Download artifacts
