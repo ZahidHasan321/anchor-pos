@@ -69,6 +69,7 @@
 	let btConnecting = $state(false);
 	let btTesting = $state(false);
 	let btPaperWidth = $state('58');
+	let btSlowMode = $state(false);
 	let btScanning = $state(false);
 	let btDevices: DiscoveredDevice[] = $state([]);
 
@@ -78,6 +79,7 @@
 		useBtPrinter = localStorage.getItem('pos-use-bt-printer') === 'true';
 		btPrinterName = localStorage.getItem('pos-bt-printer-name') || '';
 		btPaperWidth = localStorage.getItem('pos-bt-printer-width') || '58';
+		btSlowMode = localStorage.getItem('pos-bt-printer-slow') === 'true';
 		btConnected = isBtConnected();
 
 		// Capacitor native: subscribe to device discovery events
@@ -252,6 +254,7 @@
 	function saveBtSettings() {
 		localStorage.setItem('pos-use-bt-printer', useBtPrinter.toString());
 		localStorage.setItem('pos-bt-printer-width', btPaperWidth);
+		localStorage.setItem('pos-bt-printer-slow', btSlowMode.toString());
 		toast.success('Bluetooth printer settings saved');
 	}
 
@@ -686,7 +689,7 @@
 										<Select.Content>
 											<Select.Item value="usb_share" label="USB (Windows Share)">USB (Windows Share)</Select.Item>
 											<Select.Item value="usb_direct" label="USB (Direct COM Port)">USB (Direct COM Port)</Select.Item>
-											<Select.Item value="bluetooth" label="Bluetooth (COM Port)">Bluetooth (COM Port)</Select.Item>
+											<Select.Item value="bluetooth" label="Bluetooth (COM Port)">Bluetooth (COM Port) — for XPPrinter 365B, ZJ, etc.</Select.Item>
 										</Select.Content>
 									</Select.Root>
 								</div>
@@ -784,7 +787,9 @@
 											bind:value={thermalPrinterInterface}
 											onblur={saveThermalSettings}
 										/>
-										<p class="text-[10px] text-muted-foreground">Pair your Bluetooth printer in Windows first. Select the detected port above or type manually.</p>
+										<p class="text-[10px] text-muted-foreground">
+										Steps: 1) Turn on printer 2) Open Windows Settings &gt; Bluetooth &gt; Add device 3) Pair the printer (PIN: 1234 or 0000) 4) Click "Refresh Devices" above 5) Select the COM port that appears. Common for XPPrinter 365B, ZJ-5805, RPP02N.
+									</p>
 									{/if}
 								</div>
 
@@ -888,8 +893,8 @@
 		</Card.Root>
 	{/if}
 
-	<!-- ==================== BLUETOOTH PRINTER (Mobile/Web/Capacitor) ==================== -->
-	{#if btSupported && !isElectron}
+	<!-- ==================== BLUETOOTH PRINTER (Mobile/Web/Capacitor/Electron) ==================== -->
+	{#if btSupported || isElectron}
 		<Card.Root>
 			<Card.Header class="px-4 pb-4 sm:px-6">
 				<div class="flex items-center gap-2.5">
@@ -900,6 +905,11 @@
 						<Card.Title class="text-sm sm:text-base">Bluetooth Printer</Card.Title>
 						<Card.Description class="text-xs sm:text-sm">
 							Connect to a Bluetooth thermal printer for receipt printing.
+							{#if isElectron}
+								Most POS printers (XPPrinter 365B, ZJ, etc.) use Classic Bluetooth — pair via Windows Bluetooth Settings, then use "Bluetooth (COM Port)" in the ESC/POS Thermal section above.
+							{:else if !isNativeBt}
+								Web Bluetooth only supports BLE printers. Most POS printers (XPPrinter 365B, ZJ, etc.) use Classic Bluetooth and won't appear here — use the Android app or desktop app instead.
+							{/if}
 						</Card.Description>
 					</div>
 				</div>
@@ -1042,7 +1052,19 @@
 									<Select.Item value="80" label="80mm (48 chars)">80mm (48 chars)</Select.Item>
 								</Select.Content>
 							</Select.Root>
-							<p class="text-[10px] text-muted-foreground">Most portable Bluetooth printers use 58mm paper.</p>
+							<p class="text-[10px] text-muted-foreground">Most portable Bluetooth printers use 58mm paper. XPPrinter 365B uses 80mm.</p>
+						</div>
+
+						<!-- Slow Mode Toggle -->
+						<div class="flex items-center justify-between gap-4">
+							<div class="min-w-0 space-y-0.5">
+								<Label>Slow Printing Mode</Label>
+								<p class="text-xs text-muted-foreground">Enable if the printer cuts off or garbles receipts. Uses longer delays between data chunks.</p>
+							</div>
+							<Switch
+								checked={btSlowMode}
+								onCheckedChange={(v) => { btSlowMode = v; saveBtSettings(); }}
+							/>
 						</div>
 
 						<!-- Test Print -->

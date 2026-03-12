@@ -33,7 +33,8 @@
 	import { untrack } from 'svelte';
 	import { APP_NAME } from '$lib/constants';
 	import { powersync } from '$lib/powersync.svelte';
-	import { Wifi, WifiOff, RefreshCw } from '@lucide/svelte';
+	import { Wifi, WifiOff, RefreshCw, Printer, PrinterCheck } from '@lucide/svelte';
+	import { printerState } from '$lib/stores/printer.svelte';
 
 	let { data, children } = $props();
 	let isMobileMenuOpen = $state(false);
@@ -122,7 +123,7 @@
 
 <!-- CSS Variable sync for industry standard performance -->
 <div
-	class="flex h-screen w-full bg-background text-foreground"
+	class="flex h-dvh w-full bg-background text-foreground"
 	style="--sidebar-width: {collapsed ? '64px' : '256px'}"
 >
 	<!-- Desktop Sidebar -->
@@ -229,6 +230,49 @@
 						{:else}
 							<span class="h-2 w-2 animate-pulse rounded-full bg-amber-500"></span>
 							<span class="text-amber-500">Offline</span>
+						{/if}
+					</div>
+				{/if}
+			{/if}
+
+			<!-- Printer Status -->
+			{#if printerState.configured}
+				{#if collapsed}
+					<Tooltip.Root delayDuration={0}>
+						<Tooltip.Trigger class="w-full">
+							{#snippet child({ props })}
+								<div {...props} class="flex items-center justify-center rounded-md p-2">
+									{#if printerState.status === 'connected'}
+										<PrinterCheck class="h-4 w-4 text-green-500" />
+									{:else if printerState.status === 'connecting'}
+										<Printer class="h-4 w-4 animate-pulse text-blue-500" />
+									{:else}
+										<Printer class="h-4 w-4 text-amber-500" />
+									{/if}
+								</div>
+							{/snippet}
+						</Tooltip.Trigger>
+						<Tooltip.Content side="right" class="font-medium">
+							{printerState.status === 'connected'
+								? printerState.name || 'Printer Ready'
+								: printerState.status === 'connecting'
+									? 'Connecting...'
+									: 'Printer Disconnected'}
+						</Tooltip.Content>
+					</Tooltip.Root>
+				{:else}
+					<div
+						class="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground"
+					>
+						{#if printerState.status === 'connected'}
+							<PrinterCheck class="h-3.5 w-3.5 text-green-500" />
+							<span class="truncate text-green-500" title={printerState.name}>{printerState.name || 'Printer Ready'}</span>
+						{:else if printerState.status === 'connecting'}
+							<Printer class="h-3.5 w-3.5 animate-pulse text-blue-500" />
+							<span class="text-blue-500">Connecting...</span>
+						{:else}
+							<Printer class="h-3.5 w-3.5 text-amber-500" />
+							<span class="text-amber-500">Printer Offline</span>
 						{/if}
 					</div>
 				{/if}
@@ -404,20 +448,26 @@
 		<span class="ml-3 text-sm font-black tracking-tighter text-primary uppercase italic"
 			>{APP_NAME}</span
 		>
-		{#if isElectron}
-			<div class="ml-auto flex items-center gap-1.5 text-xs font-medium">
+		<div class="ml-auto flex items-center gap-3 text-xs font-medium">
+			{#if printerState.configured}
+				{#if printerState.status === 'connected'}
+					<PrinterCheck class="h-3.5 w-3.5 text-green-500" />
+				{:else if printerState.status === 'connecting'}
+					<Printer class="h-3.5 w-3.5 animate-pulse text-blue-500" />
+				{:else}
+					<Printer class="h-3.5 w-3.5 text-amber-500" />
+				{/if}
+			{/if}
+			{#if isElectron}
 				{#if powersync.connectionStatus === 'syncing'}
 					<RefreshCw class="h-3.5 w-3.5 animate-spin text-blue-500" />
-					<span class="text-blue-500">Syncing</span>
 				{:else if powersync.connectionStatus === 'online'}
 					<span class="h-2 w-2 rounded-full bg-green-500"></span>
-					<span class="text-green-500">Online</span>
 				{:else}
 					<span class="h-2 w-2 animate-pulse rounded-full bg-amber-500"></span>
-					<span class="text-amber-500">Offline</span>
 				{/if}
-			</div>
-		{/if}
+			{/if}
+		</div>
 	</div>
 
 	<!-- Main Content Area -->

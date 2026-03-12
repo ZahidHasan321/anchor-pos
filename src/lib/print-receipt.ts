@@ -1,6 +1,59 @@
 import { getCurrencySymbol } from './format';
 import { isConnected as isBtConnected, printBluetoothReceipt, isCapacitorNative, connectPrinter } from './bluetooth-printer';
+import { printerState } from './stores/printer.svelte';
 import qrcodeMinJs from './vendor/qrcode.min.js?raw';
+
+/**
+ * Pre-renders a QR code in the live document and returns a PNG data URL.
+ * This avoids embedding the raw JS library in print HTML, which mobile print
+ * services render as raw text instead of executing it.
+ */
+async function generateQRDataUrl(text: string): Promise<string> {
+	return new Promise((resolve) => {
+		try {
+			// Inject the QR library into the main document once
+			if (!(window as any).__QRCodeLoaded) {
+				const script = document.createElement('script');
+				script.textContent = qrcodeMinJs;
+				document.head.appendChild(script);
+				(window as any).__QRCodeLoaded = true;
+			}
+
+			const QRCode = (window as any).QRCode;
+			if (!QRCode) { resolve(''); return; }
+
+			const container = document.createElement('div');
+			container.style.cssText = 'position:fixed;left:-9999px;width:100px;height:100px;visibility:hidden;';
+			document.body.appendChild(container);
+
+			try {
+				new QRCode(container, {
+					text,
+					width: 80,
+					height: 80,
+					colorDark: '#000000',
+					colorLight: '#ffffff',
+					correctLevel: QRCode.CorrectLevel.M
+				});
+
+				// Library creates a <canvas> (desktop) or <img> (some mobile browsers)
+				const canvas = container.querySelector('canvas');
+				if (canvas) {
+					resolve(canvas.toDataURL('image/png'));
+				} else {
+					const img = container.querySelector('img') as HTMLImageElement | null;
+					resolve(img?.src || '');
+				}
+			} catch {
+				resolve('');
+			} finally {
+				document.body.removeChild(container);
+			}
+		} catch {
+			resolve('');
+		}
+	});
+}
 
 export type ReceiptData = {
 	storeSettings: {
@@ -27,6 +80,7 @@ export type ReceiptData = {
 	orderUuid?: string;
 	date: string;
 	cashier: string;
+	paymentMethod?: string;
 	items: Array<{ name: string; variant: string; qty: number; total: number; status?: string }>;
 	total: number;
 	originalTotal?: number;
@@ -40,6 +94,11 @@ export type ReceiptData = {
 export async function printReceipt(data: ReceiptData, preview = false): Promise<{ success: boolean; error?: string } | void> {
 	const s = data.storeSettings;
 	const symbol = getCurrencySymbol();
+
+	// Pre-render QR code as a static image so print services don't show raw JS as text
+	const qrDataUrl = typeof window !== 'undefined'
+		? await generateQRDataUrl(data.orderUuid || data.orderId)
+		: '';
 
 	const itemsHtml = data.items
 		.map(
@@ -142,6 +201,7 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 			<div>Order: ${data.orderId}${data.isReprint ? ' (REPRINT)' : ''}</div>
 			<div>Date: ${data.date}</div>
 			<div>Cashier: ${data.cashier}</div>
+			${data.paymentMethod ? `<div>Payment: ${data.paymentMethod.charAt(0).toUpperCase() + data.paymentMethod.slice(1)}</div>` : ''}
 		</div>
 
 		<div class="line"></div>
@@ -203,29 +263,12 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 			</div>
 			${data.footerNote ? `<div style="font-size: 9px; opacity: 0.8;">${data.footerNote}</div>` : ''}
 			<div style="margin: 10px 0; display: flex; justify-content: center;">
-				<div id="qrcode"></div>
+				${qrDataUrl ? `<img src="${qrDataUrl}" width="80" height="80" style="display:block;">` : ''}
 			</div>
 			<div style="margin-top: 4px; font-size: 9px;">*** End of Receipt ***</div>
 		</div>
 		<div class="feed-cut"></div>
 	</div>
-	<script>${qrcodeMinJs}</script>
-	<script>
-		window.onload = function() {
-			try {
-				new QRCode(document.getElementById("qrcode"), {
-					text: "${data.orderUuid || data.orderId}",
-					width: 80,
-					height: 80,
-					colorDark : "#000000",
-					colorLight : "#ffffff",
-					correctLevel : QRCode.CorrectLevel.M
-				});
-			} catch (e) {
-				console.error("QR Code generation failed", e);
-			}
-		};
-	</script>
 </body></html>`;
 
 	// --- Native Electron Printing ---
@@ -274,14 +317,14 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 		return { success: true };
 	}
 
-	// --- Bluetooth Thermal Printing (Mobile) ---
+	// --- Bluetooth Thermal Printing (Mobile/Web) ---
 	if (typeof window !== 'undefined' && !preview) {
 		const useBt = localStorage.getItem('pos-use-bt-printer') === 'true';
 		if (useBt) {
-			// On Capacitor native, auto-reconnect to last known printer if not connected
-			if (!isBtConnected() && isCapacitorNative()) {
+			// Auto-reconnect to last known printer if not connected
+			if (!isBtConnected()) {
 				const lastAddr = localStorage.getItem('pos-bt-printer-address');
-				if (lastAddr) {
+				if (lastAddr || isCapacitorNative()) {
 					try {
 						await connectPrinter();
 					} catch (e) {
@@ -293,14 +336,17 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 			if (isBtConnected()) {
 				try {
 					const result = await printBluetoothReceipt(data);
+					printerState.refresh();
 					return result;
 				} catch (e) {
 					console.error('Bluetooth print failed, falling back:', e);
+					printerState.refresh();
 					// fall through to web printing
 				}
 			} else if (isCapacitorNative()) {
+				printerState.refresh();
 				// No web print fallback on Capacitor — it won't show anything
-				return { success: false, error: 'Bluetooth printer not connected. Set up in Settings > Preferences.' };
+				return { success: false, error: 'Bluetooth printer not connected. Tap Reconnect or set up in Settings > Preferences.' };
 			}
 		} else if (isCapacitorNative()) {
 			return { success: false, error: 'Enable Bluetooth printing in Settings > Preferences.' };

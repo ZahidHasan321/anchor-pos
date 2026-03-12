@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk}"
+JAVA_HOME="/usr/lib/jvm/java-21-openjdk"
 ANDROID_HOME="${ANDROID_HOME:-/home/zahid/Android/Sdk}"
 KEYSTORE_FILE="${SCRIPT_DIR}/release-key.jks"
 STORE_PASSWORD="AutoPOS@2026"

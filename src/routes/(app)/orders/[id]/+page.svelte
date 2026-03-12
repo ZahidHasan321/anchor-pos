@@ -4,13 +4,16 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import { Badge } from '$lib/components/ui/badge';
-	import { ArrowLeft, Printer, ShoppingBag, User, CreditCard, Banknote } from '@lucide/svelte';
+	import { ArrowLeft, Printer, PrinterCheck, ShoppingBag, User, CreditCard, Banknote, Bluetooth, Loader2 } from '@lucide/svelte';
 	import { formatCurrency, formatDateTime } from '$lib/format';
 	import { printReceipt } from '$lib/print-receipt';
 	import { toast } from 'svelte-sonner';
 	import { confirmState } from '$lib/confirm.svelte';
 	import { powersync } from '$lib/powersync.svelte';
 	import { browser } from '$app/environment';
+	import { printerState } from '$lib/stores/printer.svelte';
+
+	const pStatus = $derived(printerState.status);
 
 	let { data, form } = $props();
 
@@ -95,6 +98,7 @@
 			originalTotal: originalTotal,
 			cashReceived: o.cashReceived || 0,
 			changeGiven: o.changeGiven || 0,
+			paymentMethod: o.paymentMethod,
 			status: o.status,
 			footerNote: 'Reprinted on ' + new Date().toLocaleString(),
 			isReprint: true
@@ -164,8 +168,33 @@
 					</form>
 				</div>
 			{/if}
-			<Button onclick={handlePrintReceipt} size="sm" class="h-9 px-3 text-xs font-bold">
-				<Printer class="mr-2 h-3.5 w-3.5" /> Receipt
+			{#if pStatus === 'disconnected' || pStatus === 'connecting'}
+				<Button
+					variant="outline"
+					size="sm"
+					class="h-9 px-3 text-xs font-bold cursor-pointer text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700"
+					onclick={async () => {
+						const result = await printerState.reconnect();
+						if (result.success) toast.success('Printer reconnected');
+						else toast.error(result.error || 'Could not reconnect');
+					}}
+					disabled={pStatus === 'connecting'}
+				>
+					{#if pStatus === 'connecting'}
+						<Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+					{:else}
+						<Bluetooth class="mr-1.5 h-3.5 w-3.5" />
+					{/if}
+					Reconnect
+				</Button>
+			{/if}
+			<Button onclick={handlePrintReceipt} size="sm" class="h-9 px-3 text-xs font-bold cursor-pointer">
+				{#if printerState.status === 'connected'}
+					<PrinterCheck class="mr-2 h-3.5 w-3.5" />
+				{:else}
+					<Printer class="mr-2 h-3.5 w-3.5" />
+				{/if}
+				Receipt
 			</Button>
 		</div>
 	</div>
@@ -223,7 +252,7 @@
 											)}
 										</span>
 										{#if item.status !== 'refunded' && order.status === 'completed' && data.user?.role !== 'sales'}
-											<form method="POST" action="?/refundItem" use:enhance class="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+											<form method="POST" action="?/refundItem" use:enhance class="md:opacity-0 md:group-hover:opacity-100 transition-opacity">
 												<input type="hidden" name="itemId" value={item.id} />
 												<Button
 													variant="ghost"

@@ -26,10 +26,25 @@
 	let { form } = $props();
 	let loading = $state(false);
 	let showPassword = $state(false);
+	let isCapacitor = $state(false);
+
+	$effect(() => {
+		if (browser) isCapacitor = !!(window as any).Capacitor;
+	});
 
 	function setTheme(theme: 'light' | 'dark' | 'system') {
 		if (theme === 'system') resetMode();
 		else setMode(theme);
+	}
+
+	// Capacitor: native form submission handles Set-Cookie reliably in Android WebView.
+	// fetch()-based enhance can silently drop cookies in some WebView versions.
+	function handleCapacitorSubmit(e: SubmitEvent) {
+		if (!isCapacitor) return; // let use:enhance handle it
+		e.preventDefault();
+		loading = true;
+		const formEl = e.target as HTMLFormElement;
+		formEl.submit(); // native POST — browser handles Set-Cookie + 303 redirect
 	}
 </script>
 
@@ -37,7 +52,7 @@
 	<title>Login — {APP_NAME}</title>
 </svelte:head>
 
-<div class="relative flex min-h-screen items-center justify-center bg-muted/30 p-4">
+<div class="relative flex min-h-dvh items-center justify-center bg-muted/30 p-4">
 	<!-- Theme Toggle -->
 	<div class="absolute top-4 right-4">
 		<DropdownMenu.Root>
@@ -98,30 +113,19 @@
 			<Card.Content>
 				<form
 					method="POST"
+					onsubmit={handleCapacitorSubmit}
 					use:enhance={() => {
 						loading = true;
 						return async ({ result, update }) => {
 							loading = false;
 
-							// Handle failure directly without SSR re-render
-							// (SSR can fail in Electron when @powersync/web is missing from server bundle)
 							if (result.type === 'failure') {
 								form = result.data as any;
 								return;
 							}
 
-							// Special handling for JSON redirect (Native App)
 							if (result.type === 'success' && result.data?.redirect) {
 								goto(result.data.redirect as string);
-								return;
-							}
-
-							// Capacitor Android WebView: cookies from fetch() Set-Cookie may
-							// not be immediately available. Add a small delay to allow the
-							// WebView to flush cookies to the store before hard navigation.
-							if (result.type === 'redirect' && browser && (window as any).Capacitor) {
-								await new Promise((r) => setTimeout(r, 150));
-								window.location.href = result.location;
 								return;
 							}
 

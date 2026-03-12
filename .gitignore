@@ -30,6 +30,13 @@ Thumbs.db
 # /android/
 # /ios/
 
+# Android signing keys and credentials — NEVER commit these
+*.jks
+*.keystore
+release-key.*
+.android-signing
+Auto-POS-*.apk
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*

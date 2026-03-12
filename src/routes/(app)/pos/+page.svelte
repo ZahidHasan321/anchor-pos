@@ -28,6 +28,8 @@
 	import { formatCurrency, getCurrencySymbol, formatDateTime } from '$lib/format';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { printReceipt } from '$lib/print-receipt';
+	import { printerState } from '$lib/stores/printer.svelte';
+	import { Bluetooth } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { browser } from '$app/environment';
 	import { confirmState } from '$lib/confirm.svelte';
@@ -211,7 +213,8 @@
 				changeGiven: cart.changeAmount,
 				items: [...cart.items],
 				total: cart.subtotal,
-				cashReceived: cart.cashReceived
+				cashReceived: cart.cashReceived,
+				paymentMethod: cart.paymentMethod
 			};
 			console.log('[POS] Checkout process complete.');
 			cart.clear();
@@ -255,7 +258,8 @@
 					changeGiven: form.changeGiven ?? 0,
 					items: [...cart.items],
 					total: cart.subtotal,
-					cashReceived: cart.cashReceived
+					cashReceived: cart.cashReceived,
+					paymentMethod: cart.paymentMethod
 				};
 				cart.clear();
 				checkoutOpen = false;
@@ -272,7 +276,7 @@
 
 	let activeMobileTab = $state<'products' | 'cart'>('products');
 
-	async function handlePrintReceipt(preview = true) {
+	async function handlePrintReceipt(preview = false) {
 		if (!completedOrder) return;
 		let storeSettings: any = {};
 		if (isNative) {
@@ -299,6 +303,7 @@
 			total: completedOrder.total,
 			cashReceived: completedOrder.cashReceived,
 			changeGiven: completedOrder.changeGiven,
+			paymentMethod: completedOrder.paymentMethod,
 			footerNote: 'Printed on ' + formatDateTime(new Date())
 		}, preview);
 		if (result && !result.success && result.error) {
@@ -442,7 +447,7 @@
 								</div>
 								<button
 									onclick={() => cart.removeItem(item.variantId)}
-									class="text-muted-foreground hover:text-destructive"><X class="h-4 w-4" /></button
+									class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><X class="h-4 w-4" /></button
 								>
 							</div>
 							<div class="flex items-center justify-between">
@@ -464,13 +469,13 @@
 								<div class="flex items-center gap-2">
 									<button
 										onclick={() => cart.updateQuantity(item.variantId, item.quantity - 1)}
-										class="flex h-6 w-6 items-center justify-center rounded border hover:bg-muted"
+										class="flex h-8 w-8 items-center justify-center rounded border hover:bg-muted"
 										>-</button
 									>
 									<span class="w-4 text-center text-xs font-bold">{item.quantity}</span>
 									<button
 										onclick={() => cart.updateQuantity(item.variantId, item.quantity + 1)}
-										class="flex h-6 w-6 items-center justify-center rounded border hover:bg-muted"
+										class="flex h-8 w-8 items-center justify-center rounded border hover:bg-muted"
 										disabled={item.quantity >= item.maxStock}>+</button
 									>
 								</div>
@@ -496,7 +501,7 @@
 									class="text-[10px] text-muted-foreground">{cart.customer.phone}</span
 								>
 							</div>
-							<button onclick={() => cart.setCustomer(null)}><X class="h-4 w-4" /></button>
+							<button onclick={() => cart.setCustomer(null)} class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><X class="h-4 w-4" /></button>
 						</div>
 					{:else}
 						<div class="relative">
@@ -726,14 +731,14 @@
 
 			<!-- Change Result -->
 			{#if (cart.paymentMethod === 'cash' || cart.paymentMethod === 'split') && (cart.cashReceived ?? 0) > 0}
-				<div class="rounded-xl bg-emerald-50 border border-emerald-100 p-4 flex justify-between items-center animate-in zoom-in-95 duration-200">
+				<div class="rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-4 flex justify-between items-center animate-in zoom-in-95 duration-200">
 					<div class="flex items-center gap-3">
 						<div class="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
-							<Banknote class="h-5 w-5 text-emerald-600" />
+							<Banknote class="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
 						</div>
-						<span class="text-sm font-semibold text-emerald-700">Change to Return</span>
+						<span class="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Change to Return</span>
 					</div>
-					<span class="text-xl font-bold text-emerald-600">{formatCurrency(cart.changeAmount)}</span>
+					<span class="text-xl font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(cart.changeAmount)}</span>
 				</div>
 			{/if}
 		</div>
@@ -831,14 +836,53 @@
 				<div class="text-4xl font-black">{formatCurrency(completedOrder.total)}</div>
 			</div>
 			{#if completedOrder.changeGiven > 0}<div
-					class="rounded-xl bg-amber-50 p-4 text-xl font-bold text-amber-600"
+					class="rounded-xl bg-amber-50 dark:bg-amber-950/50 p-4 text-xl font-bold text-amber-600 dark:text-amber-400"
 				>
 					Change: {formatCurrency(completedOrder.changeGiven)}
 				</div>{/if}
+
+			<!-- Printer status warning with quick reconnect -->
+			{@const pStatus = printerState.status}
+			{#if pStatus === 'disconnected' || pStatus === 'connecting'}
+				<div class="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-left">
+					<div class="min-w-0">
+						<p class="text-sm font-medium text-amber-700 dark:text-amber-400">
+							{pStatus === 'connecting' ? 'Connecting...' : 'Printer disconnected'}
+						</p>
+						<p class="text-xs text-amber-600/70 dark:text-amber-500/70 truncate">{printerState.name || 'Tap reconnect or go to Settings'}</p>
+					</div>
+					<Button
+						variant="outline"
+						size="sm"
+						class="shrink-0 cursor-pointer border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-400"
+						onclick={async () => {
+							const result = await printerState.reconnect();
+							if (result.success) {
+								toast.success('Printer reconnected');
+							} else {
+								toast.error(result.error || 'Could not reconnect');
+							}
+						}}
+						disabled={pStatus === 'connecting'}
+					>
+						{#if pStatus === 'connecting'}
+							<Loader2 class="mr-1 h-3 w-3 animate-spin" />
+						{:else}
+							<Bluetooth class="mr-1 h-3 w-3" />
+						{/if}
+						Reconnect
+					</Button>
+				</div>
+			{:else if pStatus === 'not-configured'}
+				<div class="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+					No printer configured. <a href="/settings/preferences" class="font-medium text-primary underline underline-offset-2">Set up in Settings</a>
+				</div>
+			{/if}
+
 			<div class="flex gap-2">
-				<Button class="h-14 flex-1" onclick={() => handlePrintReceipt(true)}
+				<Button class="h-14 flex-1 cursor-pointer" onclick={() => handlePrintReceipt()}
 					><Printer class="mr-2 h-5 w-5" /> Print</Button
-				><Button variant="outline" class="h-14 flex-1" onclick={() => (completedOrder = null)}
+				><Button variant="outline" class="h-14 flex-1 cursor-pointer" onclick={() => (completedOrder = null)}
 					>Done</Button
 				>
 			</div>

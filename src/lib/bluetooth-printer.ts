@@ -42,6 +42,7 @@ export type BluetoothReceiptData = {
 		store_bin?: string;
 		store_facebook?: string;
 		store_instagram?: string;
+		store_currency?: string;
 		receipt_footer?: string;
 		return_policy?: string;
 		exchange_policy?: string;
@@ -50,6 +51,7 @@ export type BluetoothReceiptData = {
 	orderId: string;
 	date: string;
 	cashier: string;
+	paymentMethod?: string;
 	items: Array<{ name: string; variant: string; qty: number; total: number; status?: string }>;
 	total: number;
 	originalTotal?: number;
@@ -77,22 +79,22 @@ async function getCapPlugin(): Promise<any> {
 		const mod = await import('capacitor-thermal-printer');
 		capPlugin = mod.CapacitorThermalPrinter;
 
-		capPlugin.addListener('discoverDevices', (event: any) => {
+		await capPlugin.addListener('discoverDevices', (event: any) => {
 			const devices = event?.devices ?? (Array.isArray(event) ? event : []);
 			capDiscoveredDevices = devices;
 			capScanCallbacks.forEach((cb) => cb(devices));
 		});
 
-		capPlugin.addListener('discoveryFinish', () => {
+		await capPlugin.addListener('discoveryFinish', () => {
 			capScanFinishCallbacks.forEach((cb) => cb());
 		});
 
-		capPlugin.addListener('connected', (device: any) => {
+		await capPlugin.addListener('connected', (device: any) => {
 			capConnectedFlag = true;
 			if (device) capConnectedDevice = device;
 		});
 
-		capPlugin.addListener('disconnected', () => {
+		await capPlugin.addListener('disconnected', () => {
 			capConnectedFlag = false;
 			capConnectedDevice = null;
 		});
@@ -181,6 +183,32 @@ async function capIsConnected(): Promise<boolean> {
 	}
 }
 
+function wordWrap(text: string, width: number): string[] {
+	const words = text.split(' ');
+	const lines: string[] = [];
+	let current = '';
+	for (const word of words) {
+		const candidate = current ? current + ' ' + word : word;
+		if (candidate.length <= width) {
+			current = candidate;
+		} else {
+			if (current) lines.push(current);
+			current = word.length > width ? word.substring(0, width) : word;
+		}
+	}
+	if (current) lines.push(current);
+	return lines;
+}
+
+function currencySymbol(currency?: string): string {
+	if (!currency) return '';
+	try {
+		return new Intl.NumberFormat('en', { style: 'currency', currency }).formatToParts(0).find(p => p.type === 'currency')?.value ?? '';
+	} catch {
+		return '';
+	}
+}
+
 function leftRightStr(left: string, right: string, width: number): string {
 	const gap = width - left.length - right.length;
 	if (gap > 0) return left + ' '.repeat(gap) + right;
@@ -206,6 +234,7 @@ async function printReceiptNative(
 
 		const pw = localStorage.getItem('pos-bt-printer-width') === '58' ? 32 : 48;
 		const s = data.storeSettings;
+		const sym = currencySymbol(s.store_currency);
 
 		plugin.begin();
 
@@ -244,6 +273,7 @@ async function printReceiptNative(
 		plugin.text('Order: ' + data.orderId + (data.isReprint ? ' (REPRINT)' : '') + '\n');
 		plugin.text('Date: ' + data.date + '\n');
 		plugin.text('Cashier: ' + data.cashier + '\n');
+		if (data.paymentMethod) plugin.text('Payment: ' + data.paymentMethod.charAt(0).toUpperCase() + data.paymentMethod.slice(1) + '\n');
 		plugin.text('-'.repeat(pw) + '\n');
 
 		// Column header
@@ -272,24 +302,24 @@ async function printReceiptNative(
 		// Totals
 		const refundAmount = data.originalTotal ? data.originalTotal - data.total : 0;
 		if (data.originalTotal && data.originalTotal !== data.total) {
-			plugin.text(leftRightStr('ORIGINAL TOTAL', data.originalTotal.toFixed(2), pw) + '\n');
-			plugin.text(leftRightStr('TOTAL REFUND', '-' + refundAmount.toFixed(2), pw) + '\n');
+			plugin.text(leftRightStr('ORIGINAL TOTAL', sym + data.originalTotal.toFixed(2), pw) + '\n');
+			plugin.text(leftRightStr('TOTAL REFUND', '-' + sym + refundAmount.toFixed(2), pw) + '\n');
 		}
 		plugin.bold(true);
-		plugin.text(leftRightStr('NET TOTAL', data.total.toFixed(2), pw) + '\n');
+		plugin.text(leftRightStr('NET TOTAL', sym + data.total.toFixed(2), pw) + '\n');
 		plugin.bold(false);
 
 		if (data.cashReceived) {
-			plugin.text(leftRightStr('Cash Received', data.cashReceived.toFixed(2), pw) + '\n');
-			plugin.text(leftRightStr('Change', data.changeGiven.toFixed(2), pw) + '\n');
+			plugin.text(leftRightStr('Cash Received', sym + data.cashReceived.toFixed(2), pw) + '\n');
+			plugin.text(leftRightStr('Change', sym + data.changeGiven.toFixed(2), pw) + '\n');
 		}
 
 		// Policies
 		if (s.return_policy || s.exchange_policy || s.terms_conditions) {
 			plugin.text('-'.repeat(pw) + '\n');
-			if (s.return_policy) plugin.text('Return: ' + s.return_policy + '\n');
-			if (s.exchange_policy) plugin.text('Exchange: ' + s.exchange_policy + '\n');
-			if (s.terms_conditions) plugin.text('T&C: ' + s.terms_conditions + '\n');
+			if (s.return_policy) wordWrap('Return: ' + s.return_policy, pw).forEach(l => plugin.text(l + '\n'));
+			if (s.exchange_policy) wordWrap('Exchange: ' + s.exchange_policy, pw).forEach(l => plugin.text(l + '\n'));
+			if (s.terms_conditions) wordWrap('T&C: ' + s.terms_conditions, pw).forEach(l => plugin.text(l + '\n'));
 		}
 
 		// Social
@@ -361,23 +391,35 @@ declare global {
 	}
 }
 
+// NOTE: Most thermal POS printers (XPPrinter 365B, ZJ-5805, etc.) use Classic Bluetooth SPP,
+// NOT BLE. Web Bluetooth API only supports BLE, so it won't work with those printers.
+// Use Capacitor native (Classic BT SPP via Rongta SDK) or Electron + COM port instead.
+// The BLE UUIDs below are for the minority of printers that DO support BLE.
 const PRINTER_SERVICE_UUIDS = [
-	'0000ff00-0000-1000-8000-00805f9b34fb',
-	'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-	'49535343-fe7d-4ae5-8fa9-9fafd205e455'
+	'000018f0-0000-1000-8000-00805f9b34fb', // Standard BLE print service (MTP-2/3, Goojprt)
+	'0000ff00-0000-1000-8000-00805f9b34fb', // FoMemo, PeriPage
+	'0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 BLE UART module (some cheap mini printers)
+	'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Nordic UART variant
+	'49535343-fe7d-4ae5-8fa9-9fafd205e455' // Microchip Transparent UART
 ];
 
 const PRINTER_WRITE_CHAR_UUIDS = [
-	'0000ff02-0000-1000-8000-00805f9b34fb',
+	'00002af1-0000-1000-8000-00805f9b34fb', // Standard BLE print write characteristic
+	'0000ff02-0000-1000-8000-00805f9b34fb', // FoMemo, PeriPage
+	'0000ffe1-0000-1000-8000-00805f9b34fb', // HM-10 BLE UART write
 	'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
-	'49535343-8841-43f4-a8d4-ecbe34729bb3'
+	'49535343-8841-43f4-a8d4-ecbe34729bb3' // Microchip Transparent UART write
 ];
 
 const ESC = 0x1b;
 const GS = 0x1d;
 const LF = 0x0a;
-const BLE_CHUNK_SIZE = 100;
+// BLE has a 20-byte MTU for many devices — use small chunks by default for reliability
+const BLE_CHUNK_SIZE = 20;
 const BLE_CHUNK_DELAY = 50;
+// Even slower mode for unreliable connections
+const BLE_SLOW_CHUNK_SIZE = 20;
+const BLE_SLOW_CHUNK_DELAY = 150;
 
 type WebBtState = {
 	device: BluetoothDevice | null;
@@ -397,6 +439,68 @@ function webBtIsConnected(): boolean {
 	return webBt.server?.connected === true && webBt.writeCharacteristic !== null;
 }
 
+/**
+ * Search for a writable characteristic across known service UUIDs and fallback to
+ * discovering all services (for printers that don't advertise standard UUIDs).
+ */
+async function findWriteCharacteristic(
+	server: BluetoothRemoteGATTServer
+): Promise<BluetoothRemoteGATTCharacteristic | null> {
+	let writeChar: BluetoothRemoteGATTCharacteristic | null = null;
+
+	// 1. Try known service UUIDs first
+	for (const serviceUuid of PRINTER_SERVICE_UUIDS) {
+		try {
+			const service = await server.getPrimaryService(serviceUuid);
+			const chars = await service.getCharacteristics();
+
+			// Try known write characteristic UUIDs
+			for (const charUuid of PRINTER_WRITE_CHAR_UUIDS) {
+				const found = chars.find((c: any) => c.uuid === charUuid);
+				if (found && (found.properties.write || found.properties.writeWithoutResponse)) {
+					return found;
+				}
+			}
+
+			// Fallback: any writable characteristic in this service
+			writeChar =
+				chars.find((c: any) => c.properties.writeWithoutResponse || c.properties.write) ?? null;
+			if (writeChar) return writeChar;
+		} catch {
+			continue;
+		}
+	}
+
+	// 2. If known UUIDs didn't work, discover ALL services on the device
+	// This handles unknown/cheap Chinese printers with non-standard UUIDs
+	try {
+		const services = await server.getPrimaryServices();
+		for (const service of services) {
+			try {
+				const chars = await service.getCharacteristics();
+				// Try known write characteristic UUIDs
+				for (const charUuid of PRINTER_WRITE_CHAR_UUIDS) {
+					const found = chars.find((c: any) => c.uuid === charUuid);
+					if (found && (found.properties.write || found.properties.writeWithoutResponse)) {
+						return found;
+					}
+				}
+				// Any writable characteristic
+				writeChar =
+					chars.find((c: any) => c.properties.writeWithoutResponse || c.properties.write) ??
+					null;
+				if (writeChar) return writeChar;
+			} catch {
+				continue;
+			}
+		}
+	} catch {
+		// getPrimaryServices() may not be supported in all contexts
+	}
+
+	return null;
+}
+
 async function webBtConnect(): Promise<{ success: boolean; name?: string; error?: string }> {
 	if (!navigator.bluetooth) {
 		return { success: false, error: 'Web Bluetooth is not supported on this device/browser' };
@@ -405,45 +509,49 @@ async function webBtConnect(): Promise<{ success: boolean; name?: string; error?
 	try {
 		if (webBt.server?.connected) webBt.server.disconnect();
 
-		const device = await navigator.bluetooth!.requestDevice({
-			filters: PRINTER_SERVICE_UUIDS.map((uuid) => ({ services: [uuid] })),
-			optionalServices: PRINTER_SERVICE_UUIDS
-		});
+		// Try with known service filters first, fall back to acceptAllDevices
+		// Many cheap BT printers (XPPrinter 365B etc.) don't advertise standard services
+		let device: any;
+		try {
+			device = await navigator.bluetooth!.requestDevice({
+				filters: [
+					...PRINTER_SERVICE_UUIDS.map((uuid) => ({ services: [uuid] })),
+					// Also match by common printer name prefixes
+					{ namePrefix: 'XP' },
+					{ namePrefix: 'xp' },
+					{ namePrefix: 'Printer' },
+					{ namePrefix: 'BlueTooth' },
+					{ namePrefix: 'BT-' },
+					{ namePrefix: 'MPT' },
+					{ namePrefix: 'RPP' },
+					{ namePrefix: 'PT-' },
+					{ namePrefix: 'ZJ-' },
+					{ namePrefix: 'MTP' },
+					{ namePrefix: 'GP-' },
+					{ namePrefix: 'POS' }
+				],
+				optionalServices: PRINTER_SERVICE_UUIDS
+			});
+		} catch (filterErr: any) {
+			// If user cancelled, don't retry
+			if (filterErr.name === 'NotFoundError') {
+				return { success: false, error: 'No printer selected (cancelled)' };
+			}
+			// Retry with acceptAllDevices — shows all BLE devices
+			device = await navigator.bluetooth!.requestDevice({
+				acceptAllDevices: true,
+				optionalServices: PRINTER_SERVICE_UUIDS
+			});
+		}
 
 		if (!device) return { success: false, error: 'No printer selected' };
 
 		const server = await device.gatt!.connect();
-		let writeChar: BluetoothRemoteGATTCharacteristic | null = null;
-
-		for (const serviceUuid of PRINTER_SERVICE_UUIDS) {
-			try {
-				const service = await server.getPrimaryService(serviceUuid);
-				const chars = await service.getCharacteristics();
-
-				for (const charUuid of PRINTER_WRITE_CHAR_UUIDS) {
-					const found = chars.find((c: any) => c.uuid === charUuid);
-					if (found && (found.properties.write || found.properties.writeWithoutResponse)) {
-						writeChar = found;
-						break;
-					}
-				}
-
-				if (!writeChar) {
-					writeChar =
-						chars.find(
-							(c: any) => c.properties.writeWithoutResponse || c.properties.write
-						) ?? null;
-				}
-
-				if (writeChar) break;
-			} catch {
-				continue;
-			}
-		}
+		const writeChar = await findWriteCharacteristic(server);
 
 		if (!writeChar) {
 			server.disconnect();
-			return { success: false, error: 'No writable characteristic found on printer' };
+			return { success: false, error: 'No writable characteristic found on printer. This device may not be a supported thermal printer.' };
 		}
 
 		webBt = {
@@ -477,15 +585,29 @@ async function sendBytes(data: Uint8Array): Promise<void> {
 	const char = webBt.writeCharacteristic;
 	if (!char) throw new Error('Printer not connected');
 
-	for (let offset = 0; offset < data.length; offset += BLE_CHUNK_SIZE) {
-		const chunk = data.slice(offset, offset + BLE_CHUNK_SIZE);
-		if (char.properties.writeWithoutResponse) {
-			await char.writeValueWithoutResponse(chunk);
-		} else {
-			await char.writeValueWithResponse(chunk);
+	const slowMode = localStorage.getItem('pos-bt-printer-slow') === 'true';
+	const chunkSize = slowMode ? BLE_SLOW_CHUNK_SIZE : BLE_CHUNK_SIZE;
+	const chunkDelay = slowMode ? BLE_SLOW_CHUNK_DELAY : BLE_CHUNK_DELAY;
+
+	for (let offset = 0; offset < data.length; offset += chunkSize) {
+		const chunk = data.slice(offset, offset + chunkSize);
+		let retries = 3;
+		while (retries > 0) {
+			try {
+				if (char.properties.writeWithoutResponse) {
+					await char.writeValueWithoutResponse(chunk);
+				} else {
+					await char.writeValueWithResponse(chunk);
+				}
+				break;
+			} catch (e) {
+				retries--;
+				if (retries === 0) throw e;
+				await new Promise((r) => setTimeout(r, chunkDelay * 2));
+			}
 		}
-		if (offset + BLE_CHUNK_SIZE < data.length) {
-			await new Promise((r) => setTimeout(r, BLE_CHUNK_DELAY));
+		if (offset + chunkSize < data.length) {
+			await new Promise((r) => setTimeout(r, chunkDelay));
 		}
 	}
 }
@@ -502,8 +624,12 @@ class EscPosBuilder {
 	}
 
 	text(str: string): this {
-		const encoder = new TextEncoder();
-		this.buffer.push(...encoder.encode(str));
+		// Use raw single-byte encoding (Latin-1/CP437 compatible) instead of UTF-8.
+		// Cheap thermal printers (XPPrinter 365B etc.) don't handle multi-byte UTF-8.
+		for (let i = 0; i < str.length; i++) {
+			const code = str.charCodeAt(i);
+			this.buffer.push(code > 0xff ? 0x3f : code); // Replace non-Latin chars with '?'
+		}
 		return this;
 	}
 
@@ -579,34 +705,7 @@ async function webBtPrintReceipt(
 			try {
 				const server = await webBt.device.gatt.connect();
 				webBt.server = server;
-				let writeChar: BluetoothRemoteGATTCharacteristic | null = null;
-				for (const serviceUuid of PRINTER_SERVICE_UUIDS) {
-					try {
-						const service = await server.getPrimaryService(serviceUuid);
-						const chars = await service.getCharacteristics();
-
-						// Try known printer write characteristic UUIDs first
-						for (const charUuid of PRINTER_WRITE_CHAR_UUIDS) {
-							const found = chars.find((c: any) => c.uuid === charUuid);
-							if (found && (found.properties.write || found.properties.writeWithoutResponse)) {
-								writeChar = found;
-								break;
-							}
-						}
-
-						// Fallback: any writable characteristic
-						if (!writeChar) {
-							writeChar =
-								chars.find(
-									(c: any) => c.properties.writeWithoutResponse || c.properties.write
-								) ?? null;
-						}
-
-						if (writeChar) break;
-					} catch {
-						continue;
-					}
-				}
+				const writeChar = await findWriteCharacteristic(server);
 				if (writeChar) {
 					webBt.writeCharacteristic = writeChar;
 				}
@@ -620,6 +719,7 @@ async function webBtPrintReceipt(
 
 	const paperWidth = localStorage.getItem('pos-bt-printer-width') === '58' ? 32 : 48;
 	const s = data.storeSettings;
+	const sym = currencySymbol(s.store_currency);
 	const b = new EscPosBuilder();
 
 	b.init();
@@ -657,6 +757,7 @@ async function webBtPrintReceipt(
 	b.println('Order: ' + data.orderId + (data.isReprint ? ' (REPRINT)' : ''));
 	b.println('Date: ' + data.date);
 	b.println('Cashier: ' + data.cashier);
+	if (data.paymentMethod) b.println('Payment: ' + data.paymentMethod.charAt(0).toUpperCase() + data.paymentMethod.slice(1));
 	b.drawLine(paperWidth);
 
 	b.bold(true);
@@ -679,23 +780,23 @@ async function webBtPrintReceipt(
 	b.drawLine(paperWidth);
 	const refundAmountBle = data.originalTotal ? data.originalTotal - data.total : 0;
 	if (data.originalTotal && data.originalTotal !== data.total) {
-		b.leftRight('ORIGINAL TOTAL', data.originalTotal.toFixed(2), paperWidth);
-		b.leftRight('TOTAL REFUND', '-' + refundAmountBle.toFixed(2), paperWidth);
+		b.leftRight('ORIGINAL TOTAL', sym + data.originalTotal.toFixed(2), paperWidth);
+		b.leftRight('TOTAL REFUND', '-' + sym + refundAmountBle.toFixed(2), paperWidth);
 	}
 	b.bold(true);
-	b.leftRight('NET TOTAL', data.total.toFixed(2), paperWidth);
+	b.leftRight('NET TOTAL', sym + data.total.toFixed(2), paperWidth);
 	b.bold(false);
 
 	if (data.cashReceived) {
-		b.leftRight('Cash Received', data.cashReceived.toFixed(2), paperWidth);
-		b.leftRight('Change', data.changeGiven.toFixed(2), paperWidth);
+		b.leftRight('Cash Received', sym + data.cashReceived.toFixed(2), paperWidth);
+		b.leftRight('Change', sym + data.changeGiven.toFixed(2), paperWidth);
 	}
 
 	if (s.return_policy || s.exchange_policy || s.terms_conditions) {
 		b.drawLine(paperWidth);
-		if (s.return_policy) b.println('Return: ' + s.return_policy);
-		if (s.exchange_policy) b.println('Exchange: ' + s.exchange_policy);
-		if (s.terms_conditions) b.println('T&C: ' + s.terms_conditions);
+		if (s.return_policy) wordWrap('Return: ' + s.return_policy, paperWidth).forEach(l => b.println(l));
+		if (s.exchange_policy) wordWrap('Exchange: ' + s.exchange_policy, paperWidth).forEach(l => b.println(l));
+		if (s.terms_conditions) wordWrap('T&C: ' + s.terms_conditions, paperWidth).forEach(l => b.println(l));
 	}
 
 	if (s.store_facebook || s.store_instagram) {

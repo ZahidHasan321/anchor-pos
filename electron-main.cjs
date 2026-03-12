@@ -434,6 +434,24 @@ function resolveCharacterSet(key) {
     return map[key] || CharacterSet.PC437_USA;
 }
 
+/// Helper: word-wrap text to fit within a given character width
+function wordWrap(text, width) {
+    const words = text.split(' ');
+    const lines = [];
+    let current = '';
+    for (const word of words) {
+        const candidate = current ? current + ' ' + word : word;
+        if (candidate.length <= width) {
+            current = candidate;
+        } else {
+            if (current) lines.push(current);
+            current = word.length > width ? word.substring(0, width) : word;
+        }
+    }
+    if (current) lines.push(current);
+    return lines;
+}
+
 // Helper: create a ThermalPrinter instance from config
 function createThermalPrinter(config) {
     const width = config.paperWidth === '58' ? 32 : 48; // 58mm = 32 chars, 80mm = 48 chars
@@ -455,8 +473,11 @@ ipcMain.handle('test-thermal-print', async (event, config) => {
     try {
         const printer = createThermalPrinter(config);
 
+        // isPrinterConnected() is unreliable for COM/serial/Bluetooth ports — see note above.
+        const iface = config.interface || '';
+        const isFileInterface = !iface.startsWith('tcp://') && !iface.startsWith('printer:');
         const isConnected = await printer.isPrinterConnected();
-        if (!isConnected) {
+        if (!isConnected && !isFileInterface) {
             return { success: false, error: 'Printer is not connected or reachable at ' + config.interface };
         }
 
@@ -488,13 +509,27 @@ ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
     try {
         const printer = createThermalPrinter(config);
 
+        // isPrinterConnected() is unreliable for COM/serial/Bluetooth ports (uses fs.existsSync).
+        // For network printers it opens a TCP socket. For file-based interfaces (COM ports,
+        // /dev/rfcomm*, /dev/usb/lp*) it only checks if the path exists, not if the device responds.
+        // We still check it as a quick pre-flight, but don't block on failure for COM ports —
+        // the actual execute() call will give a real error if the printer is unreachable.
+        const iface = config.interface || '';
+        const isFileInterface = !iface.startsWith('tcp://') && !iface.startsWith('printer:');
         const isConnected = await printer.isPrinterConnected();
-        if (!isConnected) {
+        if (!isConnected && !isFileInterface) {
             return { success: false, error: 'Printer is not connected or reachable at ' + config.interface };
         }
 
         const s = data.storeSettings || {};
         const storeName = s.store_name || 'STORE NAME';
+
+        // Derive currency symbol from store settings
+        let sym = '';
+        try {
+            const currency = s.store_currency || 'USD';
+            sym = new Intl.NumberFormat('en', { style: 'currency', currency }).formatToParts(0).find(p => p.type === 'currency')?.value || '';
+        } catch { sym = ''; }
 
         printer.alignCenter();
         printer.setTextSize(1, 1);
@@ -531,6 +566,7 @@ ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
         printer.println('Order: ' + data.orderId + (data.isReprint ? ' (REPRINT)' : ''));
         printer.println('Date: ' + data.date);
         printer.println('Cashier: ' + data.cashier);
+        if (data.paymentMethod) printer.println('Payment: ' + data.paymentMethod.charAt(0).toUpperCase() + data.paymentMethod.slice(1));
 
         printer.drawLine();
 
@@ -550,7 +586,7 @@ ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
                 { text: sign + item.total.toFixed(2), align: "RIGHT", width: 0.35 }
             ]);
             if (item.variant) {
-                printer.println('  Size: ' + item.variant);
+                printer.println('  ' + item.variant);
             }
         }
 
@@ -561,28 +597,37 @@ ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
         if (data.originalTotal && data.originalTotal !== data.total) {
             printer.tableCustom([
                 { text: "ORIGINAL TOTAL", align: "LEFT", width: 0.5 },
-                { text: data.originalTotal.toFixed(2), align: "RIGHT", width: 0.5 }
+                { text: sym + data.originalTotal.toFixed(2), align: "RIGHT", width: 0.5 }
             ]);
             printer.tableCustom([
                 { text: "TOTAL REFUND", align: "LEFT", width: 0.5 },
-                { text: '-' + refundAmount.toFixed(2), align: "RIGHT", width: 0.5 }
+                { text: '-' + sym + refundAmount.toFixed(2), align: "RIGHT", width: 0.5 }
             ]);
         }
 
         printer.tableCustom([
             { text: "NET TOTAL", align: "LEFT", width: 0.5, bold: true },
-            { text: data.total.toFixed(2), align: "RIGHT", width: 0.5, bold: true }
+            { text: sym + data.total.toFixed(2), align: "RIGHT", width: 0.5, bold: true }
         ]);
 
         if (data.cashReceived) {
             printer.tableCustom([
                 { text: "Cash Received", align: "LEFT", width: 0.5 },
-                { text: data.cashReceived.toFixed(2), align: "RIGHT", width: 0.5 }
+                { text: sym + data.cashReceived.toFixed(2), align: "RIGHT", width: 0.5 }
             ]);
             printer.tableCustom([
                 { text: "Change", align: "LEFT", width: 0.5 },
-                { text: data.changeGiven.toFixed(2), align: "RIGHT", width: 0.5 }
+                { text: sym + data.changeGiven.toFixed(2), align: "RIGHT", width: 0.5 }
             ]);
+        }
+
+        if (s.return_policy || s.exchange_policy || s.terms_conditions) {
+            printer.drawLine();
+            printer.alignLeft();
+            const pw = config.paperWidth === '58' ? 32 : 48;
+            if (s.return_policy) wordWrap('Return: ' + s.return_policy, pw).forEach(l => printer.println(l));
+            if (s.exchange_policy) wordWrap('Exchange: ' + s.exchange_policy, pw).forEach(l => printer.println(l));
+            if (s.terms_conditions) wordWrap('T&C: ' + s.terms_conditions, pw).forEach(l => printer.println(l));
         }
 
         if (s.store_facebook || s.store_instagram) {
@@ -590,14 +635,6 @@ ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
             printer.alignCenter();
             if (s.store_facebook) printer.println('FB: ' + s.store_facebook);
             if (s.store_instagram) printer.println('IG: ' + s.store_instagram);
-        }
-
-        if (s.return_policy || s.exchange_policy || s.terms_conditions) {
-            printer.drawLine();
-            printer.alignLeft();
-            if (s.return_policy) printer.println('Return: ' + s.return_policy);
-            if (s.exchange_policy) printer.println('Exchange: ' + s.exchange_policy);
-            if (s.terms_conditions) printer.println('T&C: ' + s.terms_conditions);
         }
 
         printer.println('');
@@ -624,7 +661,7 @@ ipcMain.handle('print-thermal-receipt', async (event, data, config) => {
     }
 });
 
-// IPC handler: detect COM ports (Windows)
+// IPC handler: detect COM ports (Windows) and serial devices (Linux)
 ipcMain.handle('get-com-ports', async () => {
     try {
         const { execSync } = require('child_process');
@@ -636,10 +673,47 @@ ipcMain.handle('get-com-ports', async () => {
                 return { name: name || 'Unknown', description: description || name || '' };
             }).filter(p => p.name.startsWith('COM'));
             return ports;
+        } else if (process.platform === 'linux') {
+            const ports = [];
+            // Bluetooth serial devices (paired BT printers appear as /dev/rfcomm*)
+            try {
+                const rfcommDevices = fs.readdirSync('/dev').filter(f => f.startsWith('rfcomm'));
+                for (const dev of rfcommDevices) {
+                    let desc = 'Bluetooth Serial Port';
+                    try {
+                        // Try to get device info from rfcomm command
+                        const info = execSync(`rfcomm show ${dev.replace('rfcomm', '')} 2>/dev/null`, { encoding: 'utf8', timeout: 3000 }).trim();
+                        if (info) desc = info.split('\n')[0] || desc;
+                    } catch { /* rfcomm command may not be available */ }
+                    ports.push({ name: `/dev/${dev}`, description: desc });
+                }
+            } catch { /* /dev may not be readable */ }
+            // USB serial devices (USB thermal printers appear as /dev/ttyUSB* or /dev/ttyACM*)
+            try {
+                const usbDevices = fs.readdirSync('/dev').filter(f => f.startsWith('ttyUSB') || f.startsWith('ttyACM'));
+                for (const dev of usbDevices) {
+                    let desc = 'USB Serial Port';
+                    try {
+                        const sysPath = `/sys/class/tty/${dev}/device/../../product`;
+                        if (fs.existsSync(sysPath)) {
+                            desc = fs.readFileSync(sysPath, 'utf8').trim() || desc;
+                        }
+                    } catch { /* sysfs may not have product info */ }
+                    ports.push({ name: `/dev/${dev}`, description: desc });
+                }
+            } catch { /* /dev may not be readable */ }
+            // Also check for /dev/usb/lp* (USB printer devices)
+            try {
+                const lpDevices = fs.readdirSync('/dev/usb').filter(f => f.startsWith('lp'));
+                for (const dev of lpDevices) {
+                    ports.push({ name: `/dev/usb/${dev}`, description: 'USB Printer Port' });
+                }
+            } catch { /* /dev/usb may not exist */ }
+            return ports;
         }
         return [];
     } catch (e) {
-        log.error('Failed to detect COM ports:', e);
+        log.error('Failed to detect COM/serial ports:', e);
         return [];
     }
 });
