@@ -23,6 +23,7 @@ if [ ! -f .env ]; then
 fi
 
 docker compose build
+docker builder prune --keep-storage 3gb -f
 docker compose up -d --remove-orphans
 
 echo "Waiting for database..."
@@ -39,4 +40,13 @@ echo "Checking database connection and applying schema..."
 docker compose exec pos_app pnpm db:push
 
 docker compose restart pos_nginx
+
+# Ensure downloads directory exists for Electron/APK artifacts
+DOWNLOADS_DIR="/root/anchor-pos/downloads"
+mkdir -p "$DOWNLOADS_DIR"
+echo "Downloads directory ready at $DOWNLOADS_DIR"
+echo "  - Windows installers: *.exe, latest.yml"
+echo "  - Android APK: *.apk"
+echo "  (Artifacts are uploaded by the GitHub Actions build workflow)"
+
 echo "--- Deployment Complete ---"

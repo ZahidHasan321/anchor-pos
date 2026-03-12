@@ -72,17 +72,101 @@ jobs:
             dist-electron/latest.yml
           retention-days: 7
 
-  deploy:
-    name: Deploy to VPS
-    needs: build
+  build-android:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Artifacts
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install PNPM
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create .env
+        env:
+          PS_PUBLIC_KEY: ${{ secrets.POWERSYNC_PUBLIC_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET_HEADER }}
+        run: |
+          {
+            echo "BUILD_TARGET=capacitor"
+            echo "POWERSYNC_URL=https://powersync.anchorshop.cloud"
+            echo "VITE_POWERSYNC_URL=https://powersync.anchorshop.cloud"
+            echo "POWERSYNC_API_URL=https://anchorshop.cloud"
+            printf 'APP_SECRET_HEADER=%s\n' "$APP_SECRET"
+            printf 'POWERSYNC_PUBLIC_KEY=%s\n' "$PS_PUBLIC_KEY"
+          } > .env
+
+      - name: Build Web Assets
+        run: pnpm build
+        env:
+          BUILD_TARGET: capacitor
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release-key.jks
+
+      - name: Build Release APK
+        working-directory: android
+        run: |
+          ./gradlew assembleRelease \
+            -PRELEASE_STORE_FILE=release-key.jks \
+            -PRELEASE_STORE_PASSWORD="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            -PRELEASE_KEY_ALIAS="${{ secrets.ANDROID_KEY_ALIAS }}" \
+            -PRELEASE_KEY_PASSWORD="${{ secrets.ANDROID_KEY_PASSWORD }}"
+
+      - name: Rename APK
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          mv android/app/build/outputs/apk/release/app-release.apk "Auto-POS-${VERSION}.apk"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: Auto-POS-*.apk
+          retention-days: 7
+
+  deploy:
+    name: Deploy to VPS
+    needs: [build, build-android]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Windows Artifacts
         uses: actions/download-artifact@v4
         with:
           name: windows-installer
           path: dist-electron
+
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: dist-android
 
       - name: Upload to VPS
         uses: appleboy/scp-action@v0.1.7
@@ -90,7 +174,6 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "dist-electron/*.exe,dist-electron/*.blockmap,dist-electron/latest.yml"
+          source: "dist-electron/*.exe,dist-electron/*.blockmap,dist-electron/latest.yml,dist-android/*.apk"
           target: "/root/anchor-pos/downloads/"
           strip_components: 1
-
