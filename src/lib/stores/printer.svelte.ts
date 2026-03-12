@@ -85,18 +85,10 @@ class PrinterState {
 			return;
 		}
 
-		if (isCapacitorNative()) {
-			// Capacitor without BT configured
-			this.configured = false;
-			this.status = 'not-configured';
-			this.name = '';
-			return;
-		}
-
-		// Web browser fallback — always has system print dialog
-		this.configured = true;
-		this.status = 'connected';
-		this.name = 'System Print';
+		// Nothing configured (Capacitor without BT, or plain web browser)
+		this.configured = false;
+		this.status = 'not-configured';
+		this.name = '';
 	}
 
 	async reconnect(): Promise<{ success: boolean; error?: string }> {
