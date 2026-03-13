@@ -21,7 +21,10 @@ export async function getUserPermissions(role: string): Promise<string[]> {
 				.from(rolePermissions)
 				.where(eq(rolePermissions.role, role));
 
-			return results.map((r: { resource: string }) => r.resource);
+			if (results.length > 0) {
+				return results.map((r: { resource: string }) => r.resource);
+			}
+			// DB returned empty (e.g. table cleared) — fall through to defaults
 		} catch {
 			// DB query failed — fall through to offline defaults
 		}

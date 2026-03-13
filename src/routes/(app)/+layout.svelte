@@ -89,7 +89,8 @@
 	const navItems = $derived(
 		allNavItems.filter((item) => {
 			if (!user) return false;
-			if (item.resource === 'settings') return user.role === 'admin';
+			if (user.role === 'admin') return true;
+			if (item.resource === 'settings') return false;
 			return permissions.includes(item.resource);
 		})
 	);
