@@ -214,6 +214,7 @@
 											size="icon"
 											type="button"
 											class="h-8 w-8 text-destructive"
+										aria-label="Delete customer"
 											onclick={async (e) => {
 												if (await confirmState.confirm('Delete customer?'))
 													e.currentTarget.closest('form')?.requestSubmit();
@@ -284,6 +285,7 @@
 											size="icon"
 											type="button"
 											class="h-8 w-8 text-destructive"
+										aria-label="Delete customer"
 											onclick={async (e) => {
 												if (await confirmState.confirm('Delete customer?'))
 													e.currentTarget.closest('form')?.requestSubmit();
@@ -320,6 +322,7 @@
 								size="icon"
 								disabled={nativePagination.currentPage <= 1}
 								onclick={() => goToPage(nativePagination.currentPage - 1)}
+							aria-label="Previous page"
 								class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
 							>
 							<Button
@@ -327,6 +330,7 @@
 								size="icon"
 								disabled={nativePagination.currentPage >= nativePagination.totalPages}
 								onclick={() => goToPage(nativePagination.currentPage + 1)}
+							aria-label="Next page"
 								class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
 							>
 						</div>
@@ -347,6 +351,7 @@
 								size="icon"
 								disabled={streamed.pagination.currentPage <= 1}
 								onclick={() => goToPage(streamed.pagination.currentPage - 1)}
+							aria-label="Previous page"
 								class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
 							>
 							<Button
@@ -354,6 +359,7 @@
 								size="icon"
 								disabled={streamed.pagination.currentPage >= streamed.pagination.totalPages}
 								onclick={() => goToPage(streamed.pagination.currentPage + 1)}
+							aria-label="Next page"
 								class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
 							>
 						</div>
@@ -398,6 +404,7 @@
 	<Button
 		onclick={() => (createDialogOpen = true)}
 		size="icon"
+		aria-label="Add new customer"
 		class="h-14 w-14 rounded-full shadow-2xl"><Plus class="h-7 w-7" /></Button
 	>
 </div>

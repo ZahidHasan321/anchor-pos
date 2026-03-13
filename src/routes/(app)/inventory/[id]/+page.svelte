@@ -232,7 +232,7 @@
 		<!-- Header -->
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-4">
-				<Button variant="outline" size="icon" href="/inventory" class="cursor-pointer">
+				<Button variant="outline" size="icon" href="/inventory" class="cursor-pointer" aria-label="Back to inventory">
 					<ArrowLeft class="h-4 w-4" />
 				</Button>
 				<div>
@@ -417,6 +417,7 @@
 												size="icon"
 												class="h-8 w-8 cursor-pointer text-blue-600 hover:bg-blue-50 hover:text-blue-700"
 												onclick={() => openStockDialog(variant)}
+											aria-label="Update stock"
 												title="Update stock"
 											>
 												<Package class="h-3.5 w-3.5" />
@@ -426,6 +427,7 @@
 												size="icon"
 												class="h-8 w-8 cursor-pointer"
 												onclick={() => openEditVariant(variant)}
+											aria-label="Edit variant"
 												title="Edit variant"
 											>
 												<Pencil class="h-3.5 w-3.5" />
@@ -438,6 +440,7 @@
 													type="button"
 													class="h-8 w-8 cursor-pointer text-muted-foreground hover:text-destructive"
 													title="Delete variant"
+												aria-label="Delete variant"
 													onclick={async (e) => {
 														const formElement = e.currentTarget.closest('form');
 														if (
@@ -568,6 +571,7 @@
 						variant="outline"
 						size="icon"
 						onclick={() => (newStockQuantity = Math.max(0, newStockQuantity - 1))}
+					aria-label="Decrease quantity"
 						class="cursor-pointer"
 					>
 						<Minus class="h-4 w-4" />
@@ -586,6 +590,7 @@
 						variant="outline"
 						size="icon"
 						onclick={() => (newStockQuantity += 1)}
+					aria-label="Increase quantity"
 						class="cursor-pointer"
 					>
 						<Plus class="h-4 w-4" />

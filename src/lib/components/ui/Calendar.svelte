@@ -16,13 +16,13 @@
 	{#snippet children({ months, weekdays })}
 		<Calendar.Header class="flex items-center justify-between pb-4">
 			<Calendar.PrevButton
-				class="inline-flex size-10 cursor-pointer items-center justify-center rounded-xl border-2 border-slate-50 bg-white text-slate-600 transition-all hover:bg-slate-50 active:scale-95"
+				class="inline-flex size-10 cursor-pointer items-center justify-center rounded-xl border-2 border-border bg-background text-muted-foreground transition-all hover:bg-accent active:scale-95"
 			>
 				<ChevronLeft size={18} />
 			</Calendar.PrevButton>
-			<Calendar.Heading class="text-sm font-black tracking-tight text-slate-900 uppercase" />
+			<Calendar.Heading class="text-sm font-black tracking-tight text-foreground uppercase" />
 			<Calendar.NextButton
-				class="inline-flex size-10 cursor-pointer items-center justify-center rounded-xl border-2 border-slate-50 bg-white text-slate-600 transition-all hover:bg-slate-50 active:scale-95"
+				class="inline-flex size-10 cursor-pointer items-center justify-center rounded-xl border-2 border-border bg-background text-muted-foreground transition-all hover:bg-accent active:scale-95"
 			>
 				<ChevronRight size={18} />
 			</Calendar.NextButton>
@@ -34,7 +34,7 @@
 					<Calendar.GridHead>
 						<Calendar.GridRow class="mb-1 flex w-full justify-between">
 							{#each weekdays as day}
-								<Calendar.HeadCell class="w-9 text-[10px] font-black text-slate-400 uppercase">
+								<Calendar.HeadCell class="w-9 text-[10px] font-black text-muted-foreground uppercase">
 									{day.slice(0, 2)}
 								</Calendar.HeadCell>
 							{/each}
@@ -52,7 +52,7 @@
 										<Calendar.Day
 											class={cn(
 												'inline-flex size-9 cursor-pointer items-center justify-center rounded-xl text-sm font-bold transition-all hover:bg-primary/10 hover:text-primary',
-												'data-[selected]:bg-primary data-[selected]:font-black data-[selected]:text-white data-[selected]:shadow-lg',
+												'data-[selected]:bg-primary data-[selected]:font-black data-[selected]:text-primary-foreground data-[selected]:shadow-lg',
 												'data-[outside-month]:pointer-events-none data-[outside-month]:opacity-20'
 											)}
 										>

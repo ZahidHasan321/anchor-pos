@@ -64,7 +64,7 @@
 
 <div class="p-6">
 	<div class="mb-6 flex items-center gap-4">
-		<Button variant="outline" size="icon" href="/inventory" class="cursor-pointer">
+		<Button variant="outline" size="icon" href="/inventory" class="cursor-pointer" aria-label="Back to inventory">
 			<ArrowLeft class="h-4 w-4" />
 		</Button>
 		<h1 class="text-3xl font-bold tracking-tight">New Product</h1>

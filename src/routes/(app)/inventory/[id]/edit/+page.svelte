@@ -27,6 +27,7 @@
 			variant="outline"
 			size="icon"
 			href="/inventory/{data.product.id}"
+		aria-label="Back to product"
 			class="cursor-pointer"
 		>
 			<ArrowLeft class="h-4 w-4" />

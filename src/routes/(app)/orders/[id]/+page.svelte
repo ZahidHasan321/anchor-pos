@@ -117,7 +117,7 @@
 <div class="space-y-6 p-4 sm:p-6">
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div class="flex items-center gap-3">
-			<Button variant="outline" size="icon" href="/orders" class="h-9 w-9 shrink-0">
+			<Button variant="outline" size="icon" href="/orders" aria-label="Back to orders" class="h-9 w-9 shrink-0">
 				<ArrowLeft class="h-4 w-4" />
 			</Button>
 			<div class="overflow-hidden">

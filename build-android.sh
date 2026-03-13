@@ -14,7 +14,7 @@ echo "--- Building Android APK ---"
 cd "$SCRIPT_DIR"
 
 echo "1. Building web assets (no compression)..."
-CAPACITOR_BUILD=true pnpm build
+BUILD_TARGET=capacitor VITE_BUILD_TARGET=capacitor pnpm build
 find build/client -name "*.gz" -delete
 
 echo "2. Syncing Capacitor..."

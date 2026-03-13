@@ -399,7 +399,7 @@
 		<Sheet.Root bind:open={isMobileMenuOpen}>
 			<Sheet.Trigger>
 				{#snippet child({ props })}
-					<Button {...props} variant="ghost" size="icon" class="cursor-pointer"
+					<Button {...props} variant="ghost" size="icon" class="cursor-pointer" aria-label="Open menu"
 						><Menu class="h-5 w-5" /></Button
 					>
 				{/snippet}
@@ -440,13 +440,13 @@
 					<Separator class="my-4" />
 					<div class="flex items-center gap-2 px-3 py-2">
 						<span class="text-sm text-muted-foreground">Theme:</span>
-						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('light')}
+						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('light')} aria-label="Light theme"
 							><Sun class="h-4 w-4" /></Button
 						>
-						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('dark')}
+						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('dark')} aria-label="Dark theme"
 							><Moon class="h-4 w-4" /></Button
 						>
-						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('system')}
+						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('system')} aria-label="System theme"
 							><Monitor class="h-4 w-4" /></Button
 						>
 					</div>

@@ -445,6 +445,7 @@
 									><div class="flex justify-end gap-1">
 										<Button variant="ghost" size="icon" href="/inventory/{product.id}/labels"
 											onclick={(e: MouseEvent) => e.stopPropagation()}
+											aria-label="Print labels"
 											><Printer class="h-4 w-4" /></Button
 										>
 										{#if isAdmin}
@@ -457,6 +458,7 @@
 													size="icon"
 													type="button"
 													class="text-muted-foreground hover:text-destructive"
+													aria-label="Delete product"
 													onclick={async (e: MouseEvent) => {
 														e.stopPropagation();
 														const formEl = (e.currentTarget as HTMLElement).closest('form');
@@ -547,6 +549,7 @@
 										><div class="flex justify-end gap-1">
 											<Button variant="ghost" size="icon" href="/inventory/{product.id}/labels"
 												onclick={(e: MouseEvent) => e.stopPropagation()}
+												aria-label="Print labels"
 												><Printer class="h-4 w-4" /></Button
 											>
 											{#if isAdmin}
@@ -557,6 +560,7 @@
 														size="icon"
 														type="button"
 														class="text-muted-foreground hover:text-destructive"
+														aria-label="Delete product"
 														onclick={async (e: MouseEvent) => {
 															e.stopPropagation();
 															const formEl = (e.currentTarget as HTMLElement).closest('form');
@@ -607,6 +611,7 @@
 								variant="outline"
 								size="icon"
 								disabled={nativeData.currentPage <= 1}
+							aria-label="Previous page"
 								onclick={() => goToPage(nativeData.currentPage - 1)}
 								class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
 							>
@@ -614,6 +619,7 @@
 								variant="outline"
 								size="icon"
 								disabled={nativeData.currentPage >= nativeData.totalPages}
+							aria-label="Next page"
 								onclick={() => goToPage(nativeData.currentPage + 1)}
 								class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
 							>
@@ -632,6 +638,7 @@
 									variant="outline"
 									size="icon"
 									disabled={streamed.currentPage <= 1}
+								aria-label="Previous page"
 									onclick={() => goToPage(streamed.currentPage - 1)}
 									class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
 								>
@@ -639,6 +646,7 @@
 									variant="outline"
 									size="icon"
 									disabled={streamed.currentPage >= streamed.totalPages}
+								aria-label="Next page"
 									onclick={() => goToPage(streamed.currentPage + 1)}
 									class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
 								>
@@ -652,7 +660,7 @@
 </div>
 
 <div class="fixed right-4 bottom-20 z-40 md:hidden">
-	<Button href="/inventory/new" size="icon" class="h-14 w-14 rounded-full shadow-2xl"
+	<Button href="/inventory/new" size="icon" class="h-14 w-14 rounded-full shadow-2xl" aria-label="Add new product"
 		><Plus class="h-7 w-7" /></Button
 	>
 </div>

@@ -95,6 +95,7 @@
 										size="icon"
 										href="/settings/users/{user.id}"
 										class="h-8 w-8"
+										aria-label="Edit user"
 									>
 										<ExternalLink class="h-4 w-4" />
 									</Button>
@@ -133,6 +134,7 @@
 											isResetDialogOpen = true;
 										}}
 										class="h-8 w-8 cursor-pointer"
+										aria-label="Reset password"
 									>
 										<KeyRound class="h-4 w-4" />
 									</Button>

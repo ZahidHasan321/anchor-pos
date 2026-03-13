@@ -232,6 +232,7 @@
 						variant="outline"
 						size="icon"
 						class="h-9 w-9 cursor-pointer"
+						aria-label="Previous day"
 						onclick={() => navigateDay(-1)}
 					>
 						<ChevronLeft class="h-4 w-4" />
@@ -248,6 +249,7 @@
 						variant="outline"
 						size="icon"
 						class="h-9 w-9 cursor-pointer"
+						aria-label="Next day"
 						onclick={() => navigateDay(1)}
 					>
 						<ChevronRight class="h-4 w-4" />
@@ -772,6 +774,7 @@
 													variant="outline"
 													size="icon"
 													disabled={td.txPage <= 1}
+													aria-label="Previous page"
 													onclick={() => { nativeTransactionsData = null; loadNativeData(); }}
 													class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
 												>
@@ -779,6 +782,7 @@
 													variant="outline"
 													size="icon"
 													disabled={td.txPage >= td.txTotalPages}
+													aria-label="Next page"
 													onclick={() => { nativeTransactionsData = null; loadNativeData(); }}
 													class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
 												>
@@ -853,6 +857,7 @@
 														variant="outline"
 														size="icon"
 														disabled={td.txPage <= 1}
+														aria-label="Previous page"
 														onclick={() =>
 															goto(buildTxUrl({ txPage: td.txPage - 1 }), {
 																noScroll: true,
@@ -864,6 +869,7 @@
 														variant="outline"
 														size="icon"
 														disabled={td.txPage >= td.txTotalPages}
+														aria-label="Next page"
 														onclick={() =>
 															goto(buildTxUrl({ txPage: td.txPage + 1 }), {
 																noScroll: true,

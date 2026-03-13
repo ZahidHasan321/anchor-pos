@@ -295,13 +295,13 @@
 								<DatePicker
 									bind:value={dateFrom}
 									onchange={applyFilters}
-									class="w-[160px]"
+									class="min-w-0 flex-1"
 								/>
-								<span class="text-[10px] font-bold text-muted-foreground/50 uppercase">to</span>
+								<span class="shrink-0 text-[10px] font-bold text-muted-foreground/50 uppercase">to</span>
 								<DatePicker
 									bind:value={dateTo}
 									onchange={applyFilters}
-									class="w-[160px]"
+									class="min-w-0 flex-1"
 								/>
 							</div>
 						</div>
@@ -515,6 +515,7 @@
 								<Button
 									variant="outline"
 									size="icon"
+									aria-label="Previous page"
 									disabled={nativePagination.currentPage <= 1}
 									onclick={() => goToPage(nativePagination.currentPage - 1)}
 									class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
@@ -525,6 +526,7 @@
 								<Button
 									variant="outline"
 									size="icon"
+									aria-label="Next page"
 									disabled={nativePagination.currentPage >= nativePagination.totalPages}
 									onclick={() => goToPage(nativePagination.currentPage + 1)}
 									class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
@@ -543,6 +545,7 @@
 								<Button
 									variant="outline"
 									size="icon"
+									aria-label="Previous page"
 									disabled={streamed.pagination.currentPage <= 1}
 									onclick={() => goToPage(streamed.pagination.currentPage - 1)}
 									class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
@@ -553,6 +556,7 @@
 								<Button
 									variant="outline"
 									size="icon"
+									aria-label="Next page"
 									disabled={streamed.pagination.currentPage >= streamed.pagination.totalPages}
 									onclick={() => goToPage(streamed.pagination.currentPage + 1)}
 									class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button

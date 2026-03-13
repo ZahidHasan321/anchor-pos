@@ -94,7 +94,7 @@
 	{#if customer}
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-4">
-				<Button variant="outline" size="icon" href="/customers" class="cursor-pointer">
+				<Button variant="outline" size="icon" href="/customers" aria-label="Back to customers" class="cursor-pointer">
 					<ArrowLeft class="h-4 w-4" />
 				</Button>
 				<div>
@@ -207,6 +207,7 @@
 								size="icon"
 								disabled={pagination.currentPage <= 1}
 								onclick={() => goToPage(pagination.currentPage - 1)}
+							aria-label="Previous page"
 								class="cursor-pointer"
 							>
 								<ChevronLeft class="h-4 w-4" />
@@ -216,6 +217,7 @@
 								size="icon"
 								disabled={pagination.currentPage >= pagination.totalPages}
 								onclick={() => goToPage(pagination.currentPage + 1)}
+							aria-label="Next page"
 								class="cursor-pointer"
 							>
 								<ChevronRight class="h-4 w-4" />

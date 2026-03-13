@@ -112,6 +112,7 @@
 								variant="outline"
 								size="icon"
 								disabled={streamed.pagination.currentPage <= 1}
+								aria-label="Previous page"
 								onclick={() => goToPage(streamed.pagination.currentPage - 1)}
 								class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
 							>
@@ -119,6 +120,7 @@
 								variant="outline"
 								size="icon"
 								disabled={streamed.pagination.currentPage >= streamed.pagination.totalPages}
+								aria-label="Next page"
 								onclick={() => goToPage(streamed.pagination.currentPage + 1)}
 								class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
 							>
