@@ -17,7 +17,6 @@ echo "1. Building web assets (no compression)..."
 BUILD_TARGET=capacitor VITE_BUILD_TARGET=capacitor pnpm build
 find build/client -name "*.gz" -delete
 rm -rf build/client/uploads
-find build/client -name "*.wasm" -delete
 
 echo "2. Syncing Capacitor..."
 npx cap sync android

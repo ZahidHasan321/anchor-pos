@@ -24,7 +24,7 @@ export default defineConfig({
 		external: ['electron']
 	},
 	optimizeDeps: {
-		exclude: ['@powersync/web', '@powersync/capacitor', '@capacitor-community/sqlite', '@journeyapps/wa-sqlite']
+		exclude: ['@powersync/web', '@journeyapps/wa-sqlite']
 	},
 	worker: {
 		format: 'es'

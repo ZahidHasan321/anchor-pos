@@ -35,13 +35,7 @@ export class PowerSyncManager {
         if (!browser || this._initialized) return;
         this._initialized = true;
 
-        const isCapacitor = import.meta.env.VITE_BUILD_TARGET === 'capacitor';
-        let PowerSyncDatabase: any;
-        if (isCapacitor) {
-            ({ PowerSyncDatabase } = await import('@powersync/capacitor'));
-        } else {
-            ({ PowerSyncDatabase } = await import('@powersync/web'));
-        }
+        const { PowerSyncDatabase } = await import('@powersync/web');
         this.db = new PowerSyncDatabase({
             schema: AppSchema,
             database: {
