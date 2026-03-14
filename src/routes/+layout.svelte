@@ -7,7 +7,10 @@
 	import { ModeWatcher } from 'mode-watcher';
 	import { globalSettings } from '$lib/settings.svelte';
 	import { powersync } from '$lib/powersync.svelte';
+	import { initErrorReporter } from '$lib/error-reporter';
 	import { browser } from '$app/environment';
+
+	if (browser) initErrorReporter();
 
 	let { data, children } = $props();
 

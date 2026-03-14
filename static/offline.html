@@ -157,7 +157,7 @@
   </div>
 
   <p class="message" id="messageText">
-    Unable to reach the server. Retrying automatically...
+    Unable to reach the sync server. You can still use the app with cached data.
   </p>
 
   <button class="retry-btn" id="retryBtn" onclick="retryConnection()">
@@ -196,7 +196,8 @@
     setRetrying();
     // Small delay so the user sees the "Connecting..." state
     setTimeout(function() {
-      window.location.href = SERVER_URL;
+      // Navigate back to local app (served from device assets), not the remote server
+      window.location.href = '/';
     }, 400);
   }
 
@@ -234,8 +235,8 @@
       signal: controller ? controller.signal : undefined
     }).then(function() {
       clearTimeout(timeout);
-      // Server is reachable — navigate
-      window.location.href = SERVER_URL;
+      // Server is reachable — navigate back to local app
+      window.location.href = '/';
     }).catch(function() {
       clearTimeout(timeout);
       onFail();
