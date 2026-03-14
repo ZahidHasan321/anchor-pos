@@ -1,25 +1,76 @@
 name: Build and Deploy
 
-# Triggered by version tags (e.g. v1.2.3) or manually.
-# - Electron: builds Windows installer, uploads to VPS /downloads/, creates GitHub Release
-# - Web: SSHs into VPS and runs deploy.sh (git pull + docker compose)
-# - Capacitor/Android: still built locally via build-android.sh (needs Android SDK + keystore)
+# Triggered when code lands on main (merge from dev) or manually.
+# Flow: bump patch version → tag → build Electron → deploy web → deploy Electron → GitHub Release
+# Capacitor/Android: still built locally via build-android.sh (needs Android SDK + keystore)
 
 on:
   push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+    branches: [main]
   workflow_dispatch:
     inputs:
+      bump:
+        description: 'Version bump type'
+        type: choice
+        options: [patch, minor, major]
+        default: patch
       skip_electron:
         description: 'Skip Electron build (web deploy only)'
         type: boolean
         default: false
 
 jobs:
+  # ── Version Bump ───────────────────────────────────────────────────────────
+  version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+    # Skip CI-authored commits to prevent infinite loops
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine next version
+        id: bump
+        run: |
+          # Get latest semver tag (default to v0.0.0 if none exist)
+          LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          LATEST_TAG="${LATEST_TAG:-v0.0.0}"
+          LATEST_VERSION="${LATEST_TAG#v}"
+
+          BUMP="${{ inputs.bump || 'patch' }}"
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_VERSION"
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "### Version bump: $LATEST_TAG → v$NEW_VERSION ($BUMP)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.bump.outputs.tag }}" -m "Release ${{ steps.bump.outputs.tag }}"
+          git push origin "${{ steps.bump.outputs.tag }}"
+
   # ── Electron (Windows) ──────────────────────────────────────────────────────
   build-electron:
     name: Build Electron (Windows)
+    needs: version
     runs-on: windows-latest
     if: ${{ github.event_name == 'push' || !inputs.skip_electron }}
 
@@ -50,20 +101,17 @@ jobs:
           key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-electron-
 
-      # Sync package.json version from the git tag (e.g. v1.2.3 → 1.2.3)
-      # Without this, latest.yml always says 0.0.1 and auto-update never fires.
-      - name: Set version from tag
-        if: github.ref_type == 'tag'
+      - name: Set version from CI
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ needs.version.outputs.version }}"
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             pkg.version = '$VERSION';
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, '\t') + '\n');
           "
-          echo "Built version: $VERSION"
+          echo "Building version: $VERSION"
 
       - name: Create .env
         shell: bash
@@ -102,7 +150,7 @@ jobs:
   # ── Deploy Electron artifacts to VPS + create GitHub Release ────────────────
   deploy-electron:
     name: Deploy Electron to VPS
-    needs: build-electron
+    needs: [version, build-electron]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -129,11 +177,11 @@ jobs:
             root@${{ secrets.VPS_HOST }}:/root/anchor-pos/downloads/
 
       - name: Create GitHub Release
-        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          TAG="${{ needs.version.outputs.tag }}"
+          gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --generate-notes \
             dist-electron/*.exe \
@@ -144,6 +192,7 @@ jobs:
   # Runs in parallel with the Electron build — no dependency between them.
   deploy-web:
     name: Deploy Web to VPS
+    needs: version
     runs-on: ubuntu-latest
 
     steps:

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
@@ -25,8 +26,8 @@
 	async function loadNativeOrders() {
 		if (!isNative || !powersync.ready) return;
 		const perPage = 20;
-		const page = parseInt(new URLSearchParams(window.location.search).get('page') ?? '1');
-		const offset = (page - 1) * perPage;
+		const currentPageNum = parseInt(page.url.searchParams.get('page') ?? '1');
+		const offset = (currentPageNum - 1) * perPage;
 		let where = 'WHERE 1=1';
 		const params: any[] = [];
 
@@ -79,20 +80,20 @@
 				console.warn('[Orders] Could not fetch upload queue:', e);
 			}
 
-			// 3. Merge and deduplicate (synced orders take priority)
-			const merged = [...pendingOrders];
+			// 3. Merge and deduplicate (pending only on page 1, synced take priority)
 			const syncedIds = new Set(syncedOrders.map((o: any) => o.id));
-			
-			for (const order of syncedOrders) {
-				merged.push(order);
-			}
+			const uniquePending = currentPageNum === 1
+				? pendingOrders.filter((o: any) => !syncedIds.has(o.id))
+				: [];
+
+			const merged = [...uniquePending, ...syncedOrders];
 
 			// Re-sort by date
 			merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
 			const total = (countResult as any)?.count ?? 0;
 			nativeOrders = merged.slice(0, perPage);
-			nativePagination = { currentPage: page, totalPages: Math.ceil((total + pendingOrders.length) / perPage), totalOrders: total + pendingOrders.length, perPage };
+			nativePagination = { currentPage: currentPageNum, totalPages: Math.ceil((total + pendingOrders.length) / perPage), totalOrders: total + pendingOrders.length, perPage };
 		} catch (e) {
 			console.error('[Orders] Load failed:', e);
 		}
@@ -101,6 +102,7 @@
 	$effect(() => {
 		if (isNative && powersync.ready) {
 			powersync.dataVersion; // re-run when sync completes with new data
+			page.url.searchParams.toString(); // re-run on page/filter URL changes
 			loadNativeOrders();
 		}
 	});

@@ -850,28 +850,44 @@ if (!gotTheLock) {
         
         // --- Auto-Updater Logic ---
         if (app.isPackaged) {
-            autoUpdater.on('error', (err) => {
-                log.error('Auto-updater error:', err);
+            autoUpdater.logger = log;
+            autoUpdater.autoDownload = true;
+            autoUpdater.autoInstallOnAppQuit = true;
+
+            autoUpdater.on('checking-for-update', () => {
+                log.info('[AutoUpdater] Checking for update… current version:', app.getVersion());
             });
 
-            try {
-                autoUpdater.checkForUpdatesAndNotify().catch(e => {
-                    log.error('Failed to check for updates:', e);
-                });
-            } catch (e) {
-                log.error('Update check exception:', e);
-            }
+            autoUpdater.on('update-available', (info) => {
+                log.info('[AutoUpdater] Update available:', info.version);
+            });
 
-            autoUpdater.on('update-downloaded', () => {
+            autoUpdater.on('update-not-available', (info) => {
+                log.info('[AutoUpdater] Already up-to-date:', info.version);
+            });
 
+            autoUpdater.on('download-progress', (progress) => {
+                log.info('[AutoUpdater] Download progress:', Math.round(progress.percent) + '%');
+            });
+
+            autoUpdater.on('error', (err) => {
+                log.error('[AutoUpdater] Error:', err);
+            });
+
+            autoUpdater.on('update-downloaded', (info) => {
+                log.info('[AutoUpdater] Update downloaded:', info.version);
                 dialog.showMessageBox({
                     type: 'info',
                     title: 'Update Ready',
-                    message: 'A new version has been downloaded. Restart the app to apply the update.',
+                    message: `Version ${info.version} has been downloaded. Restart the app to apply the update.`,
                     buttons: ['Restart', 'Later']
                 }).then((result) => {
                     if (result.response === 0) autoUpdater.quitAndInstall();
                 });
+            });
+
+            autoUpdater.checkForUpdatesAndNotify().catch(e => {
+                log.error('[AutoUpdater] Check failed:', e);
             });
         }
 
