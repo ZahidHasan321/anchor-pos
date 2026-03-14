@@ -157,7 +157,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Global Route Guard
 	const isAuthRoute = event.url.pathname.startsWith('/login');
 	const isApiRoute = event.url.pathname.startsWith('/api');
-	const isRemoteAuthRoute = event.url.pathname.startsWith('/api/auth/remote-login') || event.url.pathname.startsWith('/api/auth/remote-powersync-token') || event.url.pathname.startsWith('/api/auth/mobile-login') || event.url.pathname.startsWith('/api/auth/mobile-logout') || event.url.pathname.startsWith('/api/powersync/upload') || event.url.pathname.startsWith('/api/powersync/token');
+	const isRemoteAuthRoute = event.url.pathname.startsWith('/api/auth/remote-login') || event.url.pathname.startsWith('/api/auth/remote-powersync-token') || event.url.pathname.startsWith('/api/auth/mobile-login') || event.url.pathname.startsWith('/api/auth/mobile-logout') || event.url.pathname.startsWith('/api/powersync/upload') || event.url.pathname.startsWith('/api/powersync/token') || event.url.pathname.startsWith('/api/errors');
 	const isWellKnown = event.url.pathname.startsWith('/.well-known');
 
 	// In Capacitor static builds, the adapter-static server calls hooks for fallback page generation.
