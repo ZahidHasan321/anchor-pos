@@ -2,12 +2,10 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
 	import DatePicker from '$lib/components/ui/DatePicker.svelte';
 	import { Label } from '$lib/components/ui/label';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import * as Dialog from '$lib/components/ui/dialog';
 	import {
 		TrendingUp,
 		TrendingDown,
@@ -20,17 +18,16 @@
 		Package,
 		Plus,
 		RotateCcw,
-		Printer,
 		Percent,
 		Loader2,
-		ExternalLink
+		FileText
 	} from '@lucide/svelte';
 	import { formatCurrency, getCurrencySymbol, formatDate, formatDateTime } from '$lib/format';
-	import { globalSettings } from '$lib/settings.svelte';
 	import { goto } from '$app/navigation';
 	import { powersync } from '$lib/powersync.svelte';
 	import { browser } from '$app/environment';
 	import { Chart, registerables } from 'chart.js';
+	import { exportReportPDF, type ReportPDFData } from '$lib/export-report-pdf';
 	Chart.register(...registerables);
 
 	let { data } = $props();
@@ -46,6 +43,8 @@
 	let nativeExpenseBreakdown = $state<any[] | null>(null);
 	let nativeStockUpdates = $state<any[] | null>(null);
 	let nativeChartData = $state<any[] | null>(null);
+	let nativeStaffPerformance = $state<any[] | null>(null);
+	let nativeTopCustomers = $state<any[] | null>(null);
 
 	$effect(() => {
 		if (!isNative || !powersync.ready) return;
@@ -55,7 +54,6 @@
 		const endDate = data.endDate;
 		const chartGrouping = data.chartGrouping;
 
-		// Reset to loading state when period changes
 		nativeSummaries = null;
 		nativeTopProducts = null;
 		nativeCategoryBreakdown = null;
@@ -64,17 +62,34 @@
 		nativeExpenseBreakdown = null;
 		nativeStockUpdates = null;
 		nativeChartData = null;
+		nativeStaffPerformance = null;
+		nativeTopCustomers = null;
 
 		const startIso = `${startDate} 00:00:00+00`;
 		const endIso = `${endDate} 23:59:59+00`;
 
 		// Summaries
 		Promise.all([
-			powersync.db.get(`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total, coalesce(avg(total_amount), 0) as avg_order, coalesce(sum(discount_amount), 0) as total_discount FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ?`, [startIso, endIso]),
-			powersync.db.get(`SELECT coalesce(sum(amount), 0) as total FROM cashbook WHERE type = 'out' AND category = 'expense' AND created_at >= ? AND created_at <= ?`, [startIso, endIso]),
-			powersync.db.get(`SELECT coalesce(sum(oi.quantity), 0) as total_qty, coalesce(sum(oi.cost_at_sale * oi.quantity), 0) as total_cost FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id WHERE o.status = 'completed' AND oi.status = 'completed' AND o.created_at >= ? AND o.created_at <= ?`, [startIso, endIso]),
-			powersync.db.get(`SELECT coalesce(sum(coalesce(nullif(pv.cost_price, 0), p.cost_price, 0) * pv.stock_quantity), 0) as total_cost, coalesce(sum(pv.price * pv.stock_quantity), 0) as total_retail FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id`, []),
-			powersync.db.get(`SELECT coalesce(sum(change_amount), 0) as total_stocked FROM stock_logs WHERE change_amount > 0 AND created_at >= ? AND created_at <= ?`, [startIso, endIso])
+			powersync.db.get(
+				`SELECT count(*) as count, coalesce(sum(total_amount), 0) as total, coalesce(avg(total_amount), 0) as avg_order, coalesce(sum(discount_amount), 0) as total_discount FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ?`,
+				[startIso, endIso]
+			),
+			powersync.db.get(
+				`SELECT coalesce(sum(amount), 0) as total FROM cashbook WHERE type = 'out' AND category = 'expense' AND created_at >= ? AND created_at <= ?`,
+				[startIso, endIso]
+			),
+			powersync.db.get(
+				`SELECT coalesce(sum(oi.quantity), 0) as total_qty, coalesce(sum(oi.cost_at_sale * oi.quantity), 0) as total_cost FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id WHERE o.status = 'completed' AND oi.status = 'completed' AND o.created_at >= ? AND o.created_at <= ?`,
+				[startIso, endIso]
+			),
+			powersync.db.get(
+				`SELECT coalesce(sum(coalesce(nullif(pv.cost_price, 0), p.cost_price, 0) * pv.stock_quantity), 0) as total_cost, coalesce(sum(pv.price * pv.stock_quantity), 0) as total_retail FROM product_variants pv INNER JOIN products p ON pv.product_id = p.id`,
+				[]
+			),
+			powersync.db.get(
+				`SELECT coalesce(sum(change_amount), 0) as total_stocked FROM stock_logs WHERE change_amount > 0 AND created_at >= ? AND created_at <= ?`,
+				[startIso, endIso]
+			)
 		]).then(([sales, expenses, items, inventory, stockSum]) => {
 			const s = sales as any;
 			const e = expenses as any;
@@ -82,7 +97,12 @@
 			const inv = inventory as any;
 			const grossProfit = (s?.total ?? 0) - (i?.total_cost ?? 0);
 			nativeSummaries = {
-				salesSummary: { count: s?.count ?? 0, total: s?.total ?? 0, avgOrder: s?.avg_order ?? 0, totalDiscount: s?.total_discount ?? 0 },
+				salesSummary: {
+					count: s?.count ?? 0,
+					total: s?.total ?? 0,
+					avgOrder: s?.avg_order ?? 0,
+					totalDiscount: s?.total_discount ?? 0
+				},
 				expenseSummary: { total: e?.total ?? 0 },
 				itemsSold: i?.total_qty ?? 0,
 				grossProfit,
@@ -94,33 +114,120 @@
 		});
 
 		// Top products
-		powersync.db.getAll(`SELECT p.id as product_id, oi.product_name, sum(oi.quantity) as total_qty, sum(oi.price_at_sale * oi.quantity * (1 - oi.discount / 100)) as total_revenue FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id LEFT JOIN product_variants pv ON oi.variant_id = pv.id LEFT JOIN products p ON pv.product_id = p.id WHERE oi.status = 'completed' AND o.created_at >= ? AND o.created_at <= ? GROUP BY oi.product_name, p.id ORDER BY total_qty DESC LIMIT 10`, [startIso, endIso])
-			.then((res: any) => { nativeTopProducts = (res as any[]).map((r: any) => ({ productId: r.product_id, productName: r.product_name, totalQty: r.total_qty, totalRevenue: r.total_revenue })); });
+		powersync.db
+			.getAll(
+				`SELECT p.id as product_id, oi.product_name, sum(oi.quantity) as total_qty, sum(oi.price_at_sale * oi.quantity * (1 - oi.discount / 100)) as total_revenue FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id LEFT JOIN product_variants pv ON oi.variant_id = pv.id LEFT JOIN products p ON pv.product_id = p.id WHERE oi.status = 'completed' AND o.created_at >= ? AND o.created_at <= ? GROUP BY oi.product_name, p.id ORDER BY total_qty DESC LIMIT 10`,
+				[startIso, endIso]
+			)
+			.then((res: any) => {
+				nativeTopProducts = (res as any[]).map((r: any) => ({
+					productId: r.product_id,
+					productName: r.product_name,
+					totalQty: r.total_qty,
+					totalRevenue: r.total_revenue
+				}));
+			});
 
 		// Category breakdown
-		powersync.db.getAll(`SELECT coalesce(p.category, 'Unknown') as category, sum(oi.quantity) as total_qty, sum(oi.price_at_sale * oi.quantity * (1 - oi.discount / 100)) as total_revenue FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id LEFT JOIN product_variants pv ON oi.variant_id = pv.id LEFT JOIN products p ON pv.product_id = p.id WHERE o.status = 'completed' AND oi.status = 'completed' AND o.created_at >= ? AND o.created_at <= ? GROUP BY p.category ORDER BY total_revenue DESC LIMIT 10`, [startIso, endIso])
-			.then((res: any) => { nativeCategoryBreakdown = (res as any[]).map((r: any) => ({ category: r.category, totalQty: r.total_qty, totalRevenue: r.total_revenue })); });
+		powersync.db
+			.getAll(
+				`SELECT coalesce(p.category, 'Unknown') as category, sum(oi.quantity) as total_qty, sum(oi.price_at_sale * oi.quantity * (1 - oi.discount / 100)) as total_revenue FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id LEFT JOIN product_variants pv ON oi.variant_id = pv.id LEFT JOIN products p ON pv.product_id = p.id WHERE o.status = 'completed' AND oi.status = 'completed' AND o.created_at >= ? AND o.created_at <= ? GROUP BY p.category ORDER BY total_revenue DESC LIMIT 10`,
+				[startIso, endIso]
+			)
+			.then((res: any) => {
+				nativeCategoryBreakdown = (res as any[]).map((r: any) => ({
+					category: r.category,
+					totalQty: r.total_qty,
+					totalRevenue: r.total_revenue
+				}));
+			});
 
 		// Payment breakdown
 		Promise.all([
-			powersync.db.get(`SELECT 'cash' as method, count(*) as count, coalesce(sum(coalesce(cash_amount, CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END)), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? AND (coalesce(cash_amount, 0) > 0 OR payment_method = 'cash')`, [startIso, endIso]),
-			powersync.db.get(`SELECT 'card' as method, count(*) as count, coalesce(sum(coalesce(card_amount, CASE WHEN payment_method = 'card' THEN total_amount ELSE 0 END)), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? AND (coalesce(card_amount, 0) > 0 OR payment_method = 'card')`, [startIso, endIso]),
-			powersync.db.get(`SELECT 'mobile' as method, count(*) as count, coalesce(sum(coalesce(mobile_amount, CASE WHEN payment_method = 'mobile' THEN total_amount ELSE 0 END)), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? AND (coalesce(mobile_amount, 0) > 0 OR payment_method = 'mobile')`, [startIso, endIso])
+			powersync.db.get(
+				`SELECT 'cash' as method, count(*) as count, coalesce(sum(coalesce(cash_amount, CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END)), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? AND (coalesce(cash_amount, 0) > 0 OR payment_method = 'cash')`,
+				[startIso, endIso]
+			),
+			powersync.db.get(
+				`SELECT 'card' as method, count(*) as count, coalesce(sum(coalesce(card_amount, CASE WHEN payment_method = 'card' THEN total_amount ELSE 0 END)), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? AND (coalesce(card_amount, 0) > 0 OR payment_method = 'card')`,
+				[startIso, endIso]
+			),
+			powersync.db.get(
+				`SELECT 'mobile' as method, count(*) as count, coalesce(sum(coalesce(mobile_amount, CASE WHEN payment_method = 'mobile' THEN total_amount ELSE 0 END)), 0) as total FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? AND (coalesce(mobile_amount, 0) > 0 OR payment_method = 'mobile')`,
+				[startIso, endIso]
+			)
 		]).then(([cash, card, mobile]) => {
 			nativePaymentBreakdown = [cash, card, mobile].filter(Boolean) as any[];
 		});
 
 		// Refund summary
-		powersync.db.getAll(`SELECT status, count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status IN ('refunded', 'void') AND created_at >= ? AND created_at <= ? GROUP BY status`, [startIso, endIso])
-			.then((res: any) => { nativeRefundSummary = res as any[]; });
+		powersync.db
+			.getAll(
+				`SELECT status, count(*) as count, coalesce(sum(total_amount), 0) as total FROM orders WHERE status IN ('refunded', 'void') AND created_at >= ? AND created_at <= ? GROUP BY status`,
+				[startIso, endIso]
+			)
+			.then((res: any) => {
+				nativeRefundSummary = res as any[];
+			});
 
 		// Expense breakdown
-		powersync.db.getAll(`SELECT description, coalesce(sum(amount), 0) as total, count(*) as count FROM cashbook WHERE type = 'out' AND created_at >= ? AND created_at <= ? GROUP BY description ORDER BY total DESC LIMIT 10`, [startIso, endIso])
-			.then((res: any) => { nativeExpenseBreakdown = res as any[]; });
+		powersync.db
+			.getAll(
+				`SELECT description, coalesce(sum(amount), 0) as total, count(*) as count FROM cashbook WHERE type = 'out' AND created_at >= ? AND created_at <= ? GROUP BY description ORDER BY total DESC LIMIT 10`,
+				[startIso, endIso]
+			)
+			.then((res: any) => {
+				nativeExpenseBreakdown = res as any[];
+			});
 
 		// Stock updates
-		powersync.db.getAll(`SELECT sl.id, p.id as product_id, p.name as product_name, pv.size, sl.change_amount, sl.reason, u.name as user_name, sl.created_at FROM stock_logs sl INNER JOIN product_variants pv ON sl.variant_id = pv.id INNER JOIN products p ON pv.product_id = p.id INNER JOIN users u ON sl.user_id = u.id WHERE sl.reason != 'sale' AND sl.created_at >= ? AND sl.created_at <= ? ORDER BY sl.created_at DESC LIMIT 10`, [startIso, endIso])
-			.then((res: any) => { nativeStockUpdates = (res as any[]).map((r: any) => ({ id: r.id, productId: r.product_id, productName: r.product_name, size: r.size, changeAmount: r.change_amount, reason: r.reason, userName: r.user_name, createdAt: r.created_at })); });
+		powersync.db
+			.getAll(
+				`SELECT sl.id, p.id as product_id, p.name as product_name, pv.size, sl.change_amount, sl.reason, u.name as user_name, sl.created_at FROM stock_logs sl INNER JOIN product_variants pv ON sl.variant_id = pv.id INNER JOIN products p ON pv.product_id = p.id INNER JOIN users u ON sl.user_id = u.id WHERE sl.reason != 'sale' AND sl.created_at >= ? AND sl.created_at <= ? ORDER BY sl.created_at DESC LIMIT 10`,
+				[startIso, endIso]
+			)
+			.then((res: any) => {
+				nativeStockUpdates = (res as any[]).map((r: any) => ({
+					id: r.id,
+					productId: r.product_id,
+					productName: r.product_name,
+					size: r.size,
+					changeAmount: r.change_amount,
+					reason: r.reason,
+					userName: r.user_name,
+					createdAt: r.created_at
+				}));
+			});
+
+		// Staff performance
+		powersync.db
+			.getAll(
+				`SELECT u.id as user_id, u.name as cashier_name, count(*) as order_count, coalesce(sum(o.total_amount), 0) as total_sales, coalesce(avg(o.total_amount), 0) as avg_order FROM orders o INNER JOIN users u ON o.user_id = u.id WHERE o.status = 'completed' AND o.created_at >= ? AND o.created_at <= ? GROUP BY u.id ORDER BY total_sales DESC LIMIT 10`,
+				[startIso, endIso]
+			)
+			.then((res: any) => {
+				nativeStaffPerformance = (res as any[]).map((r: any) => ({
+					cashierName: r.cashier_name,
+					orderCount: r.order_count,
+					totalSales: r.total_sales,
+					avgOrder: r.avg_order
+				}));
+			});
+
+		// Top customers
+		powersync.db
+			.getAll(
+				`SELECT c.id as customer_id, c.name as customer_name, c.phone as customer_phone, count(*) as order_count, coalesce(sum(o.total_amount), 0) as total_spent FROM orders o INNER JOIN customers c ON o.customer_id = c.id WHERE o.status = 'completed' AND o.created_at >= ? AND o.created_at <= ? GROUP BY c.id ORDER BY total_spent DESC LIMIT 10`,
+				[startIso, endIso]
+			)
+			.then((res: any) => {
+				nativeTopCustomers = (res as any[]).map((r: any) => ({
+					customerName: r.customer_name,
+					customerPhone: r.customer_phone,
+					orderCount: r.order_count,
+					totalSpent: r.total_spent
+				}));
+			});
 
 		// Chart data
 		const groupingFmt: Record<string, string> = {
@@ -130,61 +237,87 @@
 			year: "strftime('%Y', created_at)"
 		};
 		const chartExpr = groupingFmt[chartGrouping] ?? groupingFmt.day;
-		powersync.db.getAll(`SELECT ${chartExpr} as date, coalesce(sum(total_amount), 0) as amount, count(*) as count FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? GROUP BY ${chartExpr} ORDER BY date`, [startIso, endIso])
-			.then((res: any) => { nativeChartData = res as any[]; });
+		powersync.db
+			.getAll(
+				`SELECT ${chartExpr} as date, coalesce(sum(total_amount), 0) as amount, count(*) as count FROM orders WHERE status = 'completed' AND created_at >= ? AND created_at <= ? GROUP BY ${chartExpr} ORDER BY date`,
+				[startIso, endIso]
+			)
+			.then((res: any) => {
+				nativeChartData = res as any[];
+			});
 	});
 
 	// Effective data: native (PowerSync SQLite) in Electron, server (PostgreSQL) on web
 	const effectiveSummaries = $derived(
 		isNative
-			? (nativeSummaries !== null ? Promise.resolve(nativeSummaries) : new Promise<any>(() => {}))
+			? nativeSummaries !== null
+				? Promise.resolve(nativeSummaries)
+				: new Promise<any>(() => {})
 			: data.summaries
 	);
 	const effectiveTopProducts = $derived(
 		isNative
-			? (nativeTopProducts !== null ? Promise.resolve(nativeTopProducts) : new Promise<any>(() => {}))
+			? nativeTopProducts !== null
+				? Promise.resolve(nativeTopProducts)
+				: new Promise<any>(() => {})
 			: data.topProducts
 	);
 	const effectiveCategoryBreakdown = $derived(
 		isNative
-			? (nativeCategoryBreakdown !== null ? Promise.resolve(nativeCategoryBreakdown) : new Promise<any>(() => {}))
+			? nativeCategoryBreakdown !== null
+				? Promise.resolve(nativeCategoryBreakdown)
+				: new Promise<any>(() => {})
 			: data.categoryBreakdown
 	);
 	const effectivePaymentBreakdown = $derived(
 		isNative
-			? (nativePaymentBreakdown !== null ? Promise.resolve(nativePaymentBreakdown) : new Promise<any>(() => {}))
+			? nativePaymentBreakdown !== null
+				? Promise.resolve(nativePaymentBreakdown)
+				: new Promise<any>(() => {})
 			: data.paymentBreakdown
 	);
 	const effectiveRefundSummary = $derived(
 		isNative
-			? (nativeRefundSummary !== null ? Promise.resolve(nativeRefundSummary) : new Promise<any>(() => {}))
+			? nativeRefundSummary !== null
+				? Promise.resolve(nativeRefundSummary)
+				: new Promise<any>(() => {})
 			: data.refundSummary
 	);
 	const effectiveExpenseBreakdown = $derived(
 		isNative
-			? (nativeExpenseBreakdown !== null ? Promise.resolve(nativeExpenseBreakdown) : new Promise<any>(() => {}))
+			? nativeExpenseBreakdown !== null
+				? Promise.resolve(nativeExpenseBreakdown)
+				: new Promise<any>(() => {})
 			: data.expenseBreakdown
 	);
 	const effectiveStockUpdates = $derived(
 		isNative
-			? (nativeStockUpdates !== null ? Promise.resolve(nativeStockUpdates) : new Promise<any>(() => {}))
+			? nativeStockUpdates !== null
+				? Promise.resolve(nativeStockUpdates)
+				: new Promise<any>(() => {})
 			: data.stockUpdates
 	);
 	const effectiveChartData = $derived(
 		isNative
-			? (nativeChartData !== null ? Promise.resolve(nativeChartData) : new Promise<any>(() => {}))
+			? nativeChartData !== null
+				? Promise.resolve(nativeChartData)
+				: new Promise<any>(() => {})
 			: data.chartData
 	);
-
-	// Dialog states
-	let detailType = $state<'products' | 'staff' | 'customers' | 'inventory' | 'expenses' | null>(
-		null
+	const effectiveStaffPerformance = $derived(
+		isNative
+			? nativeStaffPerformance !== null
+				? Promise.resolve(nativeStaffPerformance)
+				: new Promise<any>(() => {})
+			: data.staffPerformance
 	);
-	let detailData = $state<any[]>([]);
-	let isDetailLoading = $state(false);
-	let isDialogOpen = $state(false);
-	let detailPage = $state(1);
-	let hasMoreDetails = $state(true);
+	const effectiveTopCustomers = $derived(
+		isNative
+			? nativeTopCustomers !== null
+				? Promise.resolve(nativeTopCustomers)
+				: new Promise<any>(() => {})
+			: data.topCustomers
+	);
 
 	let chartCanvas = $state<HTMLCanvasElement | null>(null);
 	let chartInstance: Chart | null = null;
@@ -283,35 +416,44 @@
 		};
 	});
 
-	async function openDetail(
-		type: 'products' | 'staff' | 'customers' | 'inventory' | 'expenses',
-		page = 1
-	) {
-		if (page === 1) {
-			detailType = type;
-			isDialogOpen = true;
-			detailData = [];
-		}
-		detailPage = page;
-		isDetailLoading = true;
-		try {
-			const res = await fetch(
-				`/api/reports/details?type=${type}&from=${data.startDate}&to=${data.endDate}&page=${page}`
-			);
-			if (res.ok) {
-				const newData = await res.json();
-				if (page === 1) {
-					detailData = newData;
-				} else {
-					detailData = [...detailData, ...newData];
-				}
-				hasMoreDetails = newData.length === 20;
-			}
-		} catch (e) {
-			console.error('Failed to fetch details:', e);
-		} finally {
-			isDetailLoading = false;
-		}
+	async function handleExportPDF() {
+		const [
+			summaries,
+			paymentBreakdown,
+			categoryBreakdown,
+			topProducts,
+			expenseBreakdown,
+			refundSummary,
+			staffPerformance,
+			topCustomers
+		] = await Promise.all([
+			effectiveSummaries,
+			effectivePaymentBreakdown,
+			effectiveCategoryBreakdown,
+			effectiveTopProducts,
+			effectiveExpenseBreakdown,
+			effectiveRefundSummary,
+			effectiveStaffPerformance,
+			effectiveTopCustomers
+		]);
+
+		exportReportPDF({
+			storeName: data.storeName,
+			periodLabel,
+			dateRange: `${formatDate(data.startDate)} to ${formatDate(data.endDate)}`,
+			summaries,
+			paymentBreakdown: paymentBreakdown as any[],
+			categoryBreakdown: categoryBreakdown as any[],
+			topProducts: topProducts as any[],
+			expenseBreakdown: expenseBreakdown as any[],
+			refundSummary: refundSummary as any[],
+			staffPerformance: staffPerformance as any[],
+			topCustomers: (topCustomers as any[])?.map((c: any) => ({
+				customerName: c.customerName,
+				orderCount: c.orderCount,
+				totalSpent: c.totalSpent
+			}))
+		});
 	}
 
 	const periods = [
@@ -351,7 +493,7 @@
 	<title>Reports — Clothing POS</title>
 </svelte:head>
 
-<div class="screen-ui space-y-5 p-3 pb-20 sm:p-4 md:p-6">
+<div class="space-y-5 p-3 pb-20 sm:p-4 md:p-6">
 	<!-- Header -->
 	<div class="flex items-start justify-between gap-3">
 		<div class="min-w-0">
@@ -360,8 +502,8 @@
 				{periodLabel} &middot; {formatDate(data.startDate)} to {formatDate(data.endDate)}
 			</p>
 		</div>
-		<Button variant="outline" size="sm" onclick={() => window.print()} class="cursor-pointer">
-			<Printer class="mr-2 h-4 w-4" /> Print
+		<Button variant="outline" size="sm" onclick={handleExportPDF} class="cursor-pointer">
+			<FileText class="mr-2 h-4 w-4" /> View PDF
 		</Button>
 	</div>
 
@@ -393,7 +535,11 @@
 					<DatePicker id="to" bind:value={customTo} class="w-full [&>button]:h-11" />
 				</div>
 			</div>
-			<Button size="sm" onclick={applyCustomRange} class="h-11 w-full cursor-pointer text-xs sm:w-auto px-6">Apply</Button>
+			<Button
+				size="sm"
+				onclick={applyCustomRange}
+				class="h-11 w-full cursor-pointer px-6 text-xs sm:w-auto">Apply</Button
+			>
 		</div>
 	</div>
 
@@ -406,23 +552,13 @@
 		</h2>
 		<div class="flex flex-wrap gap-2.5 sm:gap-3">
 			{#await effectiveSummaries}
-				{#each Array(3) as _}
+				{#each Array(6) as _}
 					<div class="min-w-[180px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
 						<Skeleton class="h-8 w-full" />
 						<Skeleton class="h-3 w-16" />
 					</div>
 				{/each}
-				<div class="min-w-[180px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
-					<Skeleton class="h-4 w-24" />
-					<Skeleton class="h-8 w-full" />
-					<Skeleton class="h-3 w-16" />
-				</div>
-				<div class="min-w-[180px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
-					<Skeleton class="h-4 w-24" />
-					<Skeleton class="h-8 w-full" />
-					<Skeleton class="h-3 w-16" />
-				</div>
 			{:then summaries}
 				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
 					<div class="flex items-center justify-between">
@@ -448,7 +584,9 @@
 							<ShoppingBag class="h-3.5 w-3.5 text-indigo-600" />
 						</div>
 					</div>
-					<div class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl">{summaries.itemsSold}</div>
+					<div class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl">
+						{summaries.itemsSold}
+					</div>
 					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
 						Avg {formatCurrency(summaries.salesSummary.avgOrder)}/order
 					</p>
@@ -472,22 +610,19 @@
 						</div>
 					</div>
 					<div
-						class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl {summaries.grossProfit >= 0
+						class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl {summaries.grossProfit >=
+						0
 							? 'text-emerald-600'
 							: 'text-red-600'}"
 					>
 						{formatCurrency(summaries.grossProfit)}
 					</div>
-					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
-						Revenue - COGS
-					</p>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">Revenue - COGS</p>
 				</div>
 
 				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
 					<div class="flex items-center justify-between">
-						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
-							>Net Profit</span
-						>
+						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Net Profit</span>
 						<div
 							class="hidden rounded-md p-1.5 sm:block {(summaries.netProfit ?? 0) >= 0
 								? 'bg-emerald-500/10'
@@ -501,7 +636,8 @@
 						</div>
 					</div>
 					<div
-						class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl {(summaries.netProfit ?? 0) >= 0
+						class="mt-1.5 text-lg font-bold break-all sm:mt-2 sm:text-2xl {(summaries.netProfit ??
+							0) >= 0
 							? 'text-emerald-600'
 							: 'text-red-600'}"
 					>
@@ -556,7 +692,7 @@
 		</h2>
 		<div class="flex flex-wrap gap-2.5 sm:gap-3">
 			{#await effectiveSummaries}
-				{#each Array(2) as _}
+				{#each Array(3) as _}
 					<div class="min-w-[200px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
 						<Skeleton class="h-8 w-full" />
@@ -688,9 +824,7 @@
 											></div>
 											<span class="font-medium capitalize">{method}</span>
 										</div>
-										<span class="tabular-nums font-bold"
-											>{formatCurrency(mData?.total ?? 0)}</span
-										>
+										<span class="font-bold tabular-nums">{formatCurrency(mData?.total ?? 0)}</span>
 									</div>
 									<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
 										<div
@@ -703,18 +837,21 @@
 										></div>
 									</div>
 									<p class="text-[10px] text-muted-foreground">
-										{mData?.count ?? 0} {method === 'cash' ? 'receipts' : 'transactions'} &middot; {pct(mData?.total ?? 0, totalSales)}%
+										{mData?.count ?? 0}
+										{method === 'cash' ? 'receipts' : 'transactions'} &middot; {pct(
+											mData?.total ?? 0,
+											totalSales
+										)}%
 									</p>
 								</div>
 							{/each}
 						</div>
 					{:else}
 						<div class="flex flex-col items-center justify-center py-8 text-center">
-							<div class="rounded-full bg-muted p-3 mb-3">
+							<div class="mb-3 rounded-full bg-muted p-3">
 								<DollarSign class="h-6 w-6 text-muted-foreground/50" />
 							</div>
 							<p class="text-sm font-medium text-muted-foreground">No sales in this period</p>
-							<p class="text-[10px] text-muted-foreground/60">Payment breakdown will appear once sales are made</p>
 						</div>
 					{/if}
 				{/await}
@@ -741,7 +878,10 @@
 					</div>
 				{:then expenseBreakdown}
 					{#if expenseBreakdown && (expenseBreakdown as any[]).length > 0}
-						{@const maxExpense = Math.max(...(expenseBreakdown as any[]).map((e: any) => e.total), 1)}
+						{@const maxExpense = Math.max(
+							...(expenseBreakdown as any[]).map((e: any) => e.total),
+							1
+						)}
 						<div class="space-y-3">
 							{#each (expenseBreakdown as any[]).slice(0, 5) as exp}
 								<div class="space-y-1">
@@ -778,28 +918,30 @@
 						<Skeleton class="h-16 w-full" />
 					</div>
 				{:then refundSummary}
-					{@const totalRefunds = !refundSummary ? 0 : (refundSummary as any[]).reduce(
-						(s: number, r: any) => s + r.total,
-						0
-					)}
-					{@const totalRefundCount = !refundSummary ? 0 : (refundSummary as any[]).reduce(
-						(s: number, r: any) => s + r.count,
-						0
-					)}
+					{@const totalRefunds = !refundSummary
+						? 0
+						: (refundSummary as any[]).reduce((s: number, r: any) => s + r.total, 0)}
+					{@const totalRefundCount = !refundSummary
+						? 0
+						: (refundSummary as any[]).reduce((s: number, r: any) => s + r.count, 0)}
 					{#if totalRefundCount > 0}
 						<div class="space-y-3">
 							<div class="grid grid-cols-2 gap-2">
 								<div class="rounded bg-red-500/5 p-2 text-center">
-									<div class="text-lg font-bold text-red-600">{totalRefundCount}</div>
+									<div class="text-lg font-bold text-red-600">
+										{totalRefundCount}
+									</div>
 									<p class="text-[10px] text-muted-foreground">Returns</p>
 								</div>
 								<div class="rounded bg-red-500/5 p-2 text-center">
-									<div class="text-lg font-bold text-red-600">{formatCurrency(totalRefunds)}</div>
+									<div class="text-lg font-bold text-red-600">
+										{formatCurrency(totalRefunds)}
+									</div>
 									<p class="text-[10px] text-muted-foreground">Lost</p>
 								</div>
 							</div>
 							<Separator />
-							{#each (refundSummary as any[]) as r}
+							{#each refundSummary as r}
 								<div class="flex items-center justify-between text-xs">
 									<span class="text-muted-foreground capitalize">{r.status}</span>
 									<span>{formatCurrency(r.total)} ({r.count})</span>
@@ -810,6 +952,106 @@
 						<div class="flex flex-col items-center justify-center py-4 text-muted-foreground/30">
 							<RotateCcw class="h-7 w-7" />
 							<p class="text-xs">No refunds</p>
+						</div>
+					{/if}
+				{/await}
+			</Card.Content>
+		</Card.Root>
+	</div>
+
+	<!-- ==================== STAFF & CUSTOMERS ==================== -->
+	<div class="grid gap-4 lg:grid-cols-2">
+		<Card.Root>
+			<Card.Header class="px-3 pb-3 sm:px-6">
+				<Card.Title class="flex items-center gap-2 text-sm">
+					<UserCheck class="h-4 w-4 text-muted-foreground" /> Staff Performance
+				</Card.Title>
+			</Card.Header>
+			<Card.Content class="p-0">
+				{#await effectiveStaffPerformance}
+					<div class="space-y-3 p-4">
+						{#each Array(3) as _}<Skeleton class="h-6 w-full" />{/each}
+					</div>
+				{:then staffPerformance}
+					{#if staffPerformance && (staffPerformance as any[]).length > 0}
+						<Table.Root>
+							<Table.Header>
+								<Table.Row class="text-xs">
+									<Table.Head class="pl-6">Cashier</Table.Head>
+									<Table.Head class="text-right">Orders</Table.Head>
+									<Table.Head class="text-right">Sales</Table.Head>
+									<Table.Head class="pr-6 text-right">Avg</Table.Head>
+								</Table.Row>
+							</Table.Header>
+							<Table.Body>
+								{#each staffPerformance as any[] as staff}
+									<Table.Row class="text-sm">
+										<Table.Cell class="pl-6 font-medium">{staff.cashierName}</Table.Cell>
+										<Table.Cell class="text-right">{staff.orderCount}</Table.Cell>
+										<Table.Cell class="text-right font-semibold break-all"
+											>{formatCurrency(staff.totalSales)}</Table.Cell
+										>
+										<Table.Cell class="pr-6 text-right text-xs text-muted-foreground"
+											>{formatCurrency(staff.avgOrder)}</Table.Cell
+										>
+									</Table.Row>
+								{/each}
+							</Table.Body>
+						</Table.Root>
+					{:else}
+						<div class="flex flex-col items-center justify-center py-10 text-center">
+							<UserCheck class="mb-2 h-8 w-8 text-muted-foreground/30" />
+							<p class="text-sm font-medium text-muted-foreground">No sales by staff yet</p>
+						</div>
+					{/if}
+				{/await}
+			</Card.Content>
+		</Card.Root>
+
+		<Card.Root>
+			<Card.Header class="px-3 pb-3 sm:px-6">
+				<Card.Title class="flex items-center gap-2 text-sm">
+					<Users class="h-4 w-4 text-muted-foreground" /> Top Customers
+				</Card.Title>
+			</Card.Header>
+			<Card.Content class="p-0">
+				{#await effectiveTopCustomers}
+					<div class="space-y-3 p-4">
+						{#each Array(3) as _}<Skeleton class="h-6 w-full" />{/each}
+					</div>
+				{:then topCustomers}
+					{#if topCustomers && (topCustomers as any[]).length > 0}
+						<Table.Root>
+							<Table.Header>
+								<Table.Row class="text-xs">
+									<Table.Head class="pl-6">Customer</Table.Head>
+									<Table.Head class="text-right">Orders</Table.Head>
+									<Table.Head class="pr-6 text-right">Spent</Table.Head>
+								</Table.Row>
+							</Table.Header>
+							<Table.Body>
+								{#each topCustomers as any[] as cust}
+									<Table.Row class="text-sm">
+										<Table.Cell class="pl-6">
+											<div class="font-medium">{cust.customerName}</div>
+											{#if cust.customerPhone}
+												<div class="text-[10px] text-muted-foreground">
+													{cust.customerPhone}
+												</div>
+											{/if}
+										</Table.Cell>
+										<Table.Cell class="text-right">{cust.orderCount}</Table.Cell>
+										<Table.Cell class="pr-6 text-right font-semibold break-all"
+											>{formatCurrency(cust.totalSpent)}</Table.Cell
+										>
+									</Table.Row>
+								{/each}
+							</Table.Body>
+						</Table.Root>
+					{:else}
+						<div class="flex flex-col items-center justify-center py-10 text-center">
+							<Users class="mb-2 h-8 w-8 text-muted-foreground/30" />
+							<p class="text-sm font-medium text-muted-foreground">No customer data yet</p>
 						</div>
 					{/if}
 				{/await}
@@ -855,7 +1097,7 @@
 							{/each}
 						{:else}
 							<div class="flex flex-col items-center justify-center py-10 text-center">
-								<Layers class="h-8 w-8 text-muted-foreground/30 mb-2" />
+								<Layers class="mb-2 h-8 w-8 text-muted-foreground/30" />
 								<p class="text-sm font-medium text-muted-foreground">No category data</p>
 							</div>
 						{/if}
@@ -866,11 +1108,9 @@
 
 		<Card.Root>
 			<Card.Header class="px-3 pb-3 sm:px-6">
-				<div class="flex items-center justify-between">
-					<Card.Title class="flex items-center gap-2 text-sm">
-						<TrendingUp class="h-4 w-4 text-muted-foreground" /> Top Selling Products
-					</Card.Title>
-				</div>
+				<Card.Title class="flex items-center gap-2 text-sm">
+					<TrendingUp class="h-4 w-4 text-muted-foreground" /> Top Selling Products
+				</Card.Title>
 			</Card.Header>
 			<Card.Content class="p-0">
 				{#await effectiveTopProducts}
@@ -897,23 +1137,23 @@
 										<Table.Cell class="text-right">{p.totalQty}</Table.Cell>
 										<Table.Cell class="pr-6 text-right font-semibold break-all"
 											>{formatCurrency(p.totalRevenue)}</Table.Cell
-									>
-								</Table.Row>
-							{/each}
-						</Table.Body>
-					</Table.Root>
-				{:else}
-					<div class="flex flex-col items-center justify-center py-10 text-center">
-						<Package class="h-8 w-8 text-muted-foreground/30 mb-2" />
-						<p class="text-sm font-medium text-muted-foreground">No products sold yet</p>
-					</div>
-				{/if}
-			{/await}
-		</Card.Content>
-	</Card.Root>
-</div>
+										>
+									</Table.Row>
+								{/each}
+							</Table.Body>
+						</Table.Root>
+					{:else}
+						<div class="flex flex-col items-center justify-center py-10 text-center">
+							<Package class="mb-2 h-8 w-8 text-muted-foreground/30" />
+							<p class="text-sm font-medium text-muted-foreground">No products sold yet</p>
+						</div>
+					{/if}
+				{/await}
+			</Card.Content>
+		</Card.Root>
+	</div>
 
-	<!-- ==================== ACTIVITY & STAFF ==================== -->
+	<!-- ==================== STOCK UPDATES ==================== -->
 	<Card.Root>
 		<Card.Header class="px-3 pb-3 sm:px-6">
 			<Card.Title class="flex items-center gap-2 text-sm">
@@ -936,88 +1176,32 @@
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-							{#each (stockUpdates as any[]) || [] as update}
-								<Table.Row class="text-sm">
-									<Table.Cell class="pl-6 text-[11px] text-muted-foreground"
-										>{formatDateTime(update.createdAt)}</Table.Cell
-									>
-									<Table.Cell class="font-medium">{update.productName} ({update.size})</Table.Cell>
-									<Table.Cell
-										class="text-right font-bold {update.changeAmount > 0
-											? 'text-emerald-600'
-											: 'text-red-600'}"
-									>
-										{update.changeAmount > 0 ? '+' : ''}{update.changeAmount}
-									</Table.Cell>
-									<Table.Cell class="pr-6 text-xs text-muted-foreground">{update.userName}</Table.Cell
-									>
-								</Table.Row>
-							{:else}
-								<Table.Row
-									><Table.Cell colspan={4} class="py-6 text-center text-sm text-muted-foreground"
-										>No activity.</Table.Cell
-									></Table.Row
+						{#each (stockUpdates as any[]) || [] as update}
+							<Table.Row class="text-sm">
+								<Table.Cell class="pl-6 text-[11px] text-muted-foreground"
+									>{formatDateTime(update.createdAt)}</Table.Cell
 								>
-							{/each}
-						</Table.Body>
+								<Table.Cell class="font-medium">{update.productName} ({update.size})</Table.Cell>
+								<Table.Cell
+									class="text-right font-bold {update.changeAmount > 0
+										? 'text-emerald-600'
+										: 'text-red-600'}"
+								>
+									{update.changeAmount > 0 ? '+' : ''}{update.changeAmount}
+								</Table.Cell>
+								<Table.Cell class="pr-6 text-xs text-muted-foreground">{update.userName}</Table.Cell
+								>
+							</Table.Row>
+						{:else}
+							<Table.Row
+								><Table.Cell colspan={4} class="py-6 text-center text-sm text-muted-foreground"
+									>No activity.</Table.Cell
+								></Table.Row
+							>
+						{/each}
+					</Table.Body>
 				</Table.Root>
 			{/await}
 		</Card.Content>
 	</Card.Root>
 </div>
-
-<!-- Simplified Print Layout -->
-<div class="print-report">
-	{#await effectiveSummaries}
-		<p>Loading report data for printing...</p>
-	{:then summaries}
-		<div class="print-header">
-			<h1>{data.storeName}</h1>
-			<h2>Sales Report</h2>
-			<p>{periodLabel} &middot; {formatDate(data.startDate)} to {formatDate(data.endDate)}</p>
-		</div>
-		<div class="print-divider-double"></div>
-		<h3>SUMMARY</h3>
-		<table class="print-summary">
-			<tbody>
-				<tr
-					><td>Total Revenue</td><td class="right"
-						>{formatCurrency(summaries.salesSummary.total)}</td
-					></tr
-				>
-				<tr><td>Total Orders</td><td class="right">{summaries.salesSummary.count}</td></tr>
-				<tr><td>Items Sold</td><td class="right">{summaries.itemsSold}</td></tr>
-				<tr class="print-row-bold"
-					><td>Gross Profit</td><td class="right">{formatCurrency(summaries.grossProfit)}</td></tr
-				>
-				<tr class="print-row-bold"
-					><td>Net Profit</td><td class="right">{formatCurrency(summaries.netProfit ?? 0)}</td></tr
-				>
-			</tbody>
-		</table>
-		<div class="print-divider-double"></div>
-		<p class="print-footer">End of Report</p>
-	{/await}
-</div>
-
-<style>
-	.print-report {
-		display: none;
-	}
-	@media print {
-		.screen-ui {
-			display: none !important;
-		}
-		.print-report {
-			display: block !important;
-			font-family: monospace;
-		}
-		.right {
-			text-align: right;
-		}
-		.print-row-bold {
-			font-weight: bold;
-			border-top: 1px solid #000;
-		}
-	}
-</style>

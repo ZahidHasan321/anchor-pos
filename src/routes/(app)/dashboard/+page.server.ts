@@ -9,7 +9,7 @@ import {
 	products,
 	storeSettings
 } from '$lib/server/db/schema';
-import { eq, sql, gte, and, desc, lte, gt } from 'drizzle-orm';
+import { eq, sql, gte, and, desc, lte, gt, lt } from 'drizzle-orm';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
 import env from '$lib/server/env';
 
@@ -20,7 +20,22 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	const today = new Date();
 	today.setHours(0, 0, 0, 0);
+
+	const yesterday = new Date(today);
+	yesterday.setDate(yesterday.getDate() - 1);
+
 	const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+	// Last month same period: day 1 to min(today's day-of-month, last day of prev month)
+	const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+	const lastDayOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+	const compareDayOfMonth = Math.min(today.getDate(), lastDayOfPrevMonth);
+	const lastMonthEnd = new Date(today.getFullYear(), today.getMonth() - 1, compareDayOfMonth + 1);
+
+	// Last 7 days range
+	const sevenDaysAgo = new Date(today);
+	sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // includes today = 7 days
+
 	const isElectron = env.IS_ELECTRON;
 
 	const emptyStats = {
@@ -28,19 +43,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 		monthlySales: { count: 0, total: 0 },
 		todayExpenses: { total: 0 },
 		todayProfit: 0,
-		inventoryValue: 0
+		yesterdaySales: { total: 0 },
+		lastMonthSamePeriod: { total: 0 }
 	};
 
-	// Return promises for streaming
 	return {
 		isElectron,
 
-		// Summaries / Stats
 		stats: (async () => {
 			if (isElectron) return emptyStats;
 			if (!db) return emptyStats;
 
-			const [todaySales, monthlySales, todayExpenses, todayCogs, inventoryValue] = await Promise.all([
+			const [todaySales, monthlySales, todayExpenses, todayCogs, yesterdaySales, lastMonthSamePeriod] = await Promise.all([
 				db
 					.select({
 						count: sql<number>`count(*)`,
@@ -66,16 +80,22 @@ export const load: PageServerLoad = async ({ locals }) => {
 					.from(orderItems)
 					.innerJoin(orders, eq(orderItems.orderId, orders.id))
 					.where(and(
-						eq(orders.status, 'completed'), 
+						eq(orders.status, 'completed'),
 						eq(orderItems.status, 'completed'),
 						gte(orders.createdAt, today)
 					)),
 				db
 					.select({
-						total: sql<number>`coalesce(sum(coalesce(NULLIF(${productVariants.costPrice}, 0), ${products.costPrice}, 0) * ${productVariants.stockQuantity}), 0)`
+						total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`
 					})
-					.from(productVariants)
-					.innerJoin(products, eq(productVariants.productId, products.id))
+					.from(orders)
+					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, yesterday), lt(orders.createdAt, today))),
+				db
+					.select({
+						total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`
+					})
+					.from(orders)
+					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, lastMonthStart), lt(orders.createdAt, lastMonthEnd)))
 			]);
 
 			const grossProfit = (todaySales[0]?.total ?? 0) - (todayCogs[0]?.total ?? 0);
@@ -85,11 +105,62 @@ export const load: PageServerLoad = async ({ locals }) => {
 				monthlySales: monthlySales[0],
 				todayExpenses: todayExpenses[0],
 				todayProfit: grossProfit - (todayExpenses[0]?.total ?? 0),
-				inventoryValue: inventoryValue[0]?.total ?? 0
+				yesterdaySales: yesterdaySales[0],
+				lastMonthSamePeriod: lastMonthSamePeriod[0]
 			};
 		})(),
 
-		// Stock alerts (needs settings first)
+		last7Days: (async () => {
+			if (isElectron) return [];
+			if (!db) return [];
+
+			const rows = await db
+				.select({
+					day: sql<string>`to_char(${orders.createdAt}, 'YYYY-MM-DD')`,
+					total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`
+				})
+				.from(orders)
+				.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, sevenDaysAgo)))
+				.groupBy(sql`to_char(${orders.createdAt}, 'YYYY-MM-DD')`)
+				.orderBy(sql`to_char(${orders.createdAt}, 'YYYY-MM-DD')`);
+
+			return rows;
+		})(),
+
+		todayPayments: (async () => {
+			if (isElectron) return [];
+			if (!db) return [];
+
+			const [cashData, cardData, mobileData] = await Promise.all([
+				db.select({
+					method: sql<string>`'cash'`,
+					total: sql<number>`coalesce(sum(coalesce(${orders.cashAmount}, CASE WHEN ${orders.paymentMethod} = 'cash' THEN ${orders.totalAmount} ELSE 0 END)), 0)`
+				}).from(orders).where(and(
+					eq(orders.status, 'completed'),
+					gte(orders.createdAt, today),
+					sql`(coalesce(${orders.cashAmount}, 0) > 0 OR ${orders.paymentMethod} = 'cash')`
+				)),
+				db.select({
+					method: sql<string>`'card'`,
+					total: sql<number>`coalesce(sum(coalesce(${orders.cardAmount}, CASE WHEN ${orders.paymentMethod} = 'card' THEN ${orders.totalAmount} ELSE 0 END)), 0)`
+				}).from(orders).where(and(
+					eq(orders.status, 'completed'),
+					gte(orders.createdAt, today),
+					sql`(coalesce(${orders.cardAmount}, 0) > 0 OR ${orders.paymentMethod} = 'card')`
+				)),
+				db.select({
+					method: sql<string>`'mobile'`,
+					total: sql<number>`coalesce(sum(coalesce(${orders.mobileAmount}, CASE WHEN ${orders.paymentMethod} = 'mobile' THEN ${orders.totalAmount} ELSE 0 END)), 0)`
+				}).from(orders).where(and(
+					eq(orders.status, 'completed'),
+					gte(orders.createdAt, today),
+					sql`(coalesce(${orders.mobileAmount}, 0) > 0 OR ${orders.paymentMethod} = 'mobile')`
+				))
+			]);
+
+			return [cashData[0], cardData[0], mobileData[0]].filter(Boolean);
+		})(),
+
 		stockAlerts: (async () => {
 			if (isElectron) return { lowStockItems: [], lowStockCount: 0 };
 			if (!db) return { lowStockItems: [], lowStockCount: 0 };
@@ -129,13 +200,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 			return { lowStockItems: items, lowStockCount: count[0]?.count ?? 0 };
 		})(),
 
-		// Lists
-		recentOrders: (async () => {
-			if (isElectron) return [];
-			if (!db) return [];
-			return db.select().from(orders).orderBy(desc(orders.createdAt)).limit(10);
-		})(),
-
 		topProducts: (async () => {
 			if (isElectron) return [];
 			if (!db) return [];
@@ -152,7 +216,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				.from(orderItems)
 				.innerJoin(orders, eq(orderItems.orderId, orders.id))
 				.where(and(
-					eq(orders.status, 'completed'), 
+					eq(orders.status, 'completed'),
 					eq(orderItems.status, 'completed'),
 					gte(orders.createdAt, firstDayOfMonth)
 				))

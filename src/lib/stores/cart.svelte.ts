@@ -30,10 +30,15 @@ function createCart() {
 	// Split payment fields
 	let cashAmount = $state<number | null>(null);
 	let cardAmount = $state<number | null>(null);
+	let mobileAmount = $state<number | null>(0);
 
 	// Mobile payment fields
 	let mobileMethod = $state<'bkash' | 'nagad' | 'rocket' | 'other'>('bkash');
 	let mobileTrxId = $state<string>('');
+
+	// Card payment fields
+	let cardType = $state<'debit' | 'credit'>('debit');
+	let cardRef = $state<string>('');
 
 	const subtotal = $derived(
 		items.reduce((sum, item) => {
@@ -67,6 +72,7 @@ function createCart() {
 			if (v === 'split') {
 				cashAmount = null;
 				cardAmount = subtotal;
+				mobileAmount = 0;
 			}
 		},
 		get cashReceived() {
@@ -97,14 +103,21 @@ function createCart() {
 		},
 		set cashAmount(v: number | null) {
 			cashAmount = v;
-			cardAmount = Math.max(0, subtotal - (v ?? 0));
+			cardAmount = Math.max(0, subtotal - (v ?? 0) - (mobileAmount ?? 0));
 		},
 		get cardAmount() {
 			return cardAmount;
 		},
 		set cardAmount(v: number | null) {
 			cardAmount = v;
-			cashAmount = Math.max(0, subtotal - (v ?? 0));
+			cashAmount = Math.max(0, subtotal - (v ?? 0) - (mobileAmount ?? 0));
+		},
+		get mobileAmount() {
+			return mobileAmount;
+		},
+		set mobileAmount(v: number | null) {
+			mobileAmount = v;
+			cardAmount = Math.max(0, subtotal - (cashAmount ?? 0) - (v ?? 0));
 		},
 
 		exactAmount() {
@@ -124,6 +137,20 @@ function createCart() {
 		},
 		set mobileTrxId(v: string) {
 			mobileTrxId = v;
+		},
+
+		// Card payment getters/setters
+		get cardType() {
+			return cardType;
+		},
+		set cardType(v: 'debit' | 'credit') {
+			cardType = v;
+		},
+		get cardRef() {
+			return cardRef;
+		},
+		set cardRef(v: string) {
+			cardRef = v;
 		},
 
 		addItem(item: Omit<CartItem, 'quantity'>) {
@@ -172,6 +199,9 @@ function createCart() {
 			paymentMethod = 'cash';
 			cashReceived = 0;
 			globalDiscount = null;
+			mobileAmount = 0;
+			cardType = 'debit';
+			cardRef = '';
 		}
 	};
 }

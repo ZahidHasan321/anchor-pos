@@ -84,7 +84,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 	await bootstrapAdmin();
 	const token = event.cookies.get('session');
 
-	if (!token) {
+	// DEV MODE: fake admin user when no DB is available
+	if (!db && import.meta.env.DEV) {
+		event.locals.user = {
+			id: 'dev-user',
+			username: 'admin',
+			name: 'Dev Admin',
+			role: 'admin' as any,
+			theme: 'system' as any,
+			imageUrl: null,
+			email: null,
+			phone: null
+		};
+		event.locals.session = { id: 'dev-session', userId: 'dev-user', expiresAt: new Date(Date.now() + 86400000) };
+	} else if (!token) {
 		event.locals.user = null;
 		event.locals.session = null;
 	} else if (env.IS_ELECTRON) {

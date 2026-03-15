@@ -123,6 +123,10 @@ export const orders = pgTable(
 		mobileMethod: text('mobile_method'), // 'bkash', 'nagad', 'rocket', etc
 		mobileTrxId: text('mobile_trx_id'),
 
+		// Card details
+		cardType: text('card_type'), // 'debit', 'credit'
+		cardRef: text('card_ref'), // last 4 digits or approval code
+
 		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
 	},
 	(table) => ({
