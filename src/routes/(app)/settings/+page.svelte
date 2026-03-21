@@ -23,18 +23,62 @@
 		Pencil,
 		Facebook,
 		Instagram,
-		Receipt
+		Receipt,
+		Info,
+		RefreshCw,
+		CheckCircle,
+		AlertCircle,
+		Download,
+		Monitor
 	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { confirmState } from '$lib/confirm.svelte';
 	import { printReceipt } from '$lib/print-receipt';
 	import { formatCurrency, formatDateTime } from '$lib/format';
+	import { isElectron } from '$lib/electron-data.svelte';
+	import { browser } from '$app/environment';
 	import { untrack } from 'svelte';
 
 	let { data, form } = $props();
 	let loading = $state(false);
 	let isEditing = $state(false);
 	let showReceiptPreview = $state(false);
+
+	// About / Update state
+	let electronVersion = $state('');
+	let updateStatus = $state<'idle' | 'checking' | 'available' | 'up-to-date' | 'error'>('idle');
+	let updateVersion = $state('');
+	let updateError = $state('');
+
+	$effect(() => {
+		if (!browser || !isElectron) return;
+		const electron = (window as any).electron;
+		if (electron?.getAppVersion) {
+			electron.getAppVersion().then((v: string) => { electronVersion = v; });
+		}
+	});
+
+	async function checkForUpdate() {
+		const electron = (window as any).electron;
+		if (!electron?.checkForUpdate) return;
+		updateStatus = 'checking';
+		updateError = '';
+		try {
+			const result = await electron.checkForUpdate();
+			if (result.status === 'checked' && result.version && result.version !== electronVersion) {
+				updateStatus = 'available';
+				updateVersion = result.version;
+			} else if (result.status === 'error') {
+				updateStatus = 'error';
+				updateError = result.message || 'Check failed';
+			} else {
+				updateStatus = 'up-to-date';
+			}
+		} catch (e: any) {
+			updateStatus = 'error';
+			updateError = e.message || 'Check failed';
+		}
+	}
 
 	// Local state for preview
 	let previewData = $state({
@@ -407,6 +451,78 @@
 							readonly={!isEditing}
 						/>
 					</div>
+				</div>
+			</Card.Content>
+		</Card.Root>
+
+		<!-- ==================== ABOUT ==================== -->
+		<Card.Root>
+			<Card.Header class="px-4 pb-4 sm:px-6">
+				<div class="flex items-center gap-2.5">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/10">
+						<Info class="h-4 w-4 text-sky-600 dark:text-sky-400" />
+					</div>
+					<div>
+						<Card.Title class="text-sm sm:text-base">About</Card.Title>
+						<Card.Description class="text-xs sm:text-sm">
+							Application version and updates.
+						</Card.Description>
+					</div>
+				</div>
+			</Card.Header>
+			<Card.Content class="space-y-3 px-4 sm:px-6">
+				<div class="flex items-center justify-between rounded-lg border p-3">
+					<div class="flex items-center gap-3">
+						<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+							<Monitor class="h-4 w-4 text-primary" />
+						</div>
+						<div>
+							<p class="text-sm font-medium">Auto POS</p>
+							<p class="text-xs text-muted-foreground">
+								v{isElectron && electronVersion ? electronVersion : data.version || '0.0.0'}
+								{#if isElectron}
+									<span class="ml-1 text-muted-foreground/60">Desktop</span>
+								{:else}
+									<span class="ml-1 text-muted-foreground/60">Web</span>
+								{/if}
+							</p>
+						</div>
+					</div>
+					{#if isElectron}
+						<div class="flex items-center gap-2">
+							{#if updateStatus === 'checking'}
+								<span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+									<RefreshCw class="h-3.5 w-3.5 animate-spin" />
+									Checking…
+								</span>
+							{:else if updateStatus === 'available'}
+								<span class="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+									<Download class="h-3.5 w-3.5" />
+									v{updateVersion}
+								</span>
+							{:else if updateStatus === 'up-to-date'}
+								<span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+									<CheckCircle class="h-3.5 w-3.5" />
+									Latest
+								</span>
+							{:else if updateStatus === 'error'}
+								<span class="flex items-center gap-1.5 text-xs text-red-500" title={updateError}>
+									<AlertCircle class="h-3.5 w-3.5" />
+									Failed
+								</span>
+							{/if}
+							<Button
+								variant="outline"
+								size="sm"
+								class="h-8 cursor-pointer text-xs"
+								onclick={checkForUpdate}
+								disabled={updateStatus === 'checking'}
+							>
+								<RefreshCw class="mr-1.5 h-3.5 w-3.5" />
+								Check for Updates
+							</Button>
+						</div>
+					{/if}
 				</div>
 			</Card.Content>
 		</Card.Root>

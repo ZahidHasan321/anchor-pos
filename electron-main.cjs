@@ -205,8 +205,102 @@ async function createSplashWindow() {
 }
 
 async function createWindow() {
-    // Hide the default menu bar globally
-    Menu.setApplicationMenu(null);
+    // Build application menu
+    const isMac = process.platform === 'darwin';
+    const menuTemplate = [
+        // App menu (macOS only)
+        ...(isMac ? [{
+            label: app.name,
+            submenu: [
+                { role: 'about' },
+                { type: 'separator' },
+                { role: 'hide' },
+                { role: 'hideOthers' },
+                { role: 'unhide' },
+                { type: 'separator' },
+                { role: 'quit' }
+            ]
+        }] : []),
+        // File
+        {
+            label: 'File',
+            submenu: [
+                isMac ? { role: 'close' } : { role: 'quit' }
+            ]
+        },
+        // Edit
+        {
+            label: 'Edit',
+            submenu: [
+                { role: 'undo' },
+                { role: 'redo' },
+                { type: 'separator' },
+                { role: 'cut' },
+                { role: 'copy' },
+                { role: 'paste' },
+                { role: 'selectAll' }
+            ]
+        },
+        // View
+        {
+            label: 'View',
+            submenu: [
+                { role: 'reload' },
+                { role: 'forceReload' },
+                { role: 'toggleDevTools' },
+                { type: 'separator' },
+                { role: 'resetZoom' },
+                { role: 'zoomIn' },
+                { role: 'zoomOut' },
+                { type: 'separator' },
+                { role: 'togglefullscreen' }
+            ]
+        },
+        // Help
+        {
+            label: 'Help',
+            submenu: [
+                {
+                    label: 'Check for Updates…',
+                    click: async () => {
+                        if (!app.isPackaged) {
+                            dialog.showMessageBox({ type: 'info', title: 'Dev Mode', message: 'Auto-update is disabled in development.' });
+                            return;
+                        }
+                        try {
+                            const result = await autoUpdater.checkForUpdates();
+                            if (result && result.updateInfo) {
+                                const current = app.getVersion();
+                                if (result.updateInfo.version !== current) {
+                                    // autoUpdater events handle download + prompt
+                                    log.info('[Menu] Update found:', result.updateInfo.version);
+                                } else {
+                                    dialog.showMessageBox({ type: 'info', title: 'No Updates', message: `You are running the latest version (v${current}).` });
+                                }
+                            }
+                        } catch (e) {
+                            log.error('[Menu] Update check failed:', e);
+                            dialog.showMessageBox({ type: 'error', title: 'Update Error', message: `Failed to check for updates.\n\n${e.message}` });
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'About Auto POS',
+                    click: () => {
+                        dialog.showMessageBox({
+                            type: 'info',
+                            title: 'About Auto POS',
+                            message: 'Auto POS',
+                            detail: `Version: ${app.getVersion()}\nElectron: ${process.versions.electron}\nNode: ${process.versions.node}\nPlatform: ${process.platform} ${process.arch}`,
+                            buttons: ['OK']
+                        });
+                    }
+                }
+            ]
+        }
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
 
     const iconPath = app.isPackaged
         ? path.join(process.resourcesPath, 'app.asar', 'resources', 'icon.png')
@@ -220,7 +314,7 @@ async function createWindow() {
         width: state.width,
         height: state.height,
         title: "Auto POS",
-        show: false, // Don't show until ready
+        show: false,
         backgroundColor: '#ffffff',
         icon: iconPath,
         userAgent: USER_AGENT,
@@ -240,10 +334,6 @@ async function createWindow() {
     // Save window state on change
     mainWindow.on('resize', saveWindowState);
     mainWindow.on('move', saveWindowState);
-
-    // Ensure menu is hidden on Windows/Linux
-    mainWindow.setMenuBarVisibility(false);
-    mainWindow.removeMenu();
 
     // Find a free port
     const port = await portfinder.getPortPromise();
@@ -828,6 +918,27 @@ ipcMain.on('print-native', (event, html, preview = false) => {
     });
 
     printWindow.loadFile(tmpPath);
+});
+
+// --- App Info & Update IPC ---
+ipcMain.handle('get-app-version', () => app.getVersion());
+
+ipcMain.handle('check-for-update', async () => {
+    if (!app.isPackaged) return { status: 'dev' };
+    try {
+        const result = await autoUpdater.checkForUpdates();
+        if (result && result.updateInfo) {
+            return { status: 'checked', version: result.updateInfo.version };
+        }
+        return { status: 'up-to-date' };
+    } catch (e) {
+        log.error('[AutoUpdater] Manual check failed:', e);
+        return { status: 'error', message: e.message };
+    }
+});
+
+ipcMain.handle('install-update', () => {
+    autoUpdater.quitAndInstall();
 });
 
 // --- Single Instance Lock ---

@@ -320,7 +320,7 @@
 
 	let chartCanvas = $state<HTMLCanvasElement | null>(null);
 	let chartInstance: Chart | null = null;
-	// Category breakdown rendered as CSS bars — no canvas needed
+	let windowWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
 
 
 	function updateChart(chartData: any[]) {
@@ -339,24 +339,40 @@
 		const isMobile = window.innerWidth < 640;
 		const dataPoints = chartData.length;
 
+		// Use line chart on mobile when there are many data points (e.g. 30 days)
+		const useLineChart = isMobile && dataPoints > 6;
+
 		chartInstance = new Chart(ctx, {
-			type: 'bar',
+			type: useLineChart ? 'line' : 'bar',
 			data: {
 				labels: chartData.map((d: any) => d.date),
 				datasets: [
 					{
 						label: 'Revenue',
 						data: chartData.map((d: any) => Number(d.amount)),
-						backgroundColor: primaryColor,
-						borderRadius: isMobile ? 2 : 4,
-						borderSkipped: false,
-						maxBarThickness: isMobile ? 20 : 40
+						...(useLineChart
+							? {
+									borderColor: primaryColor,
+									backgroundColor: primaryColor + '20',
+									fill: true,
+									tension: 0.3,
+									pointRadius: dataPoints > 20 ? 0 : 3,
+									pointHitRadius: 10,
+									borderWidth: 2
+								}
+							: {
+									backgroundColor: primaryColor,
+									borderRadius: isMobile ? 2 : 4,
+									borderSkipped: false,
+									maxBarThickness: isMobile ? 20 : 40
+								})
 					}
 				]
 			},
 			options: {
 				responsive: true,
 				maintainAspectRatio: false,
+				interaction: useLineChart ? { mode: 'index', intersect: false } : undefined,
 				plugins: {
 					legend: { display: false },
 					tooltip: {
@@ -384,7 +400,7 @@
 							font: { size: isMobile ? 8 : 10 },
 							maxRotation: isMobile && dataPoints > 10 ? 45 : 0,
 							autoSkip: true,
-							maxTicksLimit: isMobile ? 7 : data.chartGrouping === 'hour' ? 12 : 15
+							maxTicksLimit: isMobile ? 5 : data.chartGrouping === 'hour' ? 12 : 15
 						}
 					},
 					y: {
@@ -409,11 +425,17 @@
 	}
 
 	$effect(() => {
-		// Re-run when chart data or canvas changes
+		const onResize = () => { windowWidth = window.innerWidth; };
+		window.addEventListener('resize', onResize);
+		return () => window.removeEventListener('resize', onResize);
+	});
+
+	$effect(() => {
+		// Re-run when chart data, canvas, or viewport width changes
 		const canvas = chartCanvas;
+		const _w = windowWidth; // track width so chart type updates on resize
 		effectiveChartData.then((cd: any[]) => {
 			if (canvas && cd && cd.length > 0) {
-				// Use tick to ensure canvas is in DOM after await resolves
 				requestAnimationFrame(() => updateChart(cd));
 			}
 		});
