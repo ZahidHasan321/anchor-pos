@@ -60,7 +60,10 @@
 
 <div class={cn('flex flex-col gap-1.5', className)}>
 	{#if label}
-		<label for={id} class="ml-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+		<label
+			for={id}
+			class="ml-1 text-[10px] font-black tracking-widest text-muted-foreground uppercase"
+		>
 			{label}
 			{#if required}<span class="text-rose-500">*</span>{/if}
 		</label>
@@ -70,7 +73,7 @@
 		<Popover.Trigger
 			{id}
 			class={cn(
-				'flex h-11 w-full cursor-pointer items-center gap-1.5 rounded-xl border-2 border-input bg-background px-2.5 py-2 text-sm transition-all hover:border-primary/30 focus:border-primary disabled:cursor-not-allowed disabled:opacity-50',
+				'flex h-11 w-full cursor-pointer items-center gap-1.5 rounded-xl border-2 border-input bg-card px-2.5 py-2 text-sm transition-all hover:border-primary/30 focus:border-primary active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50',
 				!value && 'font-bold text-muted-foreground'
 			)}
 		>
@@ -86,7 +89,7 @@
 		</Popover.Trigger>
 
 		<Popover.Content
-			class="z-50 w-auto max-w-[calc(100vw-1rem)] rounded-[2rem] border-2 border-border bg-popover p-0 text-popover-foreground shadow-2xl animate-in fade-in zoom-in duration-150"
+			class="z-50 w-auto max-w-[calc(100vw-1rem)] animate-in rounded-[2rem] border-2 border-border bg-popover p-0 text-popover-foreground shadow-2xl duration-150 fade-in zoom-in"
 			align="start"
 			sideOffset={8}
 			avoidCollisions={true}

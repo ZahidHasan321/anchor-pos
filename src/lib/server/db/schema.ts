@@ -1,14 +1,37 @@
 import { sql } from 'drizzle-orm';
 import {
 	pgTable,
+	pgEnum,
 	text,
 	integer,
-	doublePrecision,
+	numeric,
 	boolean,
 	timestamp,
 	index,
 	primaryKey
 } from 'drizzle-orm/pg-core';
+
+// --- Enums ---
+
+export const userRoleEnum = pgEnum('user_role', ['admin', 'manager', 'sales']);
+export const orderStatusEnum = pgEnum('order_status', ['completed', 'refunded', 'void']);
+export const orderItemStatusEnum = pgEnum('order_item_status', [
+	'completed',
+	'refunded',
+	'voided'
+]);
+export const paymentMethodEnum = pgEnum('payment_method', ['cash', 'card', 'split', 'mobile']);
+export const cashbookTypeEnum = pgEnum('cashbook_type', ['in', 'out']);
+export const cashbookCategoryEnum = pgEnum('cashbook_category', ['sale', 'refund', 'expense']);
+export const stockLogReasonEnum = pgEnum('stock_log_reason', [
+	'sale',
+	'restock',
+	'return',
+	'damage'
+]);
+
+/** Helper: numeric(12,2) stored as JS number — use for all money columns */
+const money = (name: string) => numeric(name, { precision: 12, scale: 2, mode: 'number' });
 
 // --- Users & Auth ---
 
@@ -16,13 +39,13 @@ export const users = pgTable('users', {
 	id: text('id').primaryKey(),
 	username: text('username').notNull().unique(),
 	passwordHash: text('password_hash').notNull(),
-	role: text('role').notNull().default('sales'), // enum: ['admin', 'manager', 'sales']
+	role: userRoleEnum('role').notNull().default('sales'),
 	name: text('name').notNull(),
 	phone: text('phone'),
 	email: text('email'),
 	imageUrl: text('image_url'),
 	isActive: boolean('is_active').notNull().default(true),
-	theme: text('theme').default('system') // 'light', 'dark', 'system'
+	theme: text('theme').default('system')
 });
 
 export const sessions = pgTable(
@@ -48,10 +71,11 @@ export const products = pgTable(
 		name: text('name').notNull(),
 		description: text('description'),
 		category: text('category').notNull(),
-		templatePrice: doublePrecision('base_price').notNull(),
-		costPrice: doublePrecision('cost_price').default(0),
-		defaultDiscount: doublePrecision('default_discount').default(0),
-		imageUrl: text('image_url')
+		templatePrice: money('base_price').notNull(),
+		costPrice: money('cost_price').default(0),
+		defaultDiscount: money('default_discount').default(0),
+		imageUrl: text('image_url'),
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow()
 	},
 	(table) => ({
 		categoryIdx: index('product_category_idx').on(table.category),
@@ -66,13 +90,13 @@ export const productVariants = pgTable(
 		productId: text('product_id')
 			.notNull()
 			.references(() => products.id, { onDelete: 'cascade' }),
-		size: text('size').notNull(), // S, M, L or 38, 40, 42
+		size: text('size').notNull(),
 		color: text('color'),
 		barcode: text('barcode').notNull().unique(),
 		stockQuantity: integer('stock_quantity').notNull().default(0),
-		price: doublePrecision('price').notNull().default(0),
-		costPrice: doublePrecision('cost_price').default(0),
-		discount: doublePrecision('discount').default(0)
+		price: money('price').notNull().default(0),
+		costPrice: money('cost_price').default(0),
+		discount: money('discount').default(0)
 	},
 	(table) => ({
 		productIdIdx: index('product_variant_product_id_idx').on(table.productId),
@@ -93,7 +117,8 @@ export const customers = pgTable(
 		name: text('name').notNull(),
 		phone: text('phone').unique(),
 		email: text('email'),
-		notes: text('notes')
+		notes: text('notes'),
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow()
 	},
 	(table) => ({
 		nameIdx: index('customer_name_idx').on(table.name)
@@ -106,26 +131,26 @@ export const orders = pgTable(
 	'orders',
 	{
 		id: text('id').primaryKey(),
-		orderNumber: integer('order_number'), // Human readable ID (e.g. 1001), optional and not unique to avoid sync conflicts
+		orderNumber: integer('order_number'),
 		customerId: text('customer_id').references(() => customers.id),
-		userId: text('user_id').references(() => users.id), // Cashier
-		totalAmount: doublePrecision('total_amount').notNull(),
-		status: text('status').notNull().default('completed'), // enum: ['completed', 'refunded', 'void']
-		paymentMethod: text('payment_method').notNull(), // enum: ['cash', 'card', 'split', 'mobile']
-		discountAmount: doublePrecision('discount_amount').default(0),
-		cashReceived: doublePrecision('cash_received'),
-		changeGiven: doublePrecision('change_given'),
+		userId: text('user_id').references(() => users.id),
+		totalAmount: money('total_amount').notNull(),
+		status: orderStatusEnum('status').notNull().default('completed'),
+		paymentMethod: paymentMethodEnum('payment_method').notNull(),
+		discountAmount: money('discount_amount').default(0),
+		cashReceived: money('cash_received'),
+		changeGiven: money('change_given'),
 
 		// Split & Mobile details
-		cashAmount: doublePrecision('cash_amount'),
-		cardAmount: doublePrecision('card_amount'),
-		mobileAmount: doublePrecision('mobile_amount'),
-		mobileMethod: text('mobile_method'), // 'bkash', 'nagad', 'rocket', etc
+		cashAmount: money('cash_amount'),
+		cardAmount: money('card_amount'),
+		mobileAmount: money('mobile_amount'),
+		mobileMethod: text('mobile_method'),
 		mobileTrxId: text('mobile_trx_id'),
 
 		// Card details
-		cardType: text('card_type'), // 'debit', 'credit'
-		cardRef: text('card_ref'), // last 4 digits or approval code
+		cardType: text('card_type'),
+		cardRef: text('card_ref'),
 
 		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
 	},
@@ -147,12 +172,12 @@ export const orderItems = pgTable(
 			.references(() => orders.id, { onDelete: 'cascade' }),
 		variantId: text('variant_id').references(() => productVariants.id),
 		quantity: integer('quantity').notNull(),
-		priceAtSale: doublePrecision('price_at_sale').notNull(), // Price at the moment of sale
-		costAtSale: doublePrecision('cost_at_sale').default(0), // Cost price at the moment of sale
-		discount: doublePrecision('discount').default(0),
+		priceAtSale: money('price_at_sale').notNull(),
+		costAtSale: money('cost_at_sale').default(0),
+		discount: money('discount').default(0),
 		productName: text('product_name').notNull(),
-		variantLabel: text('variant_label').notNull(), // e.g., "M / Black"
-		status: text('status').notNull().default('completed') // enum: ['completed', 'refunded']
+		variantLabel: text('variant_label').notNull(),
+		status: orderItemStatusEnum('status').notNull().default('completed')
 	},
 	(table) => ({
 		orderIdIdx: index('order_item_order_id_idx').on(table.orderId),
@@ -167,8 +192,8 @@ export const stockLogs = pgTable(
 	{
 		id: text('id').primaryKey(),
 		variantId: text('variant_id').references(() => productVariants.id),
-		changeAmount: integer('change_amount').notNull(), // +10 or -5
-		reason: text('reason').notNull(), // 'sale', 'restock', 'return', 'damage'
+		changeAmount: integer('change_amount').notNull(),
+		reason: text('reason').notNull(),
 		userId: text('user_id').references(() => users.id),
 		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
 	},
@@ -183,9 +208,9 @@ export const cashbook = pgTable(
 	'cashbook',
 	{
 		id: text('id').primaryKey(),
-		amount: doublePrecision('amount').notNull(),
-		type: text('type').notNull(), // enum: ['in', 'out']
-		category: text('category').notNull().default('expense'), // 'sale', 'refund', 'expense'
+		amount: money('amount').notNull(),
+		type: cashbookTypeEnum('type').notNull(),
+		category: cashbookCategoryEnum('category').notNull().default('expense'),
 		description: text('description').notNull(),
 		userId: text('user_id').references(() => users.id),
 		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
@@ -194,8 +219,7 @@ export const cashbook = pgTable(
 		userIdIdx: index('cashbook_user_id_idx').on(table.userId),
 		createdAtIdx: index('cashbook_created_at_idx').on(table.createdAt),
 		typeIdx: index('cashbook_type_idx').on(table.type),
-		typeCreatedIdx: index('cashbook_type_created_idx').on(table.type, table.createdAt),
-		descriptionIdx: index('cashbook_description_idx').on(table.description)
+		typeCreatedIdx: index('cashbook_type_created_idx').on(table.type, table.createdAt)
 	})
 );
 
@@ -237,17 +261,3 @@ export const auditLogs = pgTable(
 	})
 );
 
-export const loginAttempts = pgTable(
-	'login_attempts',
-	{
-		id: text('id').primaryKey(),
-		identifier: text('identifier').notNull(), // IP address or username
-		attempts: integer('attempts').notNull().default(1),
-		lastAttempt: timestamp('last_attempt', { withTimezone: true, mode: 'date' })
-			.notNull()
-			.defaultNow()
-	},
-	(table) => ({
-		identifierIdx: index('login_attempts_identifier_idx').on(table.identifier)
-	})
-);

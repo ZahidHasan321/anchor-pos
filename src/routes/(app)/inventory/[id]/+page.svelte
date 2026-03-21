@@ -7,77 +7,196 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import * as Select from '$lib/components/ui/select';
 	import {
 		ArrowLeft,
 		Plus,
-		Minus,
 		Trash,
 		Printer,
 		Pencil,
 		Loader2,
 		Package,
-		AlertTriangle,
-		PackageX,
-		CircleCheck,
 		X,
-		TrendingUp,
-		DollarSign
+		Check,
+		PackageOpen,
+		History,
+		ChevronDown
 	} from '@lucide/svelte';
-	import { formatCurrency, getCurrencySymbol } from '$lib/format';
+	import { formatCurrency, getCurrencySymbol, formatDateTime } from '$lib/format';
 	import { toast } from 'svelte-sonner';
 	import { navigating } from '$app/stores';
 	import { confirmState } from '$lib/confirm.svelte';
+	import { powersync } from '$lib/powersync.svelte';
+	import { isNative } from '$lib/electron-data.svelte';
+	import { generateId, toDbDate } from '$lib/utils';
 
 	let { data, form } = $props();
 
-	let stockDialogOpen = $state(false);
+	// ── Native data loading ──
+	let nativeProduct = $state<any>(null);
+	let nativeVariants = $state<any[]>([]);
+	let nativeStockHistory = $state<any[]>([]);
+
+	async function loadNativeProductDetail() {
+		if (!isNative || !powersync.ready) return;
+		const productId = data.product?.id ?? data.productId;
+		if (!productId) return;
+
+		const [productRows, variantRows] = await Promise.all([
+			powersync.db.getAll('SELECT * FROM products WHERE id = ?', [productId]),
+			powersync.db.getAll(
+				`SELECT id, product_id as productId, size, barcode, price,
+				 COALESCE(cost_price, 0) as costPrice, discount, stock_quantity as stockQuantity
+				 FROM product_variants WHERE product_id = ?`,
+				[productId]
+			)
+		]);
+
+		nativeProduct = (productRows as any[])[0]
+			? {
+					...(productRows as any[])[0],
+					templatePrice: (productRows as any[])[0].template_price,
+					costPrice: (productRows as any[])[0].cost_price,
+					defaultDiscount: (productRows as any[])[0].default_discount
+				}
+			: null;
+		nativeVariants = variantRows as any[];
+
+		// Stock history
+		const vIds = (variantRows as any[]).map((v: any) => v.id);
+		if (vIds.length > 0) {
+			const placeholders = vIds.map(() => '?').join(',');
+			const historyRows = await powersync.db.getAll(
+				`SELECT sl.id, sl.variant_id as variantId, pv.size, sl.change_amount as changeAmount,
+				 sl.reason, u.name as userName, sl.created_at as createdAt
+				 FROM stock_logs sl
+				 INNER JOIN product_variants pv ON sl.variant_id = pv.id
+				 LEFT JOIN users u ON sl.user_id = u.id
+				 WHERE sl.variant_id IN (${placeholders})
+				 ORDER BY sl.created_at DESC LIMIT 50`,
+				vIds
+			);
+			nativeStockHistory = historyRows as any[];
+		}
+	}
+
+	$effect(() => {
+		if (isNative && powersync.ready) {
+			powersync.dataVersion;
+			loadNativeProductDetail();
+		}
+	});
+
+	const currentProduct = $derived(isNative && nativeProduct ? nativeProduct : data.product);
+	const currentVariants = $derived(
+		isNative && nativeVariants.length > 0 ? nativeVariants : data.variants
+	);
+	const currentStockHistory = $derived(isNative ? nativeStockHistory : (data.stockHistory ?? []));
+
+	// ── Mode state ──
+	let editingVariantId = $state<string | null>(null);
+	let stockHistoryOpen = $state(false);
+	let batchStockMode = $state(false);
+
+	// ── Inline edit state ──
+	let editPrice = $state('');
+	let editCostPrice = $state('');
+	let editDiscount = $state('');
+	let editLoading = $state(false);
+
+	// ── Batch stock state ──
+	let batchStockData = $state<Record<string, string>>({});
+	let batchStockReason = $state('');
+	let batchStockLoading = $state(false);
+
+	// ── Add variant state ──
 	let variantDialogOpen = $state(false);
-	let editVariantDialogOpen = $state(false);
-	let selectedVariantId = $state('');
-	let newStockQuantity = $state(0);
-	let adjustReason = $state('');
 	let newVariantPrice = $state('');
 	let newVariantCostPrice = $state('');
 	let newVariantDiscount = $state('');
 	let newVariantInitialStock = $state('');
-	let loading = $state(false);
+	let addVariantLoading = $state(false);
+
 	let deleteLoading = $state(false);
-
-	// Variant editing state
-	let editingVariant = $state<any>(null);
-	let editVariantPrice = $state('');
-	let editVariantCostPrice = $state('');
-	let editVariantDiscount = $state('');
-
-	function openStockDialog(variant: any) {
-		selectedVariantId = variant.id;
-		newStockQuantity = variant.stockQuantity;
-		adjustReason = '';
-		stockDialogOpen = true;
-	}
 
 	const SIZE_TEMPLATES = {
 		alpha: ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL'],
 		numeric: ['28', '30', '32', '34', '36', '38', '40', '42', '44', '46', '48', '50', '52', '54']
 	};
-
 	let variantTemplate = $state('alpha');
 	let variantSelectedSizes = $state<string[]>([]);
 	let customVariantSizeInput = $state('');
 
-	// Clear selected sizes when template changes
 	$effect(() => {
 		variantTemplate;
 		variantSelectedSizes = [];
 	});
 
-	const existingSizes = $derived(data.variants.map((v: any) => v.size));
+	const existingSizes = $derived(currentVariants.map((v: any) => v.size));
 	const availableSizes = $derived(
 		SIZE_TEMPLATES[variantTemplate as keyof typeof SIZE_TEMPLATES].filter(
 			(s) => !existingSizes.includes(s)
 		)
 	);
+
+	// ── Computed ──
+	const totalStock = $derived(
+		currentVariants.reduce((sum: number, v: any) => sum + v.stockQuantity, 0)
+	);
+
+	const margin = $derived.by(() => {
+		const cost = currentProduct.costPrice ?? 0;
+		const price = currentProduct.templatePrice;
+		if (cost > 0 && price > 0) return Math.round(((price - cost) / price) * 100);
+		return null;
+	});
+
+	const batchChangedCount = $derived(
+		Object.entries(batchStockData).filter(([id, qty]) => {
+			const variant = currentVariants.find((v: any) => v.id === id);
+			return variant && qty !== '' && parseInt(qty) !== variant.stockQuantity;
+		}).length
+	);
+
+	// ── Helpers ──
+	function stockChipClass(qty: number): string {
+		if (qty === 0)
+			return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900';
+		if (qty <= 5)
+			return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900';
+		return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-900';
+	}
+
+	function stockRowBg(qty: number): string {
+		if (qty === 0) return 'bg-red-50/40 dark:bg-red-950/15';
+		if (qty <= 5) return 'bg-amber-50/40 dark:bg-amber-950/15';
+		return '';
+	}
+
+	// ── Mode transitions ──
+	function startInlineEdit(variant: any) {
+		editingVariantId = variant.id;
+		editPrice = variant.price?.toString() ?? '';
+		editCostPrice = variant.costPrice?.toString() ?? '0';
+		editDiscount = variant.discount?.toString() ?? '0';
+	}
+
+	function cancelInlineEdit() {
+		editingVariantId = null;
+	}
+
+	function enterBatchStockMode() {
+		batchStockMode = true;
+		editingVariantId = null;
+		batchStockData = {};
+		for (const v of currentVariants) {
+			batchStockData[v.id] = v.stockQuantity.toString();
+		}
+		batchStockReason = '';
+	}
+
+	function cancelBatchStock() {
+		batchStockMode = false;
+	}
 
 	function toggleVariantSize(size: string) {
 		if (variantSelectedSizes.includes(size)) {
@@ -102,25 +221,124 @@
 		customVariantSizeInput = '';
 	}
 
-	function openEditVariant(variant: any) {
-		editingVariant = variant;
-		editVariantPrice = variant.price?.toString() ?? '';
-		editVariantCostPrice = variant.costPrice?.toString() ?? '0';
-		editVariantDiscount = variant.discount?.toString() ?? '0';
-		editVariantDialogOpen = true;
+	// ── Native actions ──
+	async function nativeInlineEditSave() {
+		if (!editingVariantId || !isNative || !powersync.ready) return;
+		editLoading = true;
+		try {
+			const price = editPrice ? parseFloat(editPrice) : 0;
+			const costPrice = editCostPrice ? parseFloat(editCostPrice) : 0;
+			const discount = editDiscount ? parseFloat(editDiscount) : 0;
+			await powersync.db.execute(
+				`UPDATE product_variants SET price = ?, cost_price = ?, discount = ? WHERE id = ?`,
+				[price, costPrice, discount, editingVariantId]
+			);
+			toast.success('Variant updated');
+			editingVariantId = null;
+			loadNativeProductDetail();
+		} catch (e) {
+			toast.error('Failed to update variant');
+		} finally {
+			editLoading = false;
+		}
 	}
 
-	$effect(() => {
-		if (form?.stockSuccess) {
-			toast.success('Stock updated successfully');
-			stockDialogOpen = false;
-			adjustReason = '';
+	async function nativeBatchStockSave() {
+		if (!isNative || !powersync.ready) return;
+		batchStockLoading = true;
+		try {
+			let count = 0;
+			for (const [variantId, qtyStr] of Object.entries(batchStockData)) {
+				const newQty = parseInt(qtyStr);
+				const variant = currentVariants.find((v: any) => v.id === variantId);
+				if (!variant || isNaN(newQty) || newQty === variant.stockQuantity) continue;
+				const delta = newQty - variant.stockQuantity;
+				await powersync.db.execute(`UPDATE product_variants SET stock_quantity = ? WHERE id = ?`, [
+					newQty,
+					variantId
+				]);
+				await powersync.db.execute(
+					`INSERT INTO stock_logs (id, variant_id, change_amount, reason, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+					[generateId(), variantId, delta, batchStockReason, data.user?.id, toDbDate(new Date())]
+				);
+				count++;
+			}
+			toast.success(`Stock updated for ${count} variant(s)`);
+			batchStockMode = false;
+			batchStockReason = '';
+			loadNativeProductDetail();
+		} catch (e) {
+			toast.error('Failed to update stock');
+		} finally {
+			batchStockLoading = false;
 		}
-		if (form?.stockError) {
-			toast.error(form.stockError);
+	}
+
+	async function nativeAddVariants(
+		sizes: string[],
+		price: number,
+		costPrice: number,
+		discount: number,
+		initialStock: number
+	) {
+		if (!isNative || !powersync.ready) return;
+		const product = currentProduct;
+		const shortId = product.id.substring(0, 4).toUpperCase();
+		const catPrefix = product.category.substring(0, 3).toUpperCase();
+		for (const size of sizes) {
+			const barcode = `${catPrefix}-${shortId}-${size}`;
+			await powersync.db.execute(
+				`INSERT INTO product_variants (id, product_id, size, barcode, price, cost_price, discount, stock_quantity) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				[generateId(), product.id, size, barcode, price, costPrice, discount, initialStock]
+			);
+		}
+		toast.success('Variants added');
+		variantDialogOpen = false;
+		variantSelectedSizes = [];
+		customVariantSizeInput = '';
+		newVariantPrice = '';
+		newVariantCostPrice = '';
+		newVariantDiscount = '';
+		newVariantInitialStock = '';
+		loadNativeProductDetail();
+	}
+
+	async function nativeDeleteVariant(variantId: string) {
+		if (!isNative || !powersync.ready) return;
+		await powersync.db.execute(`DELETE FROM product_variants WHERE id = ?`, [variantId]);
+		toast.success('Variant deleted');
+		loadNativeProductDetail();
+	}
+
+	async function nativeDeleteProduct() {
+		if (!isNative || !powersync.ready) return;
+		const product = currentProduct;
+		await powersync.db.execute(`DELETE FROM product_variants WHERE product_id = ?`, [product.id]);
+		await powersync.db.execute(`DELETE FROM products WHERE id = ?`, [product.id]);
+		toast.success('Product deleted');
+		window.location.href = '/inventory';
+	}
+
+	// ── Form result handlers ──
+	$effect(() => {
+		if (form?.editVariantSuccess) {
+			toast.success('Variant updated');
+			editingVariantId = null;
+		}
+		if (form?.batchStockSuccess) {
+			toast.success('Stock updated for all variants');
+			batchStockMode = false;
+			batchStockReason = '';
+		}
+		if (form?.batchStockError) {
+			toast.error(form.batchStockError);
 		}
 		if (form?.variantSuccess) {
-			toast.success('Variants added successfully');
+			if (form.variantWarning) {
+				toast.warning(form.variantWarning);
+			} else {
+				toast.success('Variants added');
+			}
 			variantDialogOpen = false;
 			variantSelectedSizes = [];
 			customVariantSizeInput = '';
@@ -129,579 +347,734 @@
 			newVariantDiscount = '';
 			newVariantInitialStock = '';
 		}
-		if (form?.variantError) {
-			toast.error(form.variantError);
-		}
-		if (form?.deleteVariantSuccess) {
-			toast.success('Variant deleted');
-		}
-		if (form?.editVariantSuccess) {
-			toast.success('Variant updated');
-			editVariantDialogOpen = false;
-		}
-		if (form?.error) {
-			toast.error(form.error);
-		}
+		if (form?.variantError) toast.error(form.variantError);
+		if (form?.deleteVariantSuccess) toast.success('Variant deleted');
+		if (form?.stockSuccess) toast.success('Stock updated');
+		if (form?.stockError) toast.error(form.stockError);
+		if (form?.error) toast.error(form.error);
 	});
 
-	const totalStock = $derived(data.variants.reduce((sum: number, v: any) => sum + v.stockQuantity, 0));
-	const healthyCount = $derived(data.variants.filter((v: any) => v.stockQuantity > 5).length);
-	const lowCount = $derived(
-		data.variants.filter((v: any) => v.stockQuantity > 0 && v.stockQuantity <= 5).length
-	);
-	const outCount = $derived(data.variants.filter((v: any) => v.stockQuantity === 0).length);
-
-	// Per-variant stock value
-	const totalCostValue = $derived(
-		data.variants.reduce((sum: number, v: any) => {
-			const cost = v.costPrice ?? data.product.costPrice ?? 0;
-			return sum + cost * v.stockQuantity;
-		}, 0)
-	);
-
-	const totalRetailValue = $derived(
-		data.variants.reduce((sum: number, v: any) => {
-			return sum + v.price * v.stockQuantity;
-		}, 0)
-	);
-
-	// Profit margins across variants
-	const variantMargins = $derived(
-		data.variants
-			.filter((v: any) => {
-				const cost = v.costPrice ?? data.product.costPrice ?? 0;
-				return cost > 0 && v.price > 0;
-			})
-			.map((v: any) => {
-				const cost = v.costPrice ?? data.product.costPrice ?? 0;
-				return Math.round(((v.price - cost) / v.price) * 100);
-			})
-	);
-	const minMargin = $derived(variantMargins.length > 0 ? Math.min(...variantMargins) : 0);
-	const maxMargin = $derived(variantMargins.length > 0 ? Math.max(...variantMargins) : 0);
-
-	function stockChipClass(qty: number): string {
-		if (qty === 0)
-			return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900';
-		if (qty <= 5)
-			return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900';
-		return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-900';
-	}
-
-	function stockBadgeVariant(qty: number): 'destructive' | 'secondary' | 'outline' {
-		if (qty === 0) return 'destructive';
-		if (qty <= 5) return 'secondary';
-		return 'outline';
-	}
+	// ── Form references (web mode) ──
+	let editFormEl = $state<HTMLFormElement | null>(null);
+	let batchStockFormEl = $state<HTMLFormElement | null>(null);
 </script>
 
 <svelte:head>
-	<title>{data.product.name} — Inventory — Clothing POS</title>
+	<title>{currentProduct.name} — Inventory — Clothing POS</title>
 </svelte:head>
 
-<div class="space-y-6 p-6">
+<div class="space-y-5 p-4 pb-24 sm:p-6 md:pb-6">
 	{#if $navigating}
-		<div class="animate-pulse space-y-6">
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-4">
-					<div class="h-10 w-10 rounded-md bg-muted"></div>
-					<div class="space-y-2">
-						<div class="h-8 w-48 rounded bg-muted"></div>
-						<div class="h-4 w-32 rounded bg-muted"></div>
-					</div>
-				</div>
-				<div class="flex gap-2">
-					<div class="h-10 w-24 rounded bg-muted"></div>
-					<div class="h-10 w-24 rounded bg-muted"></div>
+		<div class="animate-pulse space-y-5">
+			<div class="flex items-center gap-4">
+				<div class="h-10 w-10 rounded-md bg-muted"></div>
+				<div class="space-y-2">
+					<div class="h-8 w-48 rounded bg-muted"></div>
+					<div class="h-4 w-32 rounded bg-muted"></div>
 				</div>
 			</div>
-			<div class="grid gap-4 sm:grid-cols-4">
-				{#each Array(4) as _}
-					<div class="h-20 rounded-lg border bg-muted/50"></div>
-				{/each}
+			<div class="h-14 rounded-lg bg-muted/50"></div>
+			<div class="flex gap-2">
+				{#each Array(5) as _}<div class="h-8 w-16 rounded-md bg-muted"></div>{/each}
 			</div>
-			<div class="grid gap-6 lg:grid-cols-3">
-				<div class="h-[400px] rounded-lg border bg-muted/50 lg:col-span-2"></div>
-				<div class="space-y-6">
-					<div class="h-[200px] rounded-lg border bg-muted/50"></div>
-					<div class="h-[150px] rounded-lg border bg-muted/50"></div>
-				</div>
-			</div>
+			<div class="h-[400px] rounded-lg border bg-muted/50"></div>
 		</div>
 	{:else}
-		<!-- Header -->
-		<div class="flex items-center justify-between">
-			<div class="flex items-center gap-4">
-				<Button variant="outline" size="icon" href="/inventory" class="cursor-pointer" aria-label="Back to inventory">
+		<!-- ── Header ── -->
+		<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+			<div class="flex items-start gap-3">
+				<Button
+					variant="outline"
+					size="icon"
+					href="/inventory"
+					class="mt-1 shrink-0 cursor-pointer"
+					aria-label="Back to inventory"
+				>
 					<ArrowLeft class="h-4 w-4" />
 				</Button>
 				<div>
-					<h1 class="text-3xl font-bold tracking-tight">{data.product.name}</h1>
-					<div class="mt-1 flex items-center gap-2 text-muted-foreground">
-						<Badge variant="secondary">{data.product.category}</Badge>
-						<span>Total Stock: {totalStock}</span>
+					<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">{currentProduct.name}</h1>
+					<div class="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+						<Badge variant="secondary">{currentProduct.category}</Badge>
+						<span class="font-semibold tabular-nums">{totalStock} in stock</span>
 					</div>
 				</div>
 			</div>
 			<div class="flex gap-2">
-				<Button variant="outline" href="/inventory/{data.product.id}/labels" class="cursor-pointer">
-					<Printer class="mr-2 h-4 w-4" /> Labels
+				<Button
+					variant="outline"
+					size="sm"
+					href="/inventory/{currentProduct.id}/labels"
+					class="cursor-pointer"
+				>
+					<Printer class="mr-1.5 h-3.5 w-3.5" /> Labels
 				</Button>
-				<Button variant="outline" href="/inventory/{data.product.id}/edit" class="cursor-pointer">
-					<Pencil class="mr-2 h-4 w-4" /> Edit
+				<Button
+					variant="outline"
+					size="sm"
+					href="/inventory/{currentProduct.id}/edit"
+					class="cursor-pointer"
+				>
+					<Pencil class="mr-1.5 h-3.5 w-3.5" /> Edit Product
 				</Button>
 				{#if data.user?.role === 'admin'}
-					<form
-						method="POST"
-						action="?/deleteProduct"
-						use:enhance={() => {
-							deleteLoading = true;
-							return async ({ update }) => {
-								deleteLoading = false;
-								await update();
-							};
-						}}
-					>
+					{#if isNative}
 						<Button
 							variant="destructive"
+							size="sm"
 							type="button"
 							disabled={deleteLoading}
 							class="cursor-pointer"
-							onclick={async (e) => {
-								const formElement = e.currentTarget.closest('form');
+							onclick={async () => {
 								if (
-									await confirmState.confirm(
-										'Are you sure you want to delete this product? This action cannot be undone.'
-									)
+									await confirmState.confirm({
+										title: 'Delete Product',
+										message: `Delete "${currentProduct.name}" and all variants? This cannot be undone.`,
+										confirmText: 'Delete',
+										variant: 'destructive'
+									})
 								) {
-									formElement?.requestSubmit();
+									deleteLoading = true;
+									await nativeDeleteProduct();
+									deleteLoading = false;
 								}
 							}}
 						>
 							{#if deleteLoading}
-								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+								<Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
 							{:else}
-								<Trash class="mr-2 h-4 w-4" />
+								<Trash class="mr-1.5 h-3.5 w-3.5" />
 							{/if}
 							Delete
 						</Button>
-					</form>
+					{:else}
+						<form
+							method="POST"
+							action="?/deleteProduct"
+							use:enhance={() => {
+								deleteLoading = true;
+								return async ({ update }) => {
+									deleteLoading = false;
+									await update();
+								};
+							}}
+						>
+							<Button
+								variant="destructive"
+								size="sm"
+								type="button"
+								disabled={deleteLoading}
+								class="cursor-pointer"
+								onclick={async (e) => {
+									const formElement = e.currentTarget.closest('form');
+									if (
+										await confirmState.confirm({
+											title: 'Delete Product',
+											message: `Delete "${currentProduct.name}" and all variants? This cannot be undone.`,
+											confirmText: 'Delete',
+											variant: 'destructive'
+										})
+									) {
+										formElement?.requestSubmit();
+									}
+								}}
+							>
+								{#if deleteLoading}
+									<Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+								{:else}
+									<Trash class="mr-1.5 h-3.5 w-3.5" />
+								{/if}
+								Delete
+							</Button>
+						</form>
+					{/if}
 				{/if}
 			</div>
 		</div>
 
-		<!-- Stock Summary -->
-		<div class="grid gap-4 sm:grid-cols-4">
-			<Card.Root>
-				<Card.Content class="flex items-center gap-3 p-4">
-					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-						<Package class="h-4 w-4 text-blue-600" />
-					</div>
+		<!-- ── Product Info Bar ── -->
+		<div class="rounded-lg border bg-muted/30 px-4 py-3">
+			<div class="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
+				<div>
+					<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
+						>Base Price</span
+					>
+					<span class="ml-1.5 font-semibold">{formatCurrency(currentProduct.templatePrice)}</span>
+				</div>
+				<div class="hidden h-4 w-px bg-border sm:block"></div>
+				<div>
+					<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
+						>Cost</span
+					>
+					<span class="ml-1.5 font-semibold">{formatCurrency(currentProduct.costPrice ?? 0)}</span>
+				</div>
+				{#if margin !== null}
+					<div class="hidden h-4 w-px bg-border sm:block"></div>
 					<div>
-						<p class="text-xs text-muted-foreground">Total Stock</p>
-						<p class="text-xl font-bold break-words break-all">{totalStock}</p>
+						<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
+							>Margin</span
+						>
+						<span class="ml-1.5 font-semibold text-emerald-600 dark:text-emerald-400"
+							>{margin}%</span
+						>
 					</div>
-				</Card.Content>
-			</Card.Root>
-			<Card.Root>
-				<Card.Content class="flex items-center gap-3 p-4">
-					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
-						<TrendingUp class="h-4 w-4 text-emerald-500" />
-					</div>
+				{/if}
+				{#if currentProduct.defaultDiscount}
+					<div class="hidden h-4 w-px bg-border sm:block"></div>
 					<div>
-						<p class="text-xs text-muted-foreground">Retail Value</p>
-						<p class="text-xl font-bold break-words break-all text-emerald-600">
-							{formatCurrency(totalRetailValue)}
-						</p>
+						<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
+							>Default Discount</span
+						>
+						<span class="ml-1.5 font-semibold">{currentProduct.defaultDiscount}%</span>
 					</div>
-				</Card.Content>
-			</Card.Root>
-			<Card.Root>
-				<Card.Content class="flex items-center gap-3 p-4">
-					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10">
-						<DollarSign class="h-4 w-4 text-indigo-500" />
-					</div>
-					<div>
-						<p class="text-xs text-muted-foreground">Inventory Value</p>
-						<p class="text-xl font-bold break-words break-all text-indigo-600">
-							{formatCurrency(totalCostValue)}
-						</p>
-					</div>
-				</Card.Content>
-			</Card.Root>
-			<Card.Root>
-				<Card.Content class="flex items-center gap-3 p-4">
-					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
-						<AlertTriangle class="h-4 w-4 text-amber-500" />
-					</div>
-					<div>
-						<p class="text-xs text-muted-foreground">Stock Health</p>
-						<p class="text-sm font-bold">
-							<span class="text-emerald-600" title="Healthy">{healthyCount}H</span>
-							<span class="mx-0.5 text-muted-foreground">/</span>
-							<span class="text-amber-600" title="Low Stock">{lowCount}L</span>
-							<span class="mx-0.5 text-muted-foreground">/</span>
-							<span class="text-red-600" title="Out of Stock">{outCount}O</span>
-						</p>
-					</div>
-				</Card.Content>
-			</Card.Root>
+				{/if}
+			</div>
+			{#if currentProduct.description}
+				<p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+					{currentProduct.description}
+				</p>
+			{/if}
+			<p class="mt-1.5 text-[11px] text-muted-foreground/60">
+				Base price & discount apply to new variants only. Each variant has its own pricing.
+			</p>
 		</div>
 
-		<div class="grid gap-6 lg:grid-cols-3">
-			<!-- Variants Table -->
-			<Card.Root class="lg:col-span-2">
-				<Card.Header>
-					<div class="flex items-center justify-between">
-						<div>
-							<Card.Title>Variants & Stock</Card.Title>
-							<Card.Description>Manage individual sizes and colors.</Card.Description>
+		<!-- ── Size Overview ── -->
+		<div class="flex flex-wrap gap-1.5">
+			{#each currentVariants as variant}
+				<div
+					class="flex items-center gap-1.5 rounded-md border px-2.5 py-1 {stockChipClass(
+						variant.stockQuantity
+					)}"
+					title="{variant.size}: {variant.stockQuantity} in stock — {formatCurrency(variant.price)}"
+				>
+					<span class="text-xs font-semibold">{variant.size}</span>
+					<span class="text-sm font-bold tabular-nums">{variant.stockQuantity}</span>
+				</div>
+			{/each}
+		</div>
+
+		<!-- ── Variants Table ── -->
+		<Card.Root class="pb-0 {batchStockMode ? 'ring-2 ring-blue-500/30' : ''}">
+			<Card.Header>
+				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					{#if batchStockMode}
+						<div class="flex-1">
+							<Card.Title class="flex items-center gap-2">
+								<PackageOpen class="h-4 w-4 text-blue-600" />
+								Stock Adjustment
+							</Card.Title>
+							<div class="mt-2">
+								<Input
+									placeholder="Reason — e.g. New shipment, Recount, Damage…"
+									bind:value={batchStockReason}
+									class="h-9 max-w-md text-sm"
+								/>
+							</div>
 						</div>
 						<div class="flex gap-2">
+							<Button variant="outline" size="sm" onclick={cancelBatchStock} class="cursor-pointer">
+								Cancel
+							</Button>
 							<Button
-								variant="outline"
 								size="sm"
-								onclick={() => (variantDialogOpen = true)}
+								disabled={batchStockLoading || !batchStockReason.trim() || batchChangedCount === 0}
 								class="cursor-pointer"
+								onclick={async () => {
+									if (
+										await confirmState.confirm({
+											title: 'Save Stock Changes',
+											message: `Update stock for ${batchChangedCount} variant(s)?\nReason: ${batchStockReason}`,
+											confirmText: 'Save All',
+											variant: 'default'
+										})
+									) {
+										if (isNative) {
+											await nativeBatchStockSave();
+										} else {
+											batchStockFormEl?.requestSubmit();
+										}
+									}
+								}}
 							>
-								<Plus class="mr-1 h-3.5 w-3.5" /> Add Variant
+								{#if batchStockLoading}
+									<Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+								{/if}
+								Save {batchChangedCount} Change{batchChangedCount !== 1 ? 's' : ''}
 							</Button>
 						</div>
-					</div>
-				</Card.Header>
-				<Card.Content>
+					{:else}
+						<div>
+							<Card.Title>Variants & Stock</Card.Title>
+							<Card.Description>
+								{currentVariants.length} size{currentVariants.length !== 1 ? 's' : ''}
+							</Card.Description>
+						</div>
+						<div class="flex gap-2">
+							{#if data.user?.role !== 'sales'}
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={enterBatchStockMode}
+									class="cursor-pointer"
+								>
+									<Package class="mr-1.5 h-3.5 w-3.5" /> Adjust Stock
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={() => (variantDialogOpen = true)}
+									class="cursor-pointer"
+								>
+									<Plus class="mr-1.5 h-3.5 w-3.5" /> Add Sizes
+								</Button>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			</Card.Header>
+			<Card.Content class="p-0">
+				<div class="overflow-x-auto">
 					<Table.Root>
 						<Table.Header>
 							<Table.Row>
-								<Table.Head>Size</Table.Head>
-								<Table.Head>Barcode</Table.Head>
+								<Table.Head class="w-[70px]">Size</Table.Head>
+								<Table.Head class="hidden md:table-cell">Barcode</Table.Head>
 								<Table.Head>Price</Table.Head>
-								<Table.Head>Cost</Table.Head>
-								<Table.Head>Stock</Table.Head>
-								<Table.Head class="text-right">Actions</Table.Head>
+								<Table.Head class="hidden lg:table-cell">Cost</Table.Head>
+								<Table.Head class="hidden sm:table-cell">Discount</Table.Head>
+								<Table.Head class={batchStockMode ? 'min-w-[180px]' : ''}>Stock</Table.Head>
+								{#if !batchStockMode}
+									<Table.Head class="w-[100px] text-right">Actions</Table.Head>
+								{/if}
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
-							{#each data.variants as variant}
-								<Table.Row>
-									<Table.Cell class="font-medium">{variant.size}</Table.Cell>
-									<Table.Cell>
-										<code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+							{#each currentVariants as variant (variant.id)}
+								{@const isEditing = editingVariantId === variant.id}
+								{@const batchQty = batchStockData[variant.id]}
+								{@const batchDelta =
+									batchStockMode && batchQty !== undefined
+										? parseInt(batchQty) - variant.stockQuantity
+										: 0}
+
+								<Table.Row
+									class={batchStockMode
+										? ''
+										: isEditing
+											? 'bg-blue-50/50 dark:bg-blue-950/20'
+											: stockRowBg(variant.stockQuantity)}
+								>
+									<!-- Size -->
+									<Table.Cell class="font-bold">{variant.size}</Table.Cell>
+
+									<!-- Barcode -->
+									<Table.Cell class="hidden md:table-cell">
+										<code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]"
 											>{variant.barcode}</code
 										>
 									</Table.Cell>
+
+									<!-- Price -->
 									<Table.Cell>
-										<div>{formatCurrency(variant.price)}</div>
-										{#if variant.discount && variant.discount > 0}
-											<div class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-												-{variant.discount}% discount
-											</div>
+										{#if isEditing}
+											<Input
+												type="number"
+												step="0.01"
+												min="0"
+												bind:value={editPrice}
+												class="h-8 w-24 text-sm"
+											/>
+										{:else}
+											<span class="font-medium">{formatCurrency(variant.price)}</span>
 										{/if}
 									</Table.Cell>
-									<Table.Cell>
-										<div class="text-sm">{formatCurrency(variant.costPrice ?? data.product.costPrice ?? 0)}</div>
-									</Table.Cell>
-									<Table.Cell>
-										<span
-											class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold {stockChipClass(
-												variant.stockQuantity
-											)}"
-										>
-											{variant.stockQuantity}
-										</span>
-									</Table.Cell>
-									<Table.Cell class="text-right">
-										<div class="flex justify-end gap-1">
-											<Button
-												variant="ghost"
-												size="icon"
-												class="h-8 w-8 cursor-pointer text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-												onclick={() => openStockDialog(variant)}
-											aria-label="Update stock"
-												title="Update stock"
+
+									<!-- Cost -->
+									<Table.Cell class="hidden lg:table-cell">
+										{#if isEditing}
+											<Input
+												type="number"
+												step="0.01"
+												min="0"
+												bind:value={editCostPrice}
+												class="h-8 w-24 text-sm"
+											/>
+										{:else}
+											<span class="text-sm text-muted-foreground"
+												>{formatCurrency(variant.costPrice ?? currentProduct.costPrice ?? 0)}</span
 											>
-												<Package class="h-3.5 w-3.5" />
-											</Button>
-											<Button
-												variant="ghost"
-												size="icon"
-												class="h-8 w-8 cursor-pointer"
-												onclick={() => openEditVariant(variant)}
-											aria-label="Edit variant"
-												title="Edit variant"
+										{/if}
+									</Table.Cell>
+
+									<!-- Discount -->
+									<Table.Cell class="hidden sm:table-cell">
+										{#if isEditing}
+											<div class="flex items-center gap-1">
+												<Input
+													type="number"
+													step="0.01"
+													min="0"
+													max="100"
+													bind:value={editDiscount}
+													class="h-8 w-20 text-sm"
+												/>
+												<span class="text-xs text-muted-foreground">%</span>
+											</div>
+										{:else if variant.discount && variant.discount > 0}
+											<span class="text-sm font-medium text-emerald-600 dark:text-emerald-400"
+												>{variant.discount}%</span
 											>
-												<Pencil class="h-3.5 w-3.5" />
-											</Button>
-											<form method="POST" action="?/deleteVariant" use:enhance>
-												<input type="hidden" name="variantId" value={variant.id} />
-												<Button
-													variant="ghost"
-													size="icon"
-													type="button"
-													class="h-8 w-8 cursor-pointer text-muted-foreground hover:text-destructive"
-													title="Delete variant"
-												aria-label="Delete variant"
-													onclick={async (e) => {
-														const formElement = e.currentTarget.closest('form');
-														if (
-															await confirmState.confirm(
-																`Delete variant ${variant.size}? This cannot be undone.`
-															)
-														) {
-															formElement?.requestSubmit();
-														}
-													}}
+										{:else}
+											<span class="text-sm text-muted-foreground">—</span>
+										{/if}
+									</Table.Cell>
+
+									<!-- Stock -->
+									<Table.Cell>
+										{#if batchStockMode}
+											<div class="flex items-center gap-2">
+												<span class="w-8 text-right text-sm text-muted-foreground tabular-nums"
+													>{variant.stockQuantity}</span
 												>
-													<Trash class="h-3.5 w-3.5" />
-												</Button>
-											</form>
+												<span class="text-muted-foreground">→</span>
+												<Input
+													type="number"
+													min="0"
+													value={batchStockData[variant.id]}
+													oninput={(e) => {
+														batchStockData = {
+															...batchStockData,
+															[variant.id]: (e.target as HTMLInputElement).value
+														};
+													}}
+													class="h-8 w-20 text-sm"
+												/>
+												{#if batchDelta !== 0 && !isNaN(batchDelta)}
+													<span
+														class="text-xs font-bold tabular-nums {batchDelta > 0
+															? 'text-emerald-600'
+															: 'text-red-600'}"
+													>
+														{batchDelta > 0 ? '+' : ''}{batchDelta}
+													</span>
+												{/if}
+											</div>
+										{:else}
+											<span
+												class="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold {stockChipClass(
+													variant.stockQuantity
+												)}"
+											>
+												{variant.stockQuantity}
+											</span>
+										{/if}
+									</Table.Cell>
+
+									<!-- Actions -->
+									{#if !batchStockMode}
+										<Table.Cell class="text-right">
+											{#if isEditing}
+												<div class="flex justify-end gap-1">
+													<Button
+														variant="ghost"
+														size="icon"
+														class="h-8 w-8 cursor-pointer text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+														disabled={editLoading}
+														onclick={async () => {
+															if (isNative) {
+																await nativeInlineEditSave();
+															} else {
+																editFormEl?.requestSubmit();
+															}
+														}}
+														aria-label="Save changes"
+														title="Save"
+													>
+														{#if editLoading}
+															<Loader2 class="h-3.5 w-3.5 animate-spin" />
+														{:else}
+															<Check class="h-3.5 w-3.5" />
+														{/if}
+													</Button>
+													<Button
+														variant="ghost"
+														size="icon"
+														class="h-8 w-8 cursor-pointer"
+														onclick={cancelInlineEdit}
+														aria-label="Cancel editing"
+														title="Cancel"
+													>
+														<X class="h-3.5 w-3.5" />
+													</Button>
+												</div>
+											{:else if data.user?.role !== 'sales'}
+												<div class="flex justify-end gap-1">
+													<Button
+														variant="ghost"
+														size="icon"
+														class="h-8 w-8 cursor-pointer text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+														onclick={() => startInlineEdit(variant)}
+														aria-label="Edit variant"
+														title="Edit pricing"
+													>
+														<Pencil class="h-3.5 w-3.5" />
+													</Button>
+													{#if isNative}
+														<Button
+															variant="ghost"
+															size="icon"
+															type="button"
+															class="h-8 w-8 cursor-pointer text-muted-foreground hover:text-destructive"
+															title="Delete variant"
+															aria-label="Delete variant"
+															onclick={async () => {
+																if (
+																	await confirmState.confirm({
+																		title: 'Delete Variant',
+																		message: `Delete size ${variant.size}? This cannot be undone.`,
+																		confirmText: 'Delete',
+																		variant: 'destructive'
+																	})
+																) {
+																	await nativeDeleteVariant(variant.id);
+																}
+															}}
+														>
+															<Trash class="h-3.5 w-3.5" />
+														</Button>
+													{:else}
+														<form method="POST" action="?/deleteVariant" use:enhance>
+															<input type="hidden" name="variantId" value={variant.id} />
+															<Button
+																variant="ghost"
+																size="icon"
+																type="button"
+																class="h-8 w-8 cursor-pointer text-muted-foreground hover:text-destructive"
+																title="Delete variant"
+																aria-label="Delete variant"
+																onclick={async (e) => {
+																	const formElement = e.currentTarget.closest('form');
+																	if (
+																		await confirmState.confirm({
+																			title: 'Delete Variant',
+																			message: `Delete size ${variant.size}? This cannot be undone.`,
+																			confirmText: 'Delete',
+																			variant: 'destructive'
+																		})
+																	) {
+																		formElement?.requestSubmit();
+																	}
+																}}
+															>
+																<Trash class="h-3.5 w-3.5" />
+															</Button>
+														</form>
+													{/if}
+												</div>
+											{/if}
+										</Table.Cell>
+									{/if}
+								</Table.Row>
+							{:else}
+								<Table.Row>
+									<Table.Cell
+										colspan={batchStockMode ? 6 : 7}
+										class="h-32 text-center text-muted-foreground italic"
+									>
+										<div class="flex flex-col items-center justify-center gap-2">
+											<Package class="h-8 w-8 opacity-20" />
+											<p>No variants yet.</p>
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={() => (variantDialogOpen = true)}
+												class="mt-2 cursor-pointer"
+											>
+												<Plus class="mr-1.5 h-3.5 w-3.5" /> Add Sizes
+											</Button>
 										</div>
 									</Table.Cell>
 								</Table.Row>
 							{/each}
 						</Table.Body>
 					</Table.Root>
-				</Card.Content>
+				</div>
+			</Card.Content>
+		</Card.Root>
+		<!-- ── Stock History ── -->
+		{#if currentStockHistory.length > 0}
+			<Card.Root>
+				<Card.Header class="pb-0">
+					<button
+						class="flex w-full cursor-pointer items-center justify-between"
+						onclick={() => (stockHistoryOpen = !stockHistoryOpen)}
+					>
+						<div class="flex items-center gap-2">
+							<History class="h-4 w-4 text-muted-foreground" />
+							<Card.Title>Stock History</Card.Title>
+							<span class="text-xs text-muted-foreground">
+								({currentStockHistory.length} entries)
+							</span>
+						</div>
+						<ChevronDown
+							class="h-4 w-4 text-muted-foreground transition-transform {stockHistoryOpen
+								? 'rotate-180'
+								: ''}"
+						/>
+					</button>
+				</Card.Header>
+				{#if stockHistoryOpen}
+					<Card.Content class="p-0 pt-3">
+						<div class="overflow-x-auto">
+							<Table.Root>
+								<Table.Header>
+									<Table.Row>
+										<Table.Head>Date</Table.Head>
+										<Table.Head>Size</Table.Head>
+										<Table.Head>Change</Table.Head>
+										<Table.Head>Reason</Table.Head>
+										<Table.Head class="hidden sm:table-cell">By</Table.Head>
+									</Table.Row>
+								</Table.Header>
+								<Table.Body>
+									{#each currentStockHistory as log}
+										<Table.Row>
+											<Table.Cell class="text-xs text-muted-foreground">
+												{formatDateTime(log.createdAt)}
+											</Table.Cell>
+											<Table.Cell>
+												<span
+													class="inline-flex h-6 min-w-6 items-center justify-center rounded bg-primary/10 px-1.5 text-[11px] font-bold text-primary"
+												>
+													{log.size}
+												</span>
+											</Table.Cell>
+											<Table.Cell>
+												<span
+													class="text-sm font-bold tabular-nums {log.changeAmount > 0
+														? 'text-emerald-600 dark:text-emerald-400'
+														: 'text-red-600 dark:text-red-400'}"
+												>
+													{log.changeAmount > 0 ? '+' : ''}{log.changeAmount}
+												</span>
+											</Table.Cell>
+											<Table.Cell class="text-sm">{log.reason}</Table.Cell>
+											<Table.Cell class="hidden text-xs text-muted-foreground sm:table-cell"
+												>{log.userName ?? 'System'}</Table.Cell
+											>
+										</Table.Row>
+									{/each}
+								</Table.Body>
+							</Table.Root>
+						</div>
+					</Card.Content>
+				{/if}
 			</Card.Root>
-
-			<!-- Product Info Sidebar -->
-			<div class="space-y-6">
-				<Card.Root>
-					<Card.Header>
-						<Card.Title>Product Info</Card.Title>
-					</Card.Header>
-					<Card.Content class="space-y-4">
-						<div>
-							<p class="text-xs text-muted-foreground">Default Selling Price</p>
-							<p class="text-xl font-bold break-words break-all">
-								{formatCurrency(data.product.templatePrice)}
-							</p>
-						</div>
-						<div>
-							<p class="text-xs text-muted-foreground">Default Cost Price</p>
-							<p class="text-lg font-bold break-words break-all">
-								{formatCurrency(data.product.costPrice ?? 0)}
-							</p>
-						</div>
-						{#if variantMargins.length > 0}
-							<div>
-								<p class="text-xs text-muted-foreground">Profit Margin</p>
-								{#if minMargin === maxMargin}
-									<p class="font-medium text-emerald-600 dark:text-emerald-400">
-										{minMargin}%
-									</p>
-								{:else}
-									<p class="font-medium text-emerald-600 dark:text-emerald-400">
-										{minMargin}% – {maxMargin}%
-									</p>
-								{/if}
-							</div>
-						{/if}
-						<div>
-							<p class="text-xs text-muted-foreground">Default Discount</p>
-							<p class="font-medium">{data.product.defaultDiscount}%</p>
-						</div>
-						{#if data.product.description}
-							<div>
-								<p class="text-xs text-muted-foreground">Description</p>
-								<p class="text-sm">{data.product.description}</p>
-							</div>
-						{/if}
-					</Card.Content>
-				</Card.Root>
-
-				<!-- Size Stock Overview (visual) -->
-				<Card.Root>
-					<Card.Header>
-						<Card.Title>Size Overview</Card.Title>
-					</Card.Header>
-					<Card.Content>
-						<div class="flex flex-wrap gap-2">
-							{#each data.variants as variant}
-								<div
-									class="flex min-w-[3.5rem] flex-col items-center rounded-lg border p-2 {stockChipClass(
-										variant.stockQuantity
-									)}"
-									title="{variant.size}: {variant.stockQuantity} in stock — {formatCurrency(
-										variant.price
-									)}"
-								>
-									<span class="text-xs font-medium">{variant.size}</span>
-									<span class="text-lg font-bold">{variant.stockQuantity}</span>
-									<span class="text-[10px] text-muted-foreground"
-										>{formatCurrency(variant.price)}</span
-									>
-								</div>
-							{/each}
-						</div>
-					</Card.Content>
-				</Card.Root>
-			</div>
-		</div>
+		{/if}
 	{/if}
 </div>
 
-<!-- Update Stock Dialog -->
-<Dialog.Root bind:open={stockDialogOpen}>
-	<Dialog.Content>
-		{@const selectedVariant = data.variants.find((v: any) => v.id === selectedVariantId)}
-		<Dialog.Header>
-			<Dialog.Title>Update Stock: {selectedVariant?.size}</Dialog.Title>
-			<Dialog.Description>Set the new stock level for this variant.</Dialog.Description>
-		</Dialog.Header>
-		<form
-			method="POST"
-			action="?/adjustStock"
-			use:enhance={() => {
-				loading = true;
-				return async ({ update }) => {
-					loading = false;
-					await update();
-				};
-			}}
-			class="space-y-4"
-		>
-			<input type="hidden" name="variantId" value={selectedVariantId} />
+<!-- ── Hidden forms (web mode) ── -->
+<form
+	method="POST"
+	action="?/editVariant"
+	use:enhance={() => {
+		editLoading = true;
+		return async ({ update }) => {
+			editLoading = false;
+			await update();
+		};
+	}}
+	bind:this={editFormEl}
+	class="hidden"
+>
+	<input name="variantId" value={editingVariantId ?? ''} />
+	<input name="price" value={editPrice} />
+	<input name="costPrice" value={editCostPrice} />
+	<input name="discount" value={editDiscount} />
+</form>
 
-			<div class="space-y-2">
-				<Label for="newQuantity">New Stock Quantity</Label>
-				<div class="flex items-center gap-2">
-					<Button
-						type="button"
-						variant="outline"
-						size="icon"
-						onclick={() => (newStockQuantity = Math.max(0, newStockQuantity - 1))}
-					aria-label="Decrease quantity"
-						class="cursor-pointer"
-					>
-						<Minus class="h-4 w-4" />
-					</Button>
-					<Input
-						id="newQuantity"
-						name="newQuantity"
-						type="number"
-						min="0"
-						bind:value={newStockQuantity}
-						class="text-center text-lg font-bold"
-						required
-					/>
-					<Button
-						type="button"
-						variant="outline"
-						size="icon"
-						onclick={() => (newStockQuantity += 1)}
-					aria-label="Increase quantity"
-						class="cursor-pointer"
-					>
-						<Plus class="h-4 w-4" />
-					</Button>
-				</div>
-				<p class="text-center text-xs text-muted-foreground">
-					Current stock: <span class="font-bold">{selectedVariant?.stockQuantity}</span>
-					&rarr; New stock:
-					<span
-						class="font-bold {newStockQuantity > (selectedVariant?.stockQuantity ?? 0)
-							? 'text-emerald-600'
-							: newStockQuantity < (selectedVariant?.stockQuantity ?? 0)
-								? 'text-red-600'
-								: ''}">{newStockQuantity}</span
-					>
-				</p>
-			</div>
+<form
+	method="POST"
+	action="?/batchAdjustStock"
+	use:enhance={() => {
+		batchStockLoading = true;
+		return async ({ update }) => {
+			batchStockLoading = false;
+			await update();
+		};
+	}}
+	bind:this={batchStockFormEl}
+	class="hidden"
+>
+	<input name="reason" value={batchStockReason} />
+	{#each currentVariants as variant}
+		<input name="variantIds" value={variant.id} />
+		<input
+			name="quantities"
+			value={batchStockData[variant.id] ?? variant.stockQuantity.toString()}
+		/>
+	{/each}
+</form>
 
-			<div class="space-y-2">
-				<Label for="adjust-reason">Reason for Update</Label>
-				<Input
-					id="adjust-reason"
-					name="reason"
-					placeholder="e.g. Restock, Damage, Correction..."
-					bind:value={adjustReason}
-					required
-				/>
-			</div>
-
-			<Dialog.Footer>
-				<Button
-					type="button"
-					disabled={loading || !adjustReason || !selectedVariantId}
-					class="w-full cursor-pointer"
-					onclick={async (e) => {
-						const formElement = e.currentTarget.closest('form');
-						const diff = newStockQuantity - (selectedVariant?.stockQuantity ?? 0);
-						if (diff === 0) {
-							stockDialogOpen = false;
-							return;
-						}
-						const action = diff > 0 ? 'Add' : 'Remove';
-						if (
-							await confirmState.confirm({
-								title: 'Update Stock',
-								message: `Are you sure you want to change stock from ${selectedVariant?.stockQuantity} to ${newStockQuantity}? (${action} ${Math.abs(diff)} units)`,
-								confirmText: 'Confirm Update',
-								variant: diff > 0 ? 'default' : 'destructive'
-							})
-						) {
-							formElement?.requestSubmit();
-						}
-					}}
-				>
-					{#if loading}
-						<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-					{/if}
-					Save Stock Level
-				</Button>
-			</Dialog.Footer>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
-
-<!-- Add Variant Dialog -->
+<!-- ── Add Variant Dialog ── -->
 <Dialog.Root bind:open={variantDialogOpen}>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>Add New Variants</Dialog.Title>
-			<Dialog.Description>Add new size variants to this product.</Dialog.Description>
+			<Dialog.Title>Add New Sizes</Dialog.Title>
+			<Dialog.Description>Add size variants to {currentProduct.name}.</Dialog.Description>
 		</Dialog.Header>
 		<form
 			method="POST"
 			action="?/addVariant"
 			use:enhance={() => {
-				loading = true;
+				addVariantLoading = true;
 				return async ({ update }) => {
-					loading = false;
+					addVariantLoading = false;
 					await update();
 				};
 			}}
 			class="space-y-4"
 		>
-			<!-- Size Template Selector -->
-			<div class="space-y-4 rounded-lg border p-4">
+			<!-- Size template selector -->
+			<div class="space-y-3 rounded-lg border p-3">
 				<div class="flex items-center justify-between">
 					<Label class="text-sm font-semibold">Select Sizes</Label>
-					<div class="flex items-center rounded-lg border bg-muted p-1">
+					<div class="flex items-center rounded-lg border bg-muted p-0.5">
 						<button
 							type="button"
-							class="h-8 px-3 text-xs font-medium transition-all rounded-md {variantTemplate === 'alpha' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted-foreground/10'}"
+							class="h-7 rounded-md px-2.5 text-xs font-medium transition-all {variantTemplate ===
+							'alpha'
+								? 'bg-background text-foreground shadow-sm'
+								: 'text-muted-foreground hover:bg-muted-foreground/10'}"
 							onclick={() => (variantTemplate = 'alpha')}
 						>
-							Alpha (S, M, L...)
+							Alpha
 						</button>
 						<button
 							type="button"
-							class="h-8 px-3 text-xs font-medium transition-all rounded-md {variantTemplate === 'numeric' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted-foreground/10'}"
+							class="h-7 rounded-md px-2.5 text-xs font-medium transition-all {variantTemplate ===
+							'numeric'
+								? 'bg-background text-foreground shadow-sm'
+								: 'text-muted-foreground hover:bg-muted-foreground/10'}"
 							onclick={() => (variantTemplate = 'numeric')}
 						>
-							Numeric (28, 30...)
+							Numeric
 						</button>
 					</div>
 				</div>
 
 				{#if availableSizes.length > 0}
-					<div class="flex flex-wrap gap-3">
+					<div class="flex flex-wrap gap-2">
 						{#each availableSizes as size}
 							<button
 								type="button"
-								class="flex cursor-pointer items-center space-x-2 rounded-md border px-3 py-1.5 text-sm transition-colors {variantSelectedSizes.includes(size) ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border hover:bg-muted'}"
+								class="cursor-pointer rounded-md border px-2.5 py-1 text-sm font-semibold transition-colors {variantSelectedSizes.includes(
+									size
+								)
+									? 'border-primary bg-primary/10 text-primary'
+									: 'border-border hover:bg-muted'}"
 								onclick={() => toggleVariantSize(size)}
 							>
 								{size}
@@ -714,12 +1087,11 @@
 					</p>
 				{/if}
 
-				<!-- Custom size input -->
 				<div class="flex items-center gap-2">
 					<Input
-						placeholder="Custom size (e.g. OneSize, Free, 27)"
+						placeholder="Custom size…"
 						bind:value={customVariantSizeInput}
-						class="max-w-[240px]"
+						class="h-8 max-w-[200px] text-sm"
 						onkeydown={(e: KeyboardEvent) => {
 							if (e.key === 'Enter') {
 								e.preventDefault();
@@ -734,16 +1106,15 @@
 						onclick={addCustomVariantSize}
 						class="cursor-pointer"
 					>
-						<Plus class="mr-1 h-3.5 w-3.5" /> Add
+						<Plus class="mr-1 h-3 w-3" /> Add
 					</Button>
 				</div>
 
-				<!-- Selected sizes as removable badges -->
 				{#if variantSelectedSizes.length > 0}
-					<div class="flex flex-wrap gap-2">
+					<div class="flex flex-wrap gap-1.5">
 						{#each variantSelectedSizes as size}
 							<span
-								class="inline-flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-sm font-medium"
+								class="inline-flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-0.5 text-sm font-medium"
 							>
 								{size}
 								<input type="hidden" name="sizes" value={size} />
@@ -760,146 +1131,101 @@
 				{/if}
 			</div>
 
-			<div class="space-y-2">
-				<Label for="new-price">Selling Price ({getCurrencySymbol()})</Label>
-				<Input
-					id="new-price"
-					name="price"
-					type="number"
-					step="0.01"
-					placeholder="Leave blank to use default"
-					bind:value={newVariantPrice}
-				/>
-				<p class="text-xs text-muted-foreground">
-					Default: {formatCurrency(data.product.templatePrice)}
-				</p>
+			<div class="grid grid-cols-2 gap-3">
+				<div class="space-y-1.5">
+					<Label class="text-xs">Selling Price ({getCurrencySymbol()})</Label>
+					<Input
+						name="price"
+						type="number"
+						step="0.01"
+						placeholder="Default"
+						bind:value={newVariantPrice}
+						class="h-9 text-sm"
+					/>
+					<p class="text-[10px] text-muted-foreground">
+						{formatCurrency(currentProduct.templatePrice)}
+					</p>
+				</div>
+				<div class="space-y-1.5">
+					<Label class="text-xs">Cost Price ({getCurrencySymbol()})</Label>
+					<Input
+						name="costPrice"
+						type="number"
+						step="0.01"
+						placeholder="Default"
+						bind:value={newVariantCostPrice}
+						class="h-9 text-sm"
+					/>
+					<p class="text-[10px] text-muted-foreground">
+						{formatCurrency(currentProduct.costPrice ?? 0)}
+					</p>
+				</div>
 			</div>
 
-			<div class="space-y-2">
-				<Label for="new-cost-price">Cost Price ({getCurrencySymbol()})</Label>
-				<Input
-					id="new-cost-price"
-					name="costPrice"
-					type="number"
-					step="0.01"
-					placeholder="Leave blank to use default"
-					bind:value={newVariantCostPrice}
-				/>
-				<p class="text-xs text-muted-foreground">
-					Default: {formatCurrency(data.product.costPrice ?? 0)}
-				</p>
+			<div class="grid grid-cols-2 gap-3">
+				<div class="space-y-1.5">
+					<Label class="text-xs">Discount (%)</Label>
+					<Input
+						name="discount"
+						type="number"
+						step="0.01"
+						placeholder="Default"
+						bind:value={newVariantDiscount}
+						class="h-9 text-sm"
+					/>
+					<p class="text-[10px] text-muted-foreground">
+						{currentProduct.defaultDiscount}%
+					</p>
+				</div>
+				<div class="space-y-1.5">
+					<Label class="text-xs">Initial Stock (per size)</Label>
+					<Input
+						name="initialStock"
+						type="number"
+						min="0"
+						placeholder="0"
+						bind:value={newVariantInitialStock}
+						class="h-9 text-sm"
+					/>
+				</div>
 			</div>
 
-			<div class="space-y-2">
-				<Label for="new-discount">Discount (%)</Label>
-				<Input
-					id="new-discount"
-					name="discount"
-					type="number"
-					step="0.01"
-					placeholder="Leave blank to use default"
-					bind:value={newVariantDiscount}
-				/>
-				<p class="text-xs text-muted-foreground">Default: {data.product.defaultDiscount}%</p>
-			</div>
-
-			<div class="space-y-2">
-				<Label for="new-stock">Initial Stock (per size)</Label>
-				<Input
-					id="new-stock"
-					name="initialStock"
-					type="number"
-					min="0"
-					placeholder="0"
-					bind:value={newVariantInitialStock}
-				/>
-			</div>
-
-			<Dialog.Footer>
-				<Button
-					type="submit"
-					disabled={loading || variantSelectedSizes.length === 0}
-					class="w-full cursor-pointer"
-				>
-					{#if loading}
-						<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-					{/if}
-					Add {variantSelectedSizes.length} Variant{variantSelectedSizes.length !== 1 ? 's' : ''}
-				</Button>
-			</Dialog.Footer>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
-
-<!-- Edit Variant Dialog -->
-<Dialog.Root bind:open={editVariantDialogOpen}>
-	<Dialog.Content>
-		<Dialog.Header>
-			<Dialog.Title>Edit Variant</Dialog.Title>
-			<Dialog.Description>
-				{editingVariant?.size}
-			</Dialog.Description>
-		</Dialog.Header>
-		<form method="POST" action="?/editVariant" use:enhance class="space-y-4">
-			<input type="hidden" name="variantId" value={editingVariant?.id} />
-			<div class="space-y-2">
-				<Label>Selling Price ({getCurrencySymbol()})</Label>
-				<Input
-					name="price"
-					type="number"
-					step="0.01"
-					placeholder="Enter price"
-					bind:value={editVariantPrice}
-				/>
-				<p class="text-xs text-muted-foreground">
-					Default: {formatCurrency(data.product.templatePrice)}
-				</p>
-			</div>
-			<div class="space-y-2">
-				<Label>Cost Price ({getCurrencySymbol()})</Label>
-				<Input
-					name="costPrice"
-					type="number"
-					step="0.01"
-					placeholder="Enter cost price"
-					bind:value={editVariantCostPrice}
-				/>
-				<p class="text-xs text-muted-foreground">
-					Default: {formatCurrency(data.product.costPrice ?? 0)}
-				</p>
-			</div>
-			<div class="space-y-2">
-				<Label>Default Discount (%)</Label>
-				<Input
-					name="discount"
-					type="number"
-					step="0.01"
-					placeholder="0.00"
-					bind:value={editVariantDiscount}
-				/>
-				<p class="text-xs text-muted-foreground">
-					Applies automatically to POS sales (editable there)
-				</p>
-			</div>
 			<Dialog.Footer>
 				<Button
 					type="button"
+					disabled={addVariantLoading || variantSelectedSizes.length === 0}
 					class="w-full cursor-pointer"
 					onclick={async (e) => {
-						const formElement = e.currentTarget.closest('form');
-						if (
-							await confirmState.confirm({
-								title: 'Update Variant',
-								message: `Are you sure you want to update the price/discount for variant ${editingVariant?.size}?`,
-								confirmText: 'Save Changes',
-								variant: 'default'
-							})
-						) {
+						if (isNative) {
+							addVariantLoading = true;
+							const price = newVariantPrice
+								? parseFloat(newVariantPrice)
+								: currentProduct.templatePrice;
+							const costPrice = newVariantCostPrice
+								? parseFloat(newVariantCostPrice)
+								: currentProduct.costPrice || 0;
+							const discount = newVariantDiscount
+								? parseFloat(newVariantDiscount)
+								: currentProduct.defaultDiscount || 0;
+							const initialStock = parseInt(newVariantInitialStock) || 0;
+							await nativeAddVariants(
+								variantSelectedSizes,
+								price,
+								costPrice,
+								discount,
+								initialStock
+							);
+							addVariantLoading = false;
+						} else {
+							const formElement = e.currentTarget.closest('form');
 							formElement?.requestSubmit();
 						}
 					}}
 				>
-					Save Changes
+					{#if addVariantLoading}
+						<Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+					{/if}
+					Add {variantSelectedSizes.length} Size{variantSelectedSizes.length !== 1 ? 's' : ''}
 				</Button>
 			</Dialog.Footer>
 		</form>

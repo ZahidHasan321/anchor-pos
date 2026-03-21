@@ -38,8 +38,20 @@ export function generateId(): string {
 		return crypto.randomUUID();
 	} catch {
 		// Fallback for older environments or restricted contexts
-		return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+		return (
+			Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+		);
 	}
+}
+
+/** Convert a JS Date to PowerSync's DB date format (e.g. "2026-03-04 00:00:00+00") */
+export function toDbDate(d: Date): string {
+	return d.toISOString().replace('T', ' ').replace('.000Z', '+00');
+}
+
+/** Precision-safe financial rounding to 2 decimal places */
+export function round2(val: number): number {
+	return Math.round((val + Number.EPSILON) * 100) / 100;
 }
 
 export const roleLabels: Record<string, string> = {

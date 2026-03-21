@@ -16,15 +16,33 @@ function get(key: string): string {
 }
 
 const env = {
-	get APP_SECRET_HEADER() { return get('APP_SECRET_HEADER'); },
-	get POWERSYNC_API_URL() { return get('POWERSYNC_API_URL'); },
-	get POWERSYNC_URL() { return get('POWERSYNC_URL'); },
-	get POWERSYNC_PRIVATE_KEY() { return get('POWERSYNC_PRIVATE_KEY'); },
-	get POWERSYNC_PUBLIC_KEY() { return get('POWERSYNC_PUBLIC_KEY'); },
-	get BUILD_TARGET() { return get('BUILD_TARGET'); },
-	get ELECTRON_USER_DATA() { return get('ELECTRON_USER_DATA'); },
-	get IS_ELECTRON() { return get('BUILD_TARGET') === 'electron'; },
-	get IS_CAPACITOR() { return get('BUILD_TARGET') === 'capacitor'; },
+	get APP_SECRET_HEADER() {
+		return get('APP_SECRET_HEADER');
+	},
+	get POWERSYNC_API_URL() {
+		return get('POWERSYNC_API_URL');
+	},
+	get POWERSYNC_URL() {
+		return get('POWERSYNC_URL');
+	},
+	get POWERSYNC_PRIVATE_KEY() {
+		return get('POWERSYNC_PRIVATE_KEY');
+	},
+	get POWERSYNC_PUBLIC_KEY() {
+		return get('POWERSYNC_PUBLIC_KEY');
+	},
+	get BUILD_TARGET() {
+		return get('BUILD_TARGET');
+	},
+	get ELECTRON_USER_DATA() {
+		return get('ELECTRON_USER_DATA');
+	},
+	get IS_ELECTRON() {
+		return get('BUILD_TARGET') === 'electron';
+	},
+	get IS_NATIVE() {
+		return this.IS_ELECTRON;
+	}
 };
 
 export default env;

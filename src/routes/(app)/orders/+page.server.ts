@@ -2,7 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { orders, customers, users } from '$lib/server/db/schema';
-import { eq, and, gte, lte, desc, sql, like, or } from 'drizzle-orm';
+import { eq, and, gte, lte, desc, sql, or } from 'drizzle-orm';
 import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
@@ -19,7 +19,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const dateTo = url.searchParams.get('to') ?? '';
 	const statusFilter = url.searchParams.get('status') ?? '';
 	const search = url.searchParams.get('search') ?? '';
-	const isElectron = env.IS_ELECTRON;
+	const isNative = env.IS_NATIVE;
 
 	const conditions: any[] = [];
 	if (dateFrom) conditions.push(gte(orders.createdAt, new Date(dateFrom + 'T00:00:00')));
@@ -29,10 +29,10 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		conditions.push(
 			or(
 				eq(orders.id, search),
-				like(orders.id, `%${search}%`),
-				like(sql`CAST(${orders.orderNumber} AS TEXT)`, `%${search}%`),
-				like(customers.name, `%${search}%`),
-				like(customers.phone, `%${search}%`)
+				sql`CAST(${orders.orderNumber} AS TEXT) LIKE ${'%' + search + '%'}`,
+				sql`${customers.name} ILIKE ${'%' + search + '%'}`,
+				sql`similarity(${customers.name}, ${search}) > 0.15`,
+				sql`${customers.phone} ILIKE ${'%' + search + '%'}`
 			)
 		);
 	}
@@ -40,9 +40,9 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 	return {
 		filters: { from: dateFrom, to: dateTo, status: statusFilter, search },
-		isElectron,
+		isNative,
 		streamed: (async () => {
-			if (isElectron) {
+			if (isNative) {
 				return {
 					orders: [],
 					pagination: { currentPage: 1, totalPages: 1, totalOrders: 0, perPage }

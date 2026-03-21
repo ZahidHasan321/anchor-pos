@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (!db) return { categories: [] };
 
 	const rows = await db.selectDistinct({ category: products.category }).from(products);
-		const categories = rows.map((r: { category: string }) => r.category);
+	const categories = rows.map((r: { category: string }) => r.category);
 
 	return { categories: categories.sort() };
 };
@@ -59,7 +59,8 @@ export const actions: Actions = {
 		const existingCategories = catRows.map((r: { category: string }) => r.category);
 
 		const normalizedCategory =
-			existingCategories.find((c: string) => c.toLowerCase() === category.toLowerCase()) || category;
+			existingCategories.find((c: string) => c.toLowerCase() === category.toLowerCase()) ||
+			category;
 
 		const catPrefix = normalizedCategory.substring(0, 3).toUpperCase();
 
@@ -78,7 +79,9 @@ export const actions: Actions = {
 				for (let i = 0; i < sizes.length; i++) {
 					const size = sizes[i];
 					const quantity = quantities[i] ?? 0;
-					const variantSellingPrice = sellingPrices[i]?.trim() ? parseFloat(sellingPrices[i]) : templatePrice;
+					const variantSellingPrice = sellingPrices[i]?.trim()
+						? parseFloat(sellingPrices[i])
+						: templatePrice;
 					const variantCostPrice = costPrices[i]?.trim() ? parseFloat(costPrices[i]) : costPrice;
 					const variantId = generateId();
 					// Format: {CATEGORY_PREFIX}-{PRODUCT_ID_SHORT}-{SIZE}

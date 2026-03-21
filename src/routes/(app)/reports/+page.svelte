@@ -1,7 +1,9 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
+
 	import DatePicker from '$lib/components/ui/DatePicker.svelte';
 	import { Label } from '$lib/components/ui/label';
 	import { Separator } from '$lib/components/ui/separator';
@@ -16,7 +18,6 @@
 		UserCheck,
 		Layers,
 		Package,
-		Plus,
 		RotateCcw,
 		Percent,
 		Loader2,
@@ -25,16 +26,14 @@
 	import { formatCurrency, getCurrencySymbol, formatDate, formatDateTime } from '$lib/format';
 	import { goto } from '$app/navigation';
 	import { powersync } from '$lib/powersync.svelte';
-	import { browser } from '$app/environment';
+	import { isNative } from '$lib/electron-data.svelte';
 	import { Chart, registerables } from 'chart.js';
 	import { exportReportPDF, type ReportPDFData } from '$lib/export-report-pdf';
 	Chart.register(...registerables);
 
 	let { data } = $props();
 
-	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
-
-	// Native state for Electron/Capacitor (PowerSync SQLite)
+	// Native state for Electron (PowerSync SQLite)
 	let nativeSummaries = $state<any>(null);
 	let nativeTopProducts = $state<any[] | null>(null);
 	let nativeCategoryBreakdown = $state<any[] | null>(null);
@@ -321,6 +320,8 @@
 
 	let chartCanvas = $state<HTMLCanvasElement | null>(null);
 	let chartInstance: Chart | null = null;
+	// Category breakdown rendered as CSS bars — no canvas needed
+
 
 	function updateChart(chartData: any[]) {
 		if (!chartCanvas) return;
@@ -335,6 +336,8 @@
 		const gridColor = style.getPropertyValue('--border').trim() || '#e2e8f0';
 		const popoverBg = style.getPropertyValue('--popover').trim() || '#fff';
 		const popoverFg = style.getPropertyValue('--popover-foreground').trim() || '#000';
+		const isMobile = window.innerWidth < 640;
+		const dataPoints = chartData.length;
 
 		chartInstance = new Chart(ctx, {
 			type: 'bar',
@@ -343,11 +346,11 @@
 				datasets: [
 					{
 						label: 'Revenue',
-						data: chartData.map((d: any) => d.amount),
+						data: chartData.map((d: any) => Number(d.amount)),
 						backgroundColor: primaryColor,
-						borderRadius: 4,
+						borderRadius: isMobile ? 2 : 4,
 						borderSkipped: false,
-						maxBarThickness: 40
+						maxBarThickness: isMobile ? 20 : 40
 					}
 				]
 			},
@@ -362,7 +365,7 @@
 						bodyColor: popoverFg,
 						borderColor: gridColor,
 						borderWidth: 1,
-						padding: 12,
+						padding: isMobile ? 8 : 12,
 						displayColors: false,
 						callbacks: {
 							label: (context) => {
@@ -378,10 +381,10 @@
 						grid: { display: false },
 						ticks: {
 							color: mutedColor,
-							font: { size: 10 },
-							maxRotation: 0,
+							font: { size: isMobile ? 8 : 10 },
+							maxRotation: isMobile && dataPoints > 10 ? 45 : 0,
 							autoSkip: true,
-							maxTicksLimit: data.chartGrouping === 'hour' ? 12 : 15
+							maxTicksLimit: isMobile ? 7 : data.chartGrouping === 'hour' ? 12 : 15
 						}
 					},
 					y: {
@@ -392,7 +395,8 @@
 						},
 						ticks: {
 							color: mutedColor,
-							font: { size: 10 },
+							font: { size: isMobile ? 8 : 10 },
+							maxTicksLimit: isMobile ? 5 : 8,
 							callback: (val) => {
 								if (Number(val) >= 1000) return `${getCurrencySymbol()}${Number(val) / 1000}k`;
 								return `${getCurrencySymbol()}${val}`;
@@ -405,8 +409,13 @@
 	}
 
 	$effect(() => {
+		// Re-run when chart data or canvas changes
+		const canvas = chartCanvas;
 		effectiveChartData.then((cd: any[]) => {
-			if (cd && cd.length > 0) updateChart(cd);
+			if (canvas && cd && cd.length > 0) {
+				// Use tick to ensure canvas is in DOM after await resolves
+				requestAnimationFrame(() => updateChart(cd));
+			}
 		});
 		return () => {
 			if (chartInstance) {
@@ -415,6 +424,28 @@
 			}
 		};
 	});
+
+	// "View all" detail dialogs — shared state per type
+	type DetailType = 'expenses' | 'products' | 'customers' | 'inventory';
+	let detailDialog = $state<{ open: boolean; type: DetailType; title: string; items: any[]; loading: boolean }>({
+		open: false, type: 'expenses', title: '', items: [], loading: false
+	});
+
+	async function openDetailDialog(type: DetailType, title: string) {
+		detailDialog = { open: true, type, title, items: [], loading: true };
+		try {
+			const res = await fetch(`/api/reports/details?type=${type}&from=${data.startDate}&to=${data.endDate}&page=1`);
+			detailDialog.items = (await res.json()) || [];
+		} finally {
+			detailDialog.loading = false;
+		}
+	}
+
+	const categoryBarColors = [
+		'bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-violet-500',
+		'bg-rose-500', 'bg-cyan-500', 'bg-orange-500', 'bg-indigo-500',
+		'bg-teal-500', 'bg-pink-500', 'bg-lime-500', 'bg-fuchsia-500'
+	];
 
 	async function handleExportPDF() {
 		const [
@@ -437,10 +468,11 @@
 			effectiveTopCustomers
 		]);
 
+		const fmtPdf = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 		exportReportPDF({
 			storeName: data.storeName,
 			periodLabel,
-			dateRange: `${formatDate(data.startDate)} to ${formatDate(data.endDate)}`,
+			dateRange: `${fmtPdf(data.startDate)} to ${fmtPdf(data.endDate)}`,
 			summaries,
 			paymentBreakdown: paymentBreakdown as any[],
 			categoryBreakdown: categoryBreakdown as any[],
@@ -493,30 +525,30 @@
 	<title>Reports — Clothing POS</title>
 </svelte:head>
 
-<div class="space-y-5 p-3 pb-20 sm:p-4 md:p-6">
+<div class="space-y-5 overflow-x-hidden p-3 pb-20 sm:p-4 md:p-6">
 	<!-- Header -->
-	<div class="flex items-start justify-between gap-3">
+	<div class="flex items-center justify-between gap-3">
 		<div class="min-w-0">
 			<h1 class="text-xl font-bold tracking-tight sm:text-2xl">Reports</h1>
 			<p class="text-xs text-muted-foreground sm:text-sm">
 				{periodLabel} &middot; {formatDate(data.startDate)} to {formatDate(data.endDate)}
 			</p>
 		</div>
-		<Button variant="outline" size="sm" onclick={handleExportPDF} class="cursor-pointer">
-			<FileText class="mr-2 h-4 w-4" /> View PDF
+		<Button variant="outline" size="sm" onclick={handleExportPDF} class="shrink-0 cursor-pointer">
+			<FileText class="mr-2 h-4 w-4" /> Export PDF
 		</Button>
 	</div>
 
 	<!-- Period Selector -->
 	<div
-		class="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between"
+		class="sm:sticky sm:top-0 sm:z-20 space-y-3 rounded-lg border bg-card p-3 shadow-sm sm:p-4"
 	>
 		<div class="flex flex-wrap gap-1.5">
 			{#each periods as p}
 				<Button
 					variant={data.period === p.value ? 'default' : 'ghost'}
 					size="sm"
-					class="h-8 cursor-pointer text-xs"
+					class="cursor-pointer text-xs"
 					onclick={() => selectPeriod(p.value)}
 				>
 					{p.label}
@@ -525,20 +557,20 @@
 		</div>
 
 		<div class="flex flex-col gap-2 sm:flex-row sm:items-end">
-			<div class="flex flex-1 items-end gap-2">
-				<div class="flex-1 space-y-1 sm:w-48 sm:flex-none">
+			<div class="grid flex-1 grid-cols-2 gap-2">
+				<div class="min-w-0 space-y-1">
 					<Label for="from" class="text-[11px] font-semibold text-muted-foreground">From</Label>
-					<DatePicker id="from" bind:value={customFrom} class="w-full [&>button]:h-11" />
+					<DatePicker id="from" bind:value={customFrom} class="w-full" />
 				</div>
-				<div class="flex-1 space-y-1 sm:w-48 sm:flex-none">
+				<div class="min-w-0 space-y-1">
 					<Label for="to" class="text-[11px] font-semibold text-muted-foreground">To</Label>
-					<DatePicker id="to" bind:value={customTo} class="w-full [&>button]:h-11" />
+					<DatePicker id="to" bind:value={customTo} class="w-full" />
 				</div>
 			</div>
 			<Button
 				size="sm"
 				onclick={applyCustomRange}
-				class="h-11 w-full cursor-pointer px-6 text-xs sm:w-auto">Apply</Button
+				class="w-full cursor-pointer text-xs sm:w-auto">Apply</Button
 			>
 		</div>
 	</div>
@@ -550,17 +582,17 @@
 		>
 			Sales Overview
 		</h2>
-		<div class="flex flex-wrap gap-2.5 sm:gap-3">
+		<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3 md:grid-cols-3 2xl:grid-cols-6">
 			{#await effectiveSummaries}
 				{#each Array(6) as _}
-					<div class="min-w-[180px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
+					<div class="space-y-3 rounded-lg border bg-card p-3 sm:p-4">
 						<Skeleton class="h-4 w-24" />
 						<Skeleton class="h-8 w-full" />
 						<Skeleton class="h-3 w-16" />
 					</div>
 				{/each}
 			{:then summaries}
-				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
+				<div class="rounded-lg border bg-card p-3 sm:p-4">
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
 							>Total Revenue</span
@@ -577,7 +609,7 @@
 					</p>
 				</div>
 
-				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
+				<div class="rounded-lg border bg-card p-3 sm:p-4">
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Items Sold</span>
 						<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
@@ -592,7 +624,7 @@
 					</p>
 				</div>
 
-				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
+				<div class="rounded-lg border bg-card p-3 sm:p-4">
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
 							>Gross Profit</span
@@ -617,10 +649,17 @@
 					>
 						{formatCurrency(summaries.grossProfit)}
 					</div>
-					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">Revenue - COGS</p>
+					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
+						Revenue - COGS
+						{#if summaries.salesSummary.total > 0}
+							&middot; <span class="font-semibold"
+								>{pct(summaries.grossProfit, summaries.salesSummary.total)}% margin</span
+							>
+						{/if}
+					</p>
 				</div>
 
-				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
+				<div class="rounded-lg border bg-card p-3 sm:p-4">
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Net Profit</span>
 						<div
@@ -644,26 +683,16 @@
 						{formatCurrency(summaries.netProfit ?? 0)}
 					</div>
 					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
-						Gross Profit - Expenses
+						After expenses
+						{#if summaries.salesSummary.total > 0}
+							&middot; <span class="font-semibold"
+								>{pct(summaries.netProfit ?? 0, summaries.salesSummary.total)}% of revenue</span
+							>
+						{/if}
 					</p>
 				</div>
 
-				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
-					<div class="flex items-center justify-between">
-						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
-							>Total Stocked</span
-						>
-						<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
-							<Plus class="h-3.5 w-3.5 text-emerald-600" />
-						</div>
-					</div>
-					<div class="mt-1.5 text-lg font-bold break-all text-emerald-600 sm:mt-2 sm:text-2xl">
-						{summaries.totalStocked}
-					</div>
-					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">Units added</p>
-				</div>
-
-				<div class="min-w-[180px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
+				<div class="rounded-lg border bg-card p-3 sm:p-4">
 					<div class="flex items-center justify-between">
 						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs">Discounts</span>
 						<div class="hidden rounded-md bg-amber-500/10 p-1.5 sm:block">
@@ -677,76 +706,6 @@
 						{summaries.salesSummary.total > 0
 							? `${pct(summaries.salesSummary.totalDiscount, summaries.salesSummary.total + summaries.salesSummary.totalDiscount)}% of gross`
 							: 'No sales'}
-					</p>
-				</div>
-			{/await}
-		</div>
-	</div>
-
-	<!-- ==================== INVENTORY ASSETS ==================== -->
-	<div>
-		<h2
-			class="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:text-sm"
-		>
-			Current Inventory Assets
-		</h2>
-		<div class="flex flex-wrap gap-2.5 sm:gap-3">
-			{#await effectiveSummaries}
-				{#each Array(3) as _}
-					<div class="min-w-[200px] flex-1 space-y-3 rounded-lg border bg-card p-3 sm:p-4">
-						<Skeleton class="h-4 w-24" />
-						<Skeleton class="h-8 w-full" />
-					</div>
-				{/each}
-			{:then summaries}
-				<div class="min-w-[200px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
-					<div class="flex items-center justify-between">
-						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
-							>Retail Value</span
-						>
-						<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
-							<TrendingUp class="h-3.5 w-3.5 text-emerald-600" />
-						</div>
-					</div>
-					<div class="mt-1.5 text-xl font-black break-all text-emerald-600 sm:mt-2 sm:text-2xl">
-						{formatCurrency(summaries.inventoryRetailValue)}
-					</div>
-					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
-						Potential revenue from stock
-					</p>
-				</div>
-
-				<div class="min-w-[200px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
-					<div class="flex items-center justify-between">
-						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
-							>Inventory Value</span
-						>
-						<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
-							<Package class="h-3.5 w-3.5 text-indigo-600" />
-						</div>
-					</div>
-					<div class="mt-1.5 text-xl font-black break-all text-indigo-600 sm:mt-2 sm:text-2xl">
-						{formatCurrency(summaries.inventoryCostValue)}
-					</div>
-					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
-						Total capital tied in stock
-					</p>
-				</div>
-
-				<div class="min-w-[200px] flex-1 rounded-lg border bg-card p-3 sm:p-4">
-					<div class="flex items-center justify-between">
-						<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
-							>Potential Profit</span
-						>
-						<div class="hidden rounded-md bg-blue-500/10 p-1.5 sm:block">
-							<TrendingUp class="h-3.5 w-3.5 text-blue-600" />
-						</div>
-					</div>
-					<div class="mt-1.5 text-xl font-black break-all text-blue-600 sm:mt-2 sm:text-2xl">
-						{formatCurrency(summaries.inventoryRetailValue - summaries.inventoryCostValue)}
-					</div>
-					<p class="mt-0.5 text-[10px] text-muted-foreground sm:mt-1 sm:text-xs">
-						Retail - Inventory Value
 					</p>
 				</div>
 			{/await}
@@ -878,12 +837,10 @@
 					</div>
 				{:then expenseBreakdown}
 					{#if expenseBreakdown && (expenseBreakdown as any[]).length > 0}
-						{@const maxExpense = Math.max(
-							...(expenseBreakdown as any[]).map((e: any) => e.total),
-							1
-						)}
+						{@const items = expenseBreakdown as any[]}
+						{@const maxExpense = Math.max(...items.map((e: any) => Number(e.total)), 1)}
 						<div class="space-y-3">
-							{#each (expenseBreakdown as any[]).slice(0, 5) as exp}
+							{#each items as exp}
 								<div class="space-y-1">
 									<div class="flex items-center justify-between gap-2 text-xs sm:text-sm">
 										<span class="truncate">{exp.description}</span>
@@ -894,14 +851,27 @@
 									<div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
 										<div
 											class="h-full bg-orange-500/70"
-											style="width: {(exp.total / maxExpense) * 100}%"
+											style="width: {(Number(exp.total) / maxExpense) * 100}%"
 										></div>
 									</div>
 								</div>
 							{/each}
 						</div>
+						{#if items.length >= 5}
+							<button
+								onclick={() => openDetailDialog('expenses', 'All Expenses')}
+								class="mt-3 w-full cursor-pointer rounded-md py-2 text-center text-xs font-medium text-primary transition-colors hover:bg-muted active:scale-[0.98]"
+							>
+								View all expenses
+							</button>
+						{/if}
 					{:else}
-						<p class="py-4 text-center text-sm text-muted-foreground">No expenses recorded.</p>
+						<div class="flex flex-col items-center justify-center py-8 text-center">
+							<div class="mb-2 rounded-full bg-muted p-3">
+								<DollarSign class="h-5 w-5 text-muted-foreground/40" />
+							</div>
+							<p class="text-sm font-medium text-muted-foreground">No expenses recorded</p>
+						</div>
 					{/if}
 				{/await}
 			</Card.Content>
@@ -920,10 +890,10 @@
 				{:then refundSummary}
 					{@const totalRefunds = !refundSummary
 						? 0
-						: (refundSummary as any[]).reduce((s: number, r: any) => s + r.total, 0)}
+						: (refundSummary as any[]).reduce((s: number, r: any) => s + Number(r.total), 0)}
 					{@const totalRefundCount = !refundSummary
 						? 0
-						: (refundSummary as any[]).reduce((s: number, r: any) => s + r.count, 0)}
+						: (refundSummary as any[]).reduce((s: number, r: any) => s + Number(r.count), 0)}
 					{#if totalRefundCount > 0}
 						<div class="space-y-3">
 							<div class="grid grid-cols-2 gap-2">
@@ -961,7 +931,7 @@
 
 	<!-- ==================== STAFF & CUSTOMERS ==================== -->
 	<div class="grid gap-4 lg:grid-cols-2">
-		<Card.Root>
+		<Card.Root class="pb-0">
 			<Card.Header class="px-3 pb-3 sm:px-6">
 				<Card.Title class="flex items-center gap-2 text-sm">
 					<UserCheck class="h-4 w-4 text-muted-foreground" /> Staff Performance
@@ -1000,15 +970,18 @@
 						</Table.Root>
 					{:else}
 						<div class="flex flex-col items-center justify-center py-10 text-center">
-							<UserCheck class="mb-2 h-8 w-8 text-muted-foreground/30" />
+							<div class="mb-2 rounded-full bg-muted p-3">
+								<UserCheck class="h-5 w-5 text-muted-foreground/40" />
+							</div>
 							<p class="text-sm font-medium text-muted-foreground">No sales by staff yet</p>
+							<p class="mt-1 text-xs text-muted-foreground/60">Staff performance will show here</p>
 						</div>
 					{/if}
 				{/await}
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root>
+		<Card.Root class="pb-0">
 			<Card.Header class="px-3 pb-3 sm:px-6">
 				<Card.Title class="flex items-center gap-2 text-sm">
 					<Users class="h-4 w-4 text-muted-foreground" /> Top Customers
@@ -1048,10 +1021,21 @@
 								{/each}
 							</Table.Body>
 						</Table.Root>
+						{#if (topCustomers as any[]).length >= 5}
+							<button
+								onclick={() => openDetailDialog('customers', 'All Customers')}
+								class="w-full cursor-pointer border-t py-2.5 text-center text-xs font-medium text-primary transition-colors hover:bg-muted active:bg-muted"
+							>
+								View all customers
+							</button>
+						{/if}
 					{:else}
 						<div class="flex flex-col items-center justify-center py-10 text-center">
-							<Users class="mb-2 h-8 w-8 text-muted-foreground/30" />
+							<div class="mb-2 rounded-full bg-muted p-3">
+								<Users class="h-5 w-5 text-muted-foreground/40" />
+							</div>
 							<p class="text-sm font-medium text-muted-foreground">No customer data yet</p>
+							<p class="mt-1 text-xs text-muted-foreground/60">Customers will appear as orders are placed</p>
 						</div>
 					{/if}
 				{/await}
@@ -1069,39 +1053,46 @@
 			</Card.Header>
 			<Card.Content class="px-3 sm:px-6">
 				{#await effectiveCategoryBreakdown}
-					<div class="space-y-4">
-						{#each Array(4) as _}<Skeleton class="h-8 w-full" />{/each}
+					<div class="space-y-3">
+						{#each Array(5) as _}<Skeleton class="h-6 w-full" />{/each}
 					</div>
 				{:then categoryBreakdown}
-					{@const totalRev =
-						!categoryBreakdown || (categoryBreakdown as any[]).length === 0
-							? 0
-							: (categoryBreakdown as any[]).reduce((s: number, c: any) => s + c.totalRevenue, 0)}
-					<div class="space-y-3">
-						{#if totalRev > 0}
-							{#each (categoryBreakdown as any[]) || [] as cat}
-								<div class="space-y-1">
-									<div class="flex items-center justify-between text-xs sm:text-sm">
-										<span class="font-medium">{cat.category}</span>
-										<span class="tabular-nums"
-											>{formatCurrency(cat.totalRevenue)} ({pct(cat.totalRevenue, totalRev)}%)</span
-										>
+					{@const sorted = !categoryBreakdown ? [] : (categoryBreakdown as any[])
+						.filter((c: any) => Number(c.totalRevenue) > 0)
+						.sort((a: any, b: any) => Number(b.totalRevenue) - Number(a.totalRevenue))}
+					{@const maxRev = sorted.length > 0 ? Number(sorted[0].totalRevenue) : 1}
+					{@const totalRev = sorted.reduce((s: number, c: any) => s + Number(c.totalRevenue), 0)}
+					{#if sorted.length > 0}
+						<div class="space-y-2.5">
+							{#each sorted as cat, i}
+								{@const rev = Number(cat.totalRevenue)}
+								{@const pctVal = totalRev > 0 ? Math.round((rev / totalRev) * 100) : 0}
+								<div class="group">
+									<div class="mb-1 flex items-baseline justify-between gap-2">
+										<span class="text-xs font-medium">{cat.category}</span>
+										<div class="flex items-baseline gap-1.5">
+											<span class="text-[10px] tabular-nums text-muted-foreground">{pctVal}%</span>
+											<span class="text-xs font-bold tabular-nums">{formatCurrency(rev)}</span>
+										</div>
 									</div>
-									<div class="h-1.5 overflow-hidden rounded-full bg-muted">
+									<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
 										<div
-											class="h-full bg-primary/70"
-											style="width: {(cat.totalRevenue / totalRev) * 100}%"
+											class="h-full rounded-full transition-all duration-500 {categoryBarColors[i % categoryBarColors.length]}"
+											style="width: {(rev / maxRev) * 100}%"
 										></div>
 									</div>
 								</div>
 							{/each}
-						{:else}
-							<div class="flex flex-col items-center justify-center py-10 text-center">
-								<Layers class="mb-2 h-8 w-8 text-muted-foreground/30" />
-								<p class="text-sm font-medium text-muted-foreground">No category data</p>
+						</div>
+					{:else}
+						<div class="flex flex-col items-center justify-center py-10 text-center">
+							<div class="mb-2 rounded-full bg-muted p-3">
+								<Layers class="h-5 w-5 text-muted-foreground/40" />
 							</div>
-						{/if}
-					</div>
+							<p class="text-sm font-medium text-muted-foreground">No category data</p>
+							<p class="mt-1 text-xs text-muted-foreground/60">Sales will be grouped by category here</p>
+						</div>
+					{/if}
 				{/await}
 			</Card.Content>
 		</Card.Root>
@@ -1128,7 +1119,7 @@
 								</Table.Row></Table.Header
 							>
 							<Table.Body>
-								{#each (topProducts as any[])?.slice(0, 5) || [] as p}
+								{#each topProducts as any[] as p}
 									<Table.Row
 										class="cursor-pointer text-sm hover:bg-muted/50"
 										onclick={() => goto(`/inventory/${p.productId}`)}
@@ -1142,66 +1133,120 @@
 								{/each}
 							</Table.Body>
 						</Table.Root>
+						{#if (topProducts as any[]).length >= 5}
+							<button
+								onclick={() => openDetailDialog('products', 'All Products')}
+								class="w-full cursor-pointer border-t py-2.5 text-center text-xs font-medium text-primary transition-colors hover:bg-muted active:bg-muted"
+							>
+								View all products
+							</button>
+						{/if}
 					{:else}
 						<div class="flex flex-col items-center justify-center py-10 text-center">
-							<Package class="mb-2 h-8 w-8 text-muted-foreground/30" />
+							<div class="mb-2 rounded-full bg-muted p-3">
+								<Package class="h-5 w-5 text-muted-foreground/40" />
+							</div>
 							<p class="text-sm font-medium text-muted-foreground">No products sold yet</p>
+							<p class="mt-1 text-xs text-muted-foreground/60">Top sellers will appear here</p>
 						</div>
 					{/if}
 				{/await}
 			</Card.Content>
 		</Card.Root>
 	</div>
-
-	<!-- ==================== STOCK UPDATES ==================== -->
-	<Card.Root>
-		<Card.Header class="px-3 pb-3 sm:px-6">
-			<Card.Title class="flex items-center gap-2 text-sm">
-				<Package class="h-4 w-4 text-muted-foreground" /> Recent Stock Updates
-			</Card.Title>
-		</Card.Header>
-		<Card.Content class="p-0">
-			{#await effectiveStockUpdates}
-				<div class="space-y-3 p-4">
-					{#each Array(3) as _}<Skeleton class="h-10 w-full" />{/each}
-				</div>
-			{:then stockUpdates}
-				<Table.Root>
-					<Table.Header>
-						<Table.Row class="text-xs">
-							<Table.Head class="pl-6">Date</Table.Head>
-							<Table.Head>Product</Table.Head>
-							<Table.Head class="text-right">Change</Table.Head>
-							<Table.Head class="pr-6">User</Table.Head>
-						</Table.Row>
-					</Table.Header>
-					<Table.Body>
-						{#each (stockUpdates as any[]) || [] as update}
-							<Table.Row class="text-sm">
-								<Table.Cell class="pl-6 text-[11px] text-muted-foreground"
-									>{formatDateTime(update.createdAt)}</Table.Cell
-								>
-								<Table.Cell class="font-medium">{update.productName} ({update.size})</Table.Cell>
-								<Table.Cell
-									class="text-right font-bold {update.changeAmount > 0
-										? 'text-emerald-600'
-										: 'text-red-600'}"
-								>
-									{update.changeAmount > 0 ? '+' : ''}{update.changeAmount}
-								</Table.Cell>
-								<Table.Cell class="pr-6 text-xs text-muted-foreground">{update.userName}</Table.Cell
-								>
-							</Table.Row>
-						{:else}
-							<Table.Row
-								><Table.Cell colspan={4} class="py-6 text-center text-sm text-muted-foreground"
-									>No activity.</Table.Cell
-								></Table.Row
-							>
-						{/each}
-					</Table.Body>
-				</Table.Root>
-			{/await}
-		</Card.Content>
-	</Card.Root>
 </div>
+
+<!-- Detail "View All" Dialog -->
+<Dialog.Root bind:open={detailDialog.open}>
+	<Dialog.Content class="max-h-[80vh] sm:max-w-lg">
+		<Dialog.Header>
+			<Dialog.Title>{detailDialog.title}</Dialog.Title>
+			<Dialog.Description class="text-xs text-muted-foreground">
+				{data.startDate} to {data.endDate}
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="max-h-[55vh] overflow-y-auto">
+			{#if detailDialog.loading}
+				<div class="space-y-3 p-2">
+					{#each Array(5) as _}<Skeleton class="h-6 w-full" />{/each}
+				</div>
+			{:else if detailDialog.items.length > 0}
+				{#if detailDialog.type === 'expenses'}
+					{@const maxVal = Math.max(...detailDialog.items.map((e) => Number(e.total)), 1)}
+					{@const totalVal = detailDialog.items.reduce((s: number, e: any) => s + Number(e.total), 0)}
+					<div class="space-y-3 p-1">
+						{#each detailDialog.items as item, i}
+							<div class="space-y-1">
+								<div class="flex items-center justify-between gap-3 text-sm">
+									<div class="flex items-center gap-2 min-w-0">
+										<span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">{i + 1}</span>
+										<span class="truncate font-medium">{item.description}</span>
+									</div>
+									<div class="flex items-center gap-2 shrink-0">
+										<span class="text-[10px] tabular-nums text-muted-foreground">{item.count}x</span>
+										<span class="font-bold tabular-nums">{formatCurrency(item.total)}</span>
+									</div>
+								</div>
+								<div class="ml-7 h-1.5 w-auto overflow-hidden rounded-full bg-muted">
+									<div class="h-full bg-orange-500/70" style="width: {(Number(item.total) / maxVal) * 100}%"></div>
+								</div>
+							</div>
+						{/each}
+						<Separator />
+						<div class="flex items-center justify-between px-1 text-sm font-bold">
+							<span>Total</span>
+							<span class="text-orange-600">{formatCurrency(totalVal)}</span>
+						</div>
+					</div>
+				{:else if detailDialog.type === 'products'}
+					<Table.Root>
+						<Table.Header>
+							<Table.Row>
+								<Table.Head class="pl-4">#</Table.Head>
+								<Table.Head>Product</Table.Head>
+								<Table.Head class="text-right">Qty</Table.Head>
+								<Table.Head class="pr-4 text-right">Revenue</Table.Head>
+							</Table.Row>
+						</Table.Header>
+						<Table.Body>
+							{#each detailDialog.items as item, i}
+								<Table.Row>
+									<Table.Cell class="pl-4 text-muted-foreground">{i + 1}</Table.Cell>
+									<Table.Cell class="font-medium">{item.productName}</Table.Cell>
+									<Table.Cell class="text-right tabular-nums">{Number(item.totalQty)}</Table.Cell>
+									<Table.Cell class="pr-4 text-right font-bold tabular-nums">{formatCurrency(item.totalRevenue)}</Table.Cell>
+								</Table.Row>
+							{/each}
+						</Table.Body>
+					</Table.Root>
+				{:else if detailDialog.type === 'customers'}
+					<Table.Root>
+						<Table.Header>
+							<Table.Row>
+								<Table.Head class="pl-4">Customer</Table.Head>
+								<Table.Head class="text-right">Orders</Table.Head>
+								<Table.Head class="pr-4 text-right">Spent</Table.Head>
+							</Table.Row>
+						</Table.Header>
+						<Table.Body>
+							{#each detailDialog.items as item}
+								<Table.Row>
+									<Table.Cell class="pl-4">
+										<div class="font-medium">{item.customerName}</div>
+										{#if item.customerPhone}
+											<div class="text-[10px] text-muted-foreground">{item.customerPhone}</div>
+										{/if}
+									</Table.Cell>
+									<Table.Cell class="text-right tabular-nums">{Number(item.orderCount)}</Table.Cell>
+									<Table.Cell class="pr-4 text-right font-bold tabular-nums">{formatCurrency(item.totalSpent)}</Table.Cell>
+								</Table.Row>
+							{/each}
+						</Table.Body>
+					</Table.Root>
+				{/if}
+			{:else}
+				<p class="py-8 text-center text-sm text-muted-foreground">No data found</p>
+			{/if}
+		</div>
+	</Dialog.Content>
+</Dialog.Root>

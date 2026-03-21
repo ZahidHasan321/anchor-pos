@@ -5,12 +5,10 @@
 
 import { browser } from '$app/environment';
 import {
-	isCapacitorNative,
 	isBluetoothSupported,
 	isConnected as isBtConnected,
 	getConnectedPrinterName,
-	connectPrinter,
-	connectToDevice
+	connectPrinter
 } from '$lib/bluetooth-printer';
 
 export type PrinterStatus = 'connected' | 'disconnected' | 'connecting' | 'not-configured';
@@ -72,8 +70,8 @@ class PrinterState {
 			return;
 		}
 
-		// Capacitor / Web: Bluetooth
-		if (useBt && (isCapacitorNative() || isBluetoothSupported())) {
+		// Web: Bluetooth
+		if (useBt && isBluetoothSupported()) {
 			this.configured = true;
 			if (isBtConnected()) {
 				this.status = 'connected';
@@ -85,7 +83,7 @@ class PrinterState {
 			return;
 		}
 
-		// Nothing configured (Capacitor without BT, or plain web browser)
+		// Nothing configured
 		this.configured = false;
 		this.status = 'not-configured';
 		this.name = '';
@@ -97,18 +95,6 @@ class PrinterState {
 		this.status = 'connecting';
 
 		try {
-			// Try Capacitor native auto-reconnect
-			if (isCapacitorNative()) {
-				const lastAddr = localStorage.getItem('pos-bt-printer-address');
-				if (lastAddr) {
-					const result = await connectToDevice(lastAddr);
-					this.refresh();
-					return result;
-				}
-				return { success: false, error: 'No saved printer. Go to Settings to scan and pair.' };
-			}
-
-			// Web Bluetooth
 			if (isBluetoothSupported()) {
 				const result = await connectPrinter();
 				this.refresh();

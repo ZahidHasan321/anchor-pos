@@ -1,4 +1,3 @@
-
 import { db } from './db';
 import { sessions, users } from './db/schema';
 import { eq } from 'drizzle-orm';
@@ -21,37 +20,36 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-    // Handle Scrypt hashes (format: salt:hash)
-    if (hash.includes(':')) {
-        const [salt, key] = hash.split(':');
-        if (!salt || !key) return false;
-        
-        try {
-            const keyBuffer = Buffer.from(key, 'hex');
-            const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
-            return timingSafeEqual(keyBuffer, derivedKey);
-        } catch {
-            return false;
-        }
-    }
+	// Handle Scrypt hashes (format: salt:hash)
+	if (hash.includes(':')) {
+		const [salt, key] = hash.split(':');
+		if (!salt || !key) return false;
 
-    // Legacy hash formats — reject and require password reset
-    if (hash.startsWith('$argon2')) {
-        console.warn('Argon2 hash detected but library removed. Password reset required.');
-        return false;
-    }
+		try {
+			const keyBuffer = Buffer.from(key, 'hex');
+			const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+			return timingSafeEqual(keyBuffer, derivedKey);
+		} catch {
+			return false;
+		}
+	}
 
-    // Reject bare SHA-256 hashes (insecure, no salt)
-    if (/^[a-f0-9]{64}$/.test(hash)) {
-        console.warn('Legacy unsalted SHA-256 hash detected. Password reset required.');
-        return false;
-    }
+	// Legacy hash formats — reject and require password reset
+	if (hash.startsWith('$argon2')) {
+		console.warn('Argon2 hash detected but library removed. Password reset required.');
+		return false;
+	}
 
-    return false;
+	// Reject bare SHA-256 hashes (insecure, no salt)
+	if (/^[a-f0-9]{64}$/.test(hash)) {
+		console.warn('Legacy unsalted SHA-256 hash detected. Password reset required.');
+		return false;
+	}
+
+	return false;
 }
 
 export async function createSession(token: string, userId: string) {
-
 	const sessionId = createHash('sha256').update(token).digest('hex');
 	const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
@@ -136,14 +134,14 @@ export async function invalidateSession(sessionId: string): Promise<void> {
 
 export function setSessionTokenCookie(event: RequestEvent, token: string, expiresAt: Date): void {
 	const origin = event.request.headers.get('origin') || '';
-	// 'none' for Electron (app://) and Capacitor (https://localhost) — both make cross-origin requests.
+	// 'none' for Electron (app://) — makes cross-origin requests.
 	// 'lax' for everything else (standard web).
-	const sameSite = (origin.startsWith('app://') || origin === 'https://localhost') ? 'none' : 'lax';
-	
+	const sameSite = origin.startsWith('app://') ? 'none' : 'lax';
+
 	event.cookies.set('session', token, {
 		httpOnly: true,
 		sameSite: sameSite,
-		secure: true,       // Required for both SameSite: None and for security over HTTPS
+		secure: true, // Required for both SameSite: None and for security over HTTPS
 		expires: expiresAt,
 		path: '/'
 	});

@@ -36,7 +36,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const sevenDaysAgo = new Date(today);
 	sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // includes today = 7 days
 
-	const isElectron = env.IS_ELECTRON;
+	const isNative = env.IS_NATIVE;
 
 	const emptyStats = {
 		todaySales: { count: 0, total: 0 },
@@ -48,13 +48,20 @@ export const load: PageServerLoad = async ({ locals }) => {
 	};
 
 	return {
-		isElectron,
+		isNative,
 
 		stats: (async () => {
-			if (isElectron) return emptyStats;
+			if (isNative) return emptyStats;
 			if (!db) return emptyStats;
 
-			const [todaySales, monthlySales, todayExpenses, todayCogs, yesterdaySales, lastMonthSamePeriod] = await Promise.all([
+			const [
+				todaySales,
+				monthlySales,
+				todayExpenses,
+				todayCogs,
+				yesterdaySales,
+				lastMonthSamePeriod
+			] = await Promise.all([
 				db
 					.select({
 						count: sql<number>`count(*)`,
@@ -72,30 +79,50 @@ export const load: PageServerLoad = async ({ locals }) => {
 				db
 					.select({ total: sql<number>`coalesce(sum(${cashbook.amount}), 0)` })
 					.from(cashbook)
-					.where(and(eq(cashbook.type, 'out'), eq(cashbook.category, 'expense'), gte(cashbook.createdAt, today))),
+					.where(
+						and(
+							eq(cashbook.type, 'out'),
+							eq(cashbook.category, 'expense'),
+							gte(cashbook.createdAt, today)
+						)
+					),
 				db
 					.select({
 						total: sql<number>`coalesce(sum(${orderItems.costAtSale} * ${orderItems.quantity}), 0)`
 					})
 					.from(orderItems)
 					.innerJoin(orders, eq(orderItems.orderId, orders.id))
-					.where(and(
-						eq(orders.status, 'completed'),
-						eq(orderItems.status, 'completed'),
-						gte(orders.createdAt, today)
-					)),
+					.where(
+						and(
+							eq(orders.status, 'completed'),
+							eq(orderItems.status, 'completed'),
+							gte(orders.createdAt, today)
+						)
+					),
 				db
 					.select({
 						total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`
 					})
 					.from(orders)
-					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, yesterday), lt(orders.createdAt, today))),
+					.where(
+						and(
+							eq(orders.status, 'completed'),
+							gte(orders.createdAt, yesterday),
+							lt(orders.createdAt, today)
+						)
+					),
 				db
 					.select({
 						total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`
 					})
 					.from(orders)
-					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, lastMonthStart), lt(orders.createdAt, lastMonthEnd)))
+					.where(
+						and(
+							eq(orders.status, 'completed'),
+							gte(orders.createdAt, lastMonthStart),
+							lt(orders.createdAt, lastMonthEnd)
+						)
+					)
 			]);
 
 			const grossProfit = (todaySales[0]?.total ?? 0) - (todayCogs[0]?.total ?? 0);
@@ -111,7 +138,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		})(),
 
 		last7Days: (async () => {
-			if (isElectron) return [];
+			if (isNative) return [];
 			if (!db) return [];
 
 			const rows = await db
@@ -128,41 +155,33 @@ export const load: PageServerLoad = async ({ locals }) => {
 		})(),
 
 		todayPayments: (async () => {
-			if (isElectron) return [];
+			if (isNative) return [];
 			if (!db) return [];
 
-			const [cashData, cardData, mobileData] = await Promise.all([
-				db.select({
-					method: sql<string>`'cash'`,
-					total: sql<number>`coalesce(sum(coalesce(${orders.cashAmount}, CASE WHEN ${orders.paymentMethod} = 'cash' THEN ${orders.totalAmount} ELSE 0 END)), 0)`
-				}).from(orders).where(and(
-					eq(orders.status, 'completed'),
-					gte(orders.createdAt, today),
-					sql`(coalesce(${orders.cashAmount}, 0) > 0 OR ${orders.paymentMethod} = 'cash')`
-				)),
-				db.select({
-					method: sql<string>`'card'`,
-					total: sql<number>`coalesce(sum(coalesce(${orders.cardAmount}, CASE WHEN ${orders.paymentMethod} = 'card' THEN ${orders.totalAmount} ELSE 0 END)), 0)`
-				}).from(orders).where(and(
-					eq(orders.status, 'completed'),
-					gte(orders.createdAt, today),
-					sql`(coalesce(${orders.cardAmount}, 0) > 0 OR ${orders.paymentMethod} = 'card')`
-				)),
-				db.select({
-					method: sql<string>`'mobile'`,
-					total: sql<number>`coalesce(sum(coalesce(${orders.mobileAmount}, CASE WHEN ${orders.paymentMethod} = 'mobile' THEN ${orders.totalAmount} ELSE 0 END)), 0)`
-				}).from(orders).where(and(
-					eq(orders.status, 'completed'),
-					gte(orders.createdAt, today),
-					sql`(coalesce(${orders.mobileAmount}, 0) > 0 OR ${orders.paymentMethod} = 'mobile')`
-				))
-			]);
+			const result = await db
+				.select({
+					cash: sql<number>`coalesce(sum(coalesce(${orders.cashAmount}, CASE WHEN ${orders.paymentMethod} = 'cash' THEN ${orders.totalAmount} ELSE 0 END)), 0)`,
+					card: sql<number>`coalesce(sum(coalesce(${orders.cardAmount}, CASE WHEN ${orders.paymentMethod} = 'card' THEN ${orders.totalAmount} ELSE 0 END)), 0)`,
+					mobile: sql<number>`coalesce(sum(coalesce(${orders.mobileAmount}, CASE WHEN ${orders.paymentMethod} = 'mobile' THEN ${orders.totalAmount} ELSE 0 END)), 0)`
+				})
+				.from(orders)
+				.where(
+					and(
+						eq(orders.status, 'completed'),
+						gte(orders.createdAt, today)
+					)
+				);
 
-			return [cashData[0], cardData[0], mobileData[0]].filter(Boolean);
+			const r = result[0];
+			return [
+				{ method: 'cash', total: Number(r?.cash ?? 0) },
+				{ method: 'card', total: Number(r?.card ?? 0) },
+				{ method: 'mobile', total: Number(r?.mobile ?? 0) }
+			];
 		})(),
 
 		stockAlerts: (async () => {
-			if (isElectron) return { lowStockItems: [], lowStockCount: 0 };
+			if (isNative) return { lowStockItems: [], lowStockCount: 0 };
 			if (!db) return { lowStockItems: [], lowStockCount: 0 };
 
 			const settingsRows = await db.select().from(storeSettings);
@@ -201,7 +220,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		})(),
 
 		topProducts: (async () => {
-			if (isElectron) return [];
+			if (isNative) return [];
 			if (!db) return [];
 
 			const topProductsRaw = await db
@@ -215,11 +234,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 				})
 				.from(orderItems)
 				.innerJoin(orders, eq(orderItems.orderId, orders.id))
-				.where(and(
-					eq(orders.status, 'completed'),
-					eq(orderItems.status, 'completed'),
-					gte(orders.createdAt, firstDayOfMonth)
-				))
+				.where(
+					and(
+						eq(orders.status, 'completed'),
+						eq(orderItems.status, 'completed'),
+						gte(orders.createdAt, firstDayOfMonth)
+					)
+				)
 				.groupBy(orderItems.productName, orderItems.variantLabel)
 				.orderBy(sql`total_qty DESC`)
 				.limit(10);

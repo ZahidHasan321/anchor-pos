@@ -3,10 +3,8 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 import compression from 'vite-plugin-compression';
 
-const isCapacitor = process.env.CAPACITOR_BUILD === 'true';
-
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit(), ...(!isCapacitor ? [compression()] : [])],
+	plugins: [tailwindcss(), sveltekit(), compression()],
 	ssr: {
 		noExternal: [
 			'chart.js',

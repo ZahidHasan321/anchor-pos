@@ -5,6 +5,8 @@ import path from 'path';
 
 const LOG_DIR = '/tmp/pos-errors';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB max log file
+const MAX_ERRORS_PER_REQUEST = 50;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
@@ -14,6 +16,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (!Array.isArray(errors) || errors.length === 0) {
 			return json({ ok: true });
 		}
+
+		// Cap the number of errors per request to prevent abuse
+		const limitedErrors = errors.slice(0, MAX_ERRORS_PER_REQUEST);
 
 		if (!fs.existsSync(LOG_DIR)) {
 			fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -32,14 +37,14 @@ export const POST: RequestHandler = async ({ request }) => {
 			// file doesn't exist yet
 		}
 
-		const lines = errors.map((e: any) => {
+		const lines = limitedErrors.map((e: any) => {
 			return JSON.stringify({
 				ts: e.timestamp || new Date().toISOString(),
-				msg: e.message,
-				stack: e.stack,
-				source: e.source,
-				platform: e.platform,
-				ua: e.userAgent
+				msg: String(e.message || '').slice(0, 2000),
+				stack: String(e.stack || '').slice(0, 4000),
+				source: String(e.source || '').slice(0, 200),
+				platform: String(e.platform || '').slice(0, 50),
+				ua: String(e.userAgent || '').slice(0, 300)
 			});
 		});
 
@@ -51,15 +56,39 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 };
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, locals }) => {
+	// Only authenticated admin/manager users can read error logs
+	if (!locals.user || locals.user.role === 'sales') {
+		return json({ error: 'Unauthorized' }, { status: 403 });
+	}
+
 	const date = url.searchParams.get('date') || new Date().toISOString().split('T')[0];
+
+	// Validate date format to prevent path traversal
+	if (!DATE_PATTERN.test(date)) {
+		return json({ error: 'Invalid date format' }, { status: 400 });
+	}
+
 	const logFile = path.join(LOG_DIR, `errors-${date}.log`);
+
+	// Verify resolved path is still within LOG_DIR
+	const resolved = path.resolve(logFile);
+	if (!resolved.startsWith(path.resolve(LOG_DIR))) {
+		return json({ error: 'Invalid date format' }, { status: 400 });
+	}
 
 	try {
 		const content = fs.readFileSync(logFile, 'utf-8');
-		const errors = content.trim().split('\n').map((line) => {
-			try { return JSON.parse(line); } catch { return { raw: line }; }
-		});
+		const errors = content
+			.trim()
+			.split('\n')
+			.map((line) => {
+				try {
+					return JSON.parse(line);
+				} catch {
+					return { raw: line };
+				}
+			});
 		return json({ errors });
 	} catch {
 		return json({ errors: [] });

@@ -10,15 +10,15 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 		redirect(302, '/login');
 	}
 
-	const isElectron = env.IS_ELECTRON;
-	if (isElectron || !db) {
+	const isNative = env.IS_NATIVE;
+	if (isNative || !db) {
 		return {
 			customer: null,
 			orders: [],
 			totalSpent: 0,
 			totalOrders: 0,
 			pagination: { currentPage: 1, totalPages: 1, totalOrders: 0, perPage: 10 },
-			isElectron,
+			isNative,
 			customerId: params.id
 		};
 	}
@@ -39,39 +39,30 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 	const currentPage = Math.max(1, pageParam);
 	const offset = (currentPage - 1) * perPage;
 
-	// Total completed orders count (for stats)
-	const countResult = await db
-		.select({ count: sql<number>`count(*)` })
-		.from(orders)
-		.where(and(eq(orders.customerId, params.id), eq(orders.status, 'completed')));
+	// Single aggregation query for all stats (replaces 3 separate queries)
+	const [statsResult, customerOrders] = await Promise.all([
+		db
+			.select({
+				allCount: sql<number>`count(*)`,
+				completedCount: sql<number>`COUNT(CASE WHEN ${orders.status} = 'completed' THEN 1 END)`,
+				totalSpent: sql<number>`COALESCE(SUM(CASE WHEN ${orders.status} = 'completed' THEN ${orders.totalAmount} ELSE 0 END), 0)`
+			})
+			.from(orders)
+			.where(eq(orders.customerId, params.id)),
+		db
+			.select()
+			.from(orders)
+			.where(eq(orders.customerId, params.id))
+			.orderBy(desc(orders.createdAt))
+			.limit(perPage)
+			.offset(offset)
+	]);
 
-	const totalOrders = countResult[0]?.count ?? 0;
-
-	// Total order count for pagination (all statuses)
-	const allCountResult = await db
-		.select({ count: sql<number>`count(*)` })
-		.from(orders)
-		.where(eq(orders.customerId, params.id));
-
-	const allCount = allCountResult[0]?.count ?? 0;
+	const stats = statsResult[0];
+	const totalOrders = stats?.completedCount ?? 0;
+	const allCount = stats?.allCount ?? 0;
+	const totalSpent = stats?.totalSpent ?? 0;
 	const totalPages = Math.ceil(allCount / perPage);
-
-	// Total spent (completed orders only)
-	const spentResult = await db
-		.select({ total: sql<number>`COALESCE(SUM(total_amount), 0)` })
-		.from(orders)
-		.where(and(eq(orders.customerId, params.id), eq(orders.status, 'completed')));
-
-	const totalSpent = spentResult[0]?.total ?? 0;
-
-	// Paginated orders (all statuses for history visibility)
-	const customerOrders = await db
-		.select()
-		.from(orders)
-		.where(eq(orders.customerId, params.id))
-		.orderBy(desc(orders.createdAt))
-		.limit(perPage)
-		.offset(offset);
 
 	return {
 		customer,
@@ -84,7 +75,7 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 			totalOrders: allCount,
 			perPage
 		},
-		isElectron: false,
+		isNative: false,
 		customerId: params.id
 	};
 };

@@ -1,0 +1,40 @@
+node_modules
+.git
+.gitignore
+.svelte-kit
+build
+dist-electron
+downloads
+*.log
+
+# Electron/Android
+electron_stdout.txt
+resources/
+android/
+
+# SSL/certs
+ssl/
+certbot/
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+
+# Env (injected at runtime, not build time)
+.env
+.env.*
+!.env.example
+
+# CI/CD
+.github/
+deploy.sh
+dev.sh
+
+# Docs/tests
+*.md
+test-*.js

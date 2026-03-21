@@ -4,9 +4,6 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Autocomplete } from '$lib/components/ui/autocomplete';
 	import { Label } from '$lib/components/ui/label';
-	import { Textarea } from '$lib/components/ui/textarea';
-	import * as Card from '$lib/components/ui/card';
-	import * as Select from '$lib/components/ui/select';
 	import { ArrowLeft, Loader2, X, Plus } from '@lucide/svelte';
 	import { getCurrencySymbol } from '$lib/format';
 	import { toast } from 'svelte-sonner';
@@ -22,7 +19,18 @@
 	let loading = $state(false);
 	let customSizeInput = $state('');
 
-	let sizeData = $state<Record<string, { quantity: string; sellingPrice: string; costPrice: string }>>({});
+	// Track default prices for placeholders in size table
+	let defaultSellingPrice = $state('');
+	let defaultCostPrice = $state('');
+
+	$effect(() => {
+		if (form?.data?.templatePrice) defaultSellingPrice = form.data.templatePrice as string;
+		if (form?.data?.costPrice) defaultCostPrice = form.data.costPrice as string;
+	});
+
+	let sizeData = $state<
+		Record<string, { quantity: string; sellingPrice: string; costPrice: string }>
+	>({});
 
 	// Clear selections when template changes
 	$effect(() => {
@@ -62,166 +70,179 @@
 	<title>New Product — Clothing POS</title>
 </svelte:head>
 
-<div class="p-6">
-	<div class="mb-6 flex items-center gap-4">
-		<Button variant="outline" size="icon" href="/inventory" class="cursor-pointer" aria-label="Back to inventory">
+<div class="p-4 pb-24 sm:p-6 md:pb-6">
+	<div class="mb-5 flex items-center gap-4">
+		<Button
+			variant="outline"
+			size="icon"
+			href="/inventory"
+			class="cursor-pointer"
+			aria-label="Back to inventory"
+		>
 			<ArrowLeft class="h-4 w-4" />
 		</Button>
-		<h1 class="text-3xl font-bold tracking-tight">New Product</h1>
+		<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">New Product</h1>
 	</div>
 
-	<div class="rounded-lg border bg-card shadow-sm">
-		<div class="border-b p-6">
-			<h2 class="text-xl font-semibold">Product Details</h2>
-			<p class="text-sm text-muted-foreground">Create a new product and its size variants.</p>
-		</div>
-		<div class="p-6">
-			<form
-				method="POST"
-				use:enhance={() => {
-					loading = true;
-					return async ({ update, result }) => {
-						loading = false;
-						if (result.type === 'failure') {
-							toast.error('Please fix the errors below');
-						}
-						await update();
-					};
-				}}
-				class="space-y-8"
-			>
-				<div class="grid gap-6 md:grid-cols-2">
-					<div class="space-y-4">
-						<div class="space-y-2">
-							<Label for="name">Product Name</Label>
-							<Input
-								id="name"
-								name="name"
-								placeholder="e.g. Premium Cotton T-Shirt"
-								value={(form?.data?.name as string) ?? ''}
-								class="h-11"
-							/>
-							{#if form?.errors?.name}
-								<p class="text-sm text-destructive">{form.errors.name}</p>
-							{/if}
-						</div>
+	<form
+		method="POST"
+		use:enhance={() => {
+			loading = true;
+			return async ({ update, result }) => {
+				loading = false;
+				if (result.type === 'failure') {
+					toast.error('Please fix the errors below');
+				}
+				await update();
+			};
+		}}
+	>
+		<div class="grid gap-5 lg:grid-cols-5">
+			<!-- Left: Product Details -->
+			<div class="space-y-4 rounded-lg border bg-card p-4 sm:p-5 lg:col-span-2">
+				<h2 class="text-sm font-bold tracking-wider text-muted-foreground uppercase">
+					Product Details
+				</h2>
 
-						<div class="space-y-2">
-							<Label for="description">Description (Optional)</Label>
-							<Textarea
-								id="description"
-								name="description"
-								placeholder="Brief product description..."
-								value={(form?.data?.description as string) ?? ''}
-								class="min-h-[120px] resize-none"
-							/>
-						</div>
+				<div class="space-y-2">
+					<Label for="name">Product Name</Label>
+					<Input
+						id="name"
+						name="name"
+						placeholder="e.g. Premium Cotton T-Shirt"
+						value={(form?.data?.name as string) ?? ''}
+					/>
+					{#if form?.errors?.name}
+						<p class="text-sm text-destructive">{form.errors.name}</p>
+					{/if}
+				</div>
+
+				<div class="space-y-2">
+					<Label for="category">Category</Label>
+					<Autocomplete
+						id="category"
+						name="category"
+						placeholder="e.g. T-Shirt, Jeans"
+						value={(form?.data?.category as string) ?? ''}
+						suggestions={data.categories}
+					/>
+					{#if form?.errors?.category}
+						<p class="text-sm text-destructive">{form.errors.category}</p>
+					{/if}
+				</div>
+
+				<div class="grid gap-3 sm:grid-cols-2">
+					<div class="space-y-2">
+						<Label for="templatePrice">Selling Price ({getCurrencySymbol()})</Label>
+						<Input
+							id="templatePrice"
+							name="templatePrice"
+							type="number"
+							step="0.01"
+							placeholder="0.00"
+							bind:value={defaultSellingPrice}
+						/>
+						{#if form?.errors?.templatePrice}
+							<p class="text-sm text-destructive">{form.errors.templatePrice}</p>
+						{/if}
 					</div>
-
-					<div class="space-y-4">
-						<div class="space-y-2">
-							<Label for="category">Category</Label>
-							<Autocomplete
-								id="category"
-								name="category"
-								placeholder="e.g. T-Shirt, Jeans"
-								value={(form?.data?.category as string) ?? ''}
-								suggestions={data.categories}
-							/>
-							{#if form?.errors?.category}
-								<p class="text-sm text-destructive">{form.errors.category}</p>
-							{/if}
-						</div>
-
-						<div class="grid gap-4 sm:grid-cols-2">
-							<div class="space-y-2">
-								<Label for="templatePrice">Default Selling Price ({getCurrencySymbol()})</Label>
-								<Input
-									id="templatePrice"
-									name="templatePrice"
-									type="number"
-									step="0.01"
-									placeholder="0.00"
-									value={(form?.data?.templatePrice as string) ?? ''}
-									class="h-11"
-								/>
-								{#if form?.errors?.templatePrice}
-									<p class="text-sm text-destructive">{form.errors.templatePrice}</p>
-								{/if}
-							</div>
-							<div class="space-y-2">
-								<Label for="costPrice">Default Cost Price ({getCurrencySymbol()})</Label>
-								<Input
-									id="costPrice"
-									name="costPrice"
-									type="number"
-									step="0.01"
-									placeholder="0.00"
-									value={(form?.data?.costPrice as string) ?? ''}
-									class="h-11"
-								/>
-								{#if form?.errors?.costPrice}
-									<p class="text-sm text-destructive">{form.errors.costPrice}</p>
-								{/if}
-							</div>
-						</div>
-						<div class="space-y-2">
-							<Label for="defaultDiscount">Default Discount (%)</Label>
-							<Input
-								id="defaultDiscount"
-								name="defaultDiscount"
-								type="number"
-								step="0.01"
-								placeholder="0"
-								value={(form?.data?.defaultDiscount as string) ?? ''}
-								class="h-11"
-							/>
-						</div>
+					<div class="space-y-2">
+						<Label for="costPrice">Cost Price ({getCurrencySymbol()})</Label>
+						<Input
+							id="costPrice"
+							name="costPrice"
+							type="number"
+							step="0.01"
+							placeholder="0.00"
+							bind:value={defaultCostPrice}
+						/>
+						{#if form?.errors?.costPrice}
+							<p class="text-sm text-destructive">{form.errors.costPrice}</p>
+						{/if}
 					</div>
 				</div>
 
-				<div class="space-y-6 rounded-xl border bg-muted/30 p-6">
-					<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-						<div>
-							<Label class="text-lg font-bold">Size Variants</Label>
-							<p class="text-sm text-muted-foreground">
-								Select the sizes you want to create and set pricing & stock.
-							</p>
-						</div>
-						<div class="flex items-center rounded-lg border bg-muted p-1">
-							<button
-								type="button"
-								class="h-8 px-3 text-xs font-medium transition-all rounded-md {selectedTemplate === 'alpha' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted-foreground/10'}"
-								onclick={() => (selectedTemplate = 'alpha')}
-							>
-								Alpha (S, M, L...)
-							</button>
-							<button
-								type="button"
-								class="h-8 px-3 text-xs font-medium transition-all rounded-md {selectedTemplate === 'numeric' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted-foreground/10'}"
-								onclick={() => (selectedTemplate = 'numeric')}
-							>
-								Numeric (28, 30...)
-							</button>
-						</div>
-					</div>
+				<div class="space-y-2">
+					<Label for="defaultDiscount">Discount (%)</Label>
+					<Input
+						id="defaultDiscount"
+						name="defaultDiscount"
+						type="number"
+						step="0.01"
+						placeholder="0"
+						value={(form?.data?.defaultDiscount as string) ?? ''}
+					/>
+				</div>
 
-					<div class="flex flex-wrap gap-2">
-						{#each SIZE_TEMPLATES[selectedTemplate as keyof typeof SIZE_TEMPLATES] as size}
-							<button
-								type="button"
-								class="cursor-pointer rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors {size in sizeData ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'}"
-								onclick={() => toggleSize(size)}
-							>
-								{size}
-							</button>
-						{/each}
-					</div>
+				<div class="space-y-2">
+					<Label for="description">Description (Optional)</Label>
+					<Input
+						id="description"
+						name="description"
+						placeholder="Brief product description…"
+						value={(form?.data?.description as string) ?? ''}
+					/>
+				</div>
+			</div>
 
-					<!-- Custom size input -->
-					<div class="flex max-w-md items-center gap-2">
+			<!-- Right: Size Variants -->
+			<div class="space-y-3 rounded-lg border bg-card p-4 sm:p-5 lg:col-span-3">
+				<!-- Header -->
+				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<div class="flex items-center gap-2">
+						<h2 class="text-sm font-bold tracking-wider text-muted-foreground uppercase">
+							Size Variants
+						</h2>
+						{#if selectedSizes.length > 0}
+							<span
+								class="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground"
+							>
+								{selectedSizes.length}
+							</span>
+						{/if}
+					</div>
+					<div class="flex items-center rounded-lg border bg-muted p-0.5">
+						<button
+							type="button"
+							class="h-7 rounded-md px-2.5 text-xs font-medium transition-all {selectedTemplate ===
+							'alpha'
+								? 'bg-background text-foreground shadow-sm'
+								: 'text-muted-foreground hover:bg-muted-foreground/10'}"
+							onclick={() => (selectedTemplate = 'alpha')}
+						>
+							Alpha (S, M, L…)
+						</button>
+						<button
+							type="button"
+							class="h-7 rounded-md px-2.5 text-xs font-medium transition-all {selectedTemplate ===
+							'numeric'
+								? 'bg-background text-foreground shadow-sm'
+								: 'text-muted-foreground hover:bg-muted-foreground/10'}"
+							onclick={() => (selectedTemplate = 'numeric')}
+						>
+							Numeric (28, 30…)
+						</button>
+					</div>
+				</div>
+
+				<!-- Size buttons + custom -->
+				<div class="flex flex-wrap items-center gap-1.5">
+					{#each SIZE_TEMPLATES[selectedTemplate as keyof typeof SIZE_TEMPLATES] as size}
+						<button
+							type="button"
+							class="cursor-pointer rounded-md border px-2.5 py-1 text-sm font-semibold transition-all {size in
+							sizeData
+								? 'border-primary bg-primary text-primary-foreground shadow-sm'
+								: 'border-border bg-background hover:bg-muted'}"
+							onclick={() => toggleSize(size)}
+						>
+							{size}
+						</button>
+					{/each}
+					<span class="mx-1 text-muted-foreground/30">|</span>
+					<div class="flex items-center gap-1">
 						<Input
-							placeholder="Custom size (e.g. OneSize, Free, 27)"
+							placeholder="Custom…"
 							bind:value={customSizeInput}
 							onkeydown={(e: KeyboardEvent) => {
 								if (e.key === 'Enter') {
@@ -229,147 +250,163 @@
 									addCustomSize();
 								}
 							}}
-							class="h-10"
+							class="h-8 w-28 text-sm"
 						/>
-						<Button type="button" variant="outline" onclick={addCustomSize} class="cursor-pointer">
-							<Plus class="mr-2 h-4 w-4" /> Add Size
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							onclick={addCustomSize}
+							class="h-8 w-8 cursor-pointer"
+							aria-label="Add custom size"
+						>
+							<Plus class="h-3.5 w-3.5" />
 						</Button>
 					</div>
-
-					{#if selectedSizes.length > 0}
-						<div class="space-y-6 border-t border-muted-foreground/10 pt-4">
-							<div class="space-y-3">
-								<Label class="text-sm font-bold tracking-wider text-muted-foreground uppercase"
-									>Per-Size Pricing & Stock</Label
-								>
-								<p class="text-xs text-muted-foreground">
-									Leave price fields blank to use the defaults above.
-								</p>
-								<div class="overflow-x-auto rounded-lg border bg-background">
-									<table class="w-full text-sm">
-										<thead>
-											<tr class="border-b bg-muted/50">
-												<th class="px-3 py-2 text-left font-semibold">Size</th>
-												<th class="px-3 py-2 text-left font-semibold">Selling ({getCurrencySymbol()})</th>
-												<th class="px-3 py-2 text-left font-semibold">Cost ({getCurrencySymbol()})</th>
-												<th class="px-3 py-2 text-left font-semibold">Qty</th>
-												<th class="w-8 px-2 py-2"></th>
-											</tr>
-										</thead>
-										<tbody>
-											{#each selectedSizes as size}
-												<tr class="border-b last:border-b-0">
-													<td class="px-3 py-2 font-bold">{size}</td>
-													<td class="px-3 py-2">
-														<Input
-															type="number"
-															step="0.01"
-															min="0"
-															value={sizeData[size].sellingPrice}
-															oninput={(e: Event) => {
-																sizeData = {
-																	...sizeData,
-																	[size]: { ...sizeData[size], sellingPrice: (e.target as HTMLInputElement).value }
-																};
-															}}
-															class="h-8 w-28 text-sm"
-															placeholder="Default"
-														/>
-													</td>
-													<td class="px-3 py-2">
-														<Input
-															type="number"
-															step="0.01"
-															min="0"
-															value={sizeData[size].costPrice}
-															oninput={(e: Event) => {
-																sizeData = {
-																	...sizeData,
-																	[size]: { ...sizeData[size], costPrice: (e.target as HTMLInputElement).value }
-																};
-															}}
-															class="h-8 w-28 text-sm"
-															placeholder="Default"
-														/>
-													</td>
-													<td class="px-3 py-2">
-														<Input
-															type="number"
-															min="0"
-															value={sizeData[size].quantity}
-															oninput={(e: Event) => {
-																sizeData = {
-																	...sizeData,
-																	[size]: { ...sizeData[size], quantity: (e.target as HTMLInputElement).value }
-																};
-															}}
-															class="h-8 w-20 text-sm"
-															placeholder="0"
-														/>
-													</td>
-													<td class="px-2 py-2">
-														<button
-															type="button"
-															class="cursor-pointer rounded-full p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-destructive"
-															onclick={() => removeSize(size)}
-														>
-															<X class="h-3 w-3" />
-														</button>
-													</td>
-												</tr>
-											{/each}
-										</tbody>
-									</table>
-								</div>
-							</div>
-
-							<div class="max-w-xl space-y-2 rounded-lg border border-primary/10 bg-primary/5 p-4">
-								<Label for="stockReason" class="text-sm font-bold">Stock Adjustment Reason</Label>
-								<Input
-									id="stockReason"
-									name="stockReason"
-									placeholder="e.g. Initial Opening Stock, New Shipment..."
-									value={form?.data?.stockReason ?? ''}
-									class="h-11 bg-background"
-								/>
-								<p class="text-[11px] text-muted-foreground">
-									This will be recorded in the stock logs for all variants with quantity > 0.
-								</p>
-							</div>
-						</div>
-					{/if}
-
-					<!-- Hidden form fields for sizes, quantities, and per-variant prices -->
-					{#each selectedSizes as size}
-						<input type="hidden" name="sizes" value={size} />
-						<input type="hidden" name="quantities" value={sizeData[size].quantity} />
-						<input type="hidden" name="sellingPrices" value={sizeData[size].sellingPrice} />
-						<input type="hidden" name="costPrices" value={sizeData[size].costPrice} />
-					{/each}
-
-					{#if form?.errors?.sizes}
-						<p class="text-sm font-medium text-destructive">{form.errors.sizes}</p>
-					{/if}
 				</div>
 
-				<div class="flex justify-end gap-4 pt-4">
-					<Button variant="outline" href="/inventory" class="h-12 w-32 cursor-pointer"
-						>Cancel</Button
+				<!-- Size table -->
+				{#if selectedSizes.length > 0}
+					<div class="overflow-x-auto rounded-lg border">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="border-b bg-muted/50">
+									<th class="px-3 py-1.5 text-left font-semibold">Size</th>
+									<th class="px-3 py-1.5 text-left font-semibold text-blue-600 dark:text-blue-400"
+										>Qty</th
+									>
+									<th class="px-3 py-1.5 text-left font-semibold"
+										>Selling ({getCurrencySymbol()})</th
+									>
+									<th class="px-3 py-1.5 text-left font-semibold">Cost ({getCurrencySymbol()})</th>
+									<th class="w-10 px-2 py-1.5"></th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each selectedSizes as size}
+									<tr class="border-b last:border-b-0 hover:bg-muted/30">
+										<td class="px-3 py-1">
+											<span
+												class="inline-flex h-7 min-w-7 items-center justify-center rounded-md bg-primary/10 px-2 text-xs font-bold text-primary"
+											>
+												{size}
+											</span>
+										</td>
+										<td class="px-3 py-1">
+											<Input
+												type="number"
+												min="0"
+												value={sizeData[size].quantity}
+												oninput={(e: Event) => {
+													sizeData = {
+														...sizeData,
+														[size]: {
+															...sizeData[size],
+															quantity: (e.target as HTMLInputElement).value
+														}
+													};
+												}}
+												class="h-8 w-20 border-blue-200 text-sm focus-visible:ring-blue-500/30 dark:border-blue-800"
+												placeholder="0"
+											/>
+										</td>
+										<td class="px-3 py-1">
+											<Input
+												type="number"
+												step="0.01"
+												min="0"
+												value={sizeData[size].sellingPrice}
+												oninput={(e: Event) => {
+													sizeData = {
+														...sizeData,
+														[size]: {
+															...sizeData[size],
+															sellingPrice: (e.target as HTMLInputElement).value
+														}
+													};
+												}}
+												class="h-8 w-24 text-sm"
+												placeholder={defaultSellingPrice || '0.00'}
+											/>
+										</td>
+										<td class="px-3 py-1">
+											<Input
+												type="number"
+												step="0.01"
+												min="0"
+												value={sizeData[size].costPrice}
+												oninput={(e: Event) => {
+													sizeData = {
+														...sizeData,
+														[size]: {
+															...sizeData[size],
+															costPrice: (e.target as HTMLInputElement).value
+														}
+													};
+												}}
+												class="h-8 w-24 text-sm"
+												placeholder={defaultCostPrice || '0.00'}
+											/>
+										</td>
+										<td class="px-2 py-1">
+											<button
+												type="button"
+												class="cursor-pointer rounded-md p-1.5 text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+												onclick={() => removeSize(size)}
+												title="Remove {size}"
+											>
+												<X class="h-4 w-4" />
+											</button>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+
+					<div class="flex items-center gap-2">
+						<Label for="stockReason" class="shrink-0 text-xs text-muted-foreground">Reason:</Label>
+						<Input
+							id="stockReason"
+							name="stockReason"
+							placeholder="e.g. Opening stock, New shipment…"
+							value={form?.data?.stockReason ?? ''}
+							class="h-8 w-56 text-sm"
+						/>
+					</div>
+				{:else}
+					<div
+						class="flex h-32 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground"
 					>
-					<Button
-						type="submit"
-						class="h-12 w-48 cursor-pointer text-base font-bold"
-						disabled={loading}
-					>
-						{#if loading}
-							<Loader2 class="mr-2 h-5 w-5 animate-spin" />
-							Creating...
-						{:else}
-							Create Product
-						{/if}
-					</Button>
-				</div>
-			</form>
+						Click sizes above to add variants
+					</div>
+				{/if}
+
+				<!-- Hidden form fields -->
+				{#each selectedSizes as size}
+					<input type="hidden" name="sizes" value={size} />
+					<input type="hidden" name="quantities" value={sizeData[size].quantity} />
+					<input type="hidden" name="sellingPrices" value={sizeData[size].sellingPrice} />
+					<input type="hidden" name="costPrices" value={sizeData[size].costPrice} />
+				{/each}
+
+				{#if form?.errors?.sizes}
+					<p class="text-sm font-medium text-destructive">{form.errors.sizes}</p>
+				{/if}
+			</div>
 		</div>
-	</div>
+
+		<!-- Submit -->
+		<div class="mt-5 flex justify-end gap-3">
+			<Button variant="outline" href="/inventory" class="h-11 w-28 cursor-pointer">Cancel</Button>
+			<Button type="submit" class="h-11 w-44 cursor-pointer text-base font-bold" disabled={loading}>
+				{#if loading}
+					<Loader2 class="mr-2 h-5 w-5 animate-spin" />
+					Creating…
+				{:else}
+					Create Product
+				{/if}
+			</Button>
+		</div>
+	</form>
 </div>

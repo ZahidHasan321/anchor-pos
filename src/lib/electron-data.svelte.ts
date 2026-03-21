@@ -5,9 +5,10 @@
  */
 import { powersync } from './powersync.svelte';
 import { browser } from '$app/environment';
-import { generateId } from './utils';
+import { generateId, toDbDate, round2 } from './utils';
 
 export const isElectron = browser && !!(window as any).electron;
+export const isNative = isElectron;
 
 // --- Reactive query helper ---
 type WatchResult<T> = { data: T[]; loading: boolean };
@@ -53,7 +54,8 @@ export function queryProducts(search = '', category = 'All') {
 		params.push(`%${search}%`, `%${search}%`);
 	}
 
-	return createWatchQuery(`
+	return createWatchQuery(
+		`
 		SELECT pv.id, p.id as productId, p.name as productName,
 			pv.size, pv.color, pv.barcode, p.category, pv.price, pv.discount,
 			pv.stock_quantity as stockQuantity, p.base_price as basePrice
@@ -61,7 +63,9 @@ export function queryProducts(search = '', category = 'All') {
 		JOIN products p ON pv.product_id = p.id
 		${whereClause}
 		ORDER BY p.name
-	`, params);
+	`,
+		params
+	);
 }
 
 export function queryCategories() {
@@ -75,49 +79,65 @@ export function queryCustomers(search = '') {
 	if (!search || search.length < 2) {
 		return createWatchQuery('SELECT * FROM customers LIMIT 50');
 	}
-	return createWatchQuery(
-		'SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? LIMIT 50',
-		[`%${search}%`, `%${search}%`]
-	);
+	return createWatchQuery('SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? LIMIT 50', [
+		`%${search}%`,
+		`%${search}%`
+	]);
 }
 
 export function queryCustomerDetail(id: string) {
 	return {
 		customer: createWatchQuery('SELECT * FROM customers WHERE id = ?', [id]),
-		orders: createWatchQuery(`
+		orders: createWatchQuery(
+			`
 			SELECT o.*, u.name as userName
 			FROM orders o
 			LEFT JOIN users u ON o.user_id = u.id
 			WHERE o.customer_id = ?
 			ORDER BY o.created_at DESC
-		`, [id])
+		`,
+			[id]
+		)
 	};
 }
 
 // --- Orders ---
-export function queryOrders(opts: {
-	page?: number;
-	perPage?: number;
-	search?: string;
-	status?: string;
-	dateFrom?: string;
-	dateTo?: string;
-} = {}) {
+export function queryOrders(
+	opts: {
+		page?: number;
+		perPage?: number;
+		search?: string;
+		status?: string;
+		dateFrom?: string;
+		dateTo?: string;
+	} = {}
+) {
 	const { page = 1, perPage = 20, search = '', status = '', dateFrom = '', dateTo = '' } = opts;
 	const offset = (page - 1) * perPage;
 	let where = 'WHERE 1=1';
 	const params: any[] = [];
 
-	if (dateFrom) { where += ' AND o.created_at >= ?'; params.push(dateFrom + 'T00:00:00'); }
-	if (dateTo) { where += ' AND o.created_at <= ?'; params.push(dateTo + 'T23:59:59.999'); }
-	if (status) { where += ' AND o.status = ?'; params.push(status); }
+	if (dateFrom) {
+		where += ' AND o.created_at >= ?';
+		params.push(dateFrom + 'T00:00:00');
+	}
+	if (dateTo) {
+		where += ' AND o.created_at <= ?';
+		params.push(dateTo + 'T23:59:59.999');
+	}
+	if (status) {
+		where += ' AND o.status = ?';
+		params.push(status);
+	}
 	if (search) {
-		where += ' AND (o.id LIKE ? OR CAST(o.order_number AS TEXT) LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)';
+		where +=
+			' AND (o.id LIKE ? OR CAST(o.order_number AS TEXT) LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)';
 		const p = `%${search}%`;
 		params.push(p, p, p, p);
 	}
 
-	return createWatchQuery(`
+	return createWatchQuery(
+		`
 		SELECT
 			o.id, o.order_number as orderNumber, o.total_amount as totalAmount,
 			o.status, o.payment_method as paymentMethod, o.created_at as createdAt,
@@ -128,90 +148,136 @@ export function queryOrders(opts: {
 		${where}
 		ORDER BY o.created_at DESC
 		LIMIT ? OFFSET ?
-	`, [...params, perPage, offset]);
+	`,
+		[...params, perPage, offset]
+	);
 }
 
-export function queryOrderCount(opts: {
-	search?: string; status?: string; dateFrom?: string; dateTo?: string;
-} = {}) {
+export function queryOrderCount(
+	opts: {
+		search?: string;
+		status?: string;
+		dateFrom?: string;
+		dateTo?: string;
+	} = {}
+) {
 	const { search = '', status = '', dateFrom = '', dateTo = '' } = opts;
 	let where = 'WHERE 1=1';
 	const params: any[] = [];
 
-	if (dateFrom) { where += ' AND o.created_at >= ?'; params.push(dateFrom + 'T00:00:00'); }
-	if (dateTo) { where += ' AND o.created_at <= ?'; params.push(dateTo + 'T23:59:59.999'); }
-	if (status) { where += ' AND o.status = ?'; params.push(status); }
+	if (dateFrom) {
+		where += ' AND o.created_at >= ?';
+		params.push(dateFrom + 'T00:00:00');
+	}
+	if (dateTo) {
+		where += ' AND o.created_at <= ?';
+		params.push(dateTo + 'T23:59:59.999');
+	}
+	if (status) {
+		where += ' AND o.status = ?';
+		params.push(status);
+	}
 	if (search) {
-		where += ' AND (o.id LIKE ? OR CAST(o.order_number AS TEXT) LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)';
+		where +=
+			' AND (o.id LIKE ? OR CAST(o.order_number AS TEXT) LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)';
 		const p = `%${search}%`;
 		params.push(p, p, p, p);
 	}
 
-	return createWatchQuery<{ count: number }>(`
+	return createWatchQuery<{ count: number }>(
+		`
 		SELECT count(*) as count
 		FROM orders o
 		LEFT JOIN customers c ON o.customer_id = c.id
 		${where}
-	`, params);
+	`,
+		params
+	);
 }
 
 export function queryOrderDetail(id: string) {
 	return {
-		order: createWatchQuery(`
+		order: createWatchQuery(
+			`
 			SELECT o.*, c.name as customerName, c.phone as customerPhone, u.name as userName
 			FROM orders o
 			LEFT JOIN customers c ON o.customer_id = c.id
 			LEFT JOIN users u ON o.user_id = u.id
 			WHERE o.id = ?
-		`, [id]),
-		items: createWatchQuery(`
+		`,
+			[id]
+		),
+		items: createWatchQuery(
+			`
 			SELECT oi.*, pv.stock_quantity as currentStock
 			FROM order_items oi
 			LEFT JOIN product_variants pv ON oi.variant_id = pv.id
 			WHERE oi.order_id = ?
-		`, [id])
+		`,
+			[id]
+		)
 	};
 }
 
 // --- Cashbook ---
 export function queryCashbook(dateStart: string, dateEnd: string) {
 	return {
-		entries: createWatchQuery(`
+		entries: createWatchQuery(
+			`
 			SELECT c.id, c.amount, c.type, c.description, c.created_at as createdAt,
 				u.name as userName
 			FROM cashbook c
 			LEFT JOIN users u ON c.user_id = u.id
 			WHERE c.created_at >= ? AND c.created_at < ?
 			ORDER BY c.created_at DESC
-		`, [dateStart, dateEnd]),
-		totals: createWatchQuery(`
+		`,
+			[dateStart, dateEnd]
+		),
+		totals: createWatchQuery(
+			`
 			SELECT type, sum(amount) as total
 			FROM cashbook
 			WHERE created_at >= ? AND created_at < ?
 			GROUP BY type
-		`, [dateStart, dateEnd])
+		`,
+			[dateStart, dateEnd]
+		)
 	};
 }
 
-export function queryCashbookTransactions(opts: {
-	type?: string; search?: string; page?: number; limit?: number;
-} = {}) {
+export function queryCashbookTransactions(
+	opts: {
+		type?: string;
+		search?: string;
+		page?: number;
+		limit?: number;
+	} = {}
+) {
 	const { type = 'all', search = '', page = 1, limit = 50 } = opts;
 	const offset = (page - 1) * limit;
 	let where = 'WHERE 1=1';
 	const params: any[] = [];
 
-	if (type === 'in' || type === 'out') { where += ' AND type = ?'; params.push(type); }
-	if (search) { where += ' AND description LIKE ?'; params.push(`%${search}%`); }
+	if (type === 'in' || type === 'out') {
+		where += ' AND type = ?';
+		params.push(type);
+	}
+	if (search) {
+		where += ' AND description LIKE ?';
+		params.push(`%${search}%`);
+	}
 
-	return createWatchQuery(`
+	return createWatchQuery(
+		`
 		SELECT id, amount, type, description, created_at as createdAt,
 			COALESCE((SELECT name FROM users WHERE id = user_id), 'System') as userName
 		FROM cashbook
 		${where}
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
-	`, [...params, limit, offset]);
+	`,
+		[...params, limit, offset]
+	);
 }
 
 export function queryExpenseDescriptions() {
@@ -221,36 +287,52 @@ export function queryExpenseDescriptions() {
 }
 
 // --- Inventory ---
-export function queryInventory(opts: {
-	page?: number; perPage?: number; category?: string; search?: string; stockStatus?: string;
-} = {}) {
+export function queryInventory(
+	opts: {
+		page?: number;
+		perPage?: number;
+		category?: string;
+		search?: string;
+		stockStatus?: string;
+	} = {}
+) {
 	const { page = 1, perPage = 20, category = '', search = '', stockStatus = '' } = opts;
 	const offset = (page - 1) * perPage;
 	let where = 'WHERE 1=1';
 	const params: any[] = [];
 
-	if (category) { where += ' AND p.category = ?'; params.push(category); }
+	if (category) {
+		where += ' AND p.category = ?';
+		params.push(category);
+	}
 	if (search) {
-		where += ' AND (p.name LIKE ? OR p.category LIKE ? OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.barcode LIKE ?))';
+		where +=
+			' AND (p.name LIKE ? OR p.category LIKE ? OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.barcode LIKE ?))';
 		const p = `%${search}%`;
 		params.push(p, p, p);
 	}
 	if (stockStatus === 'out') {
-		where += ' AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity = 0)';
+		where +=
+			' AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity = 0)';
 	} else if (stockStatus === 'low') {
-		where += ' AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity > 0 AND pv.stock_quantity <= 5)';
+		where +=
+			' AND EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity > 0 AND pv.stock_quantity <= 5)';
 	} else if (stockStatus === 'healthy') {
-		where += ' AND NOT EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity <= 5)';
+		where +=
+			' AND NOT EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND pv.stock_quantity <= 5)';
 	}
 
-	return createWatchQuery(`
+	return createWatchQuery(
+		`
 		SELECT p.id, p.name, p.category, p.base_price as templatePrice, p.default_discount as defaultDiscount,
 			COALESCE((SELECT SUM(pv.stock_quantity) FROM product_variants pv WHERE pv.product_id = p.id), 0) as totalStock
 		FROM products p
 		${where}
 		ORDER BY p.id DESC
 		LIMIT ? OFFSET ?
-	`, [...params, perPage, offset]);
+	`,
+		[...params, perPage, offset]
+	);
 }
 
 export function queryInventoryStats() {
@@ -285,8 +367,6 @@ export function queryDashboardStats() {
 	const today = new Date();
 	today.setHours(0, 0, 0, 0);
 	const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-	// PowerSync stores created_at as PostgreSQL ::text cast (e.g. "2026-03-04 00:00:00+00")
-	const toDbDate = (d: Date) => d.toISOString().replace('T', ' ').replace('.000Z', '+00');
 	const todayIso = toDbDate(today);
 	const monthIso = toDbDate(firstDayOfMonth);
 
@@ -318,13 +398,16 @@ export function queryDashboardStats() {
 
 export function queryStockAlerts(threshold = 5) {
 	return {
-		items: createWatchQuery(`
+		items: createWatchQuery(
+			`
 			SELECT p.id, p.name, pv.size, pv.stock_quantity as stock
 			FROM product_variants pv
 			INNER JOIN products p ON pv.product_id = p.id
 			WHERE pv.stock_quantity > 0 AND pv.stock_quantity <= ?
 			LIMIT 10
-		`, [threshold]),
+		`,
+			[threshold]
+		),
 		count: createWatchQuery<{ count: number }>(
 			`SELECT count(*) as count FROM product_variants WHERE stock_quantity > 0 AND stock_quantity <= ?`,
 			[threshold]
@@ -333,19 +416,15 @@ export function queryStockAlerts(threshold = 5) {
 }
 
 export function queryRecentOrders(limit = 10) {
-	return createWatchQuery(
-		`SELECT * FROM orders ORDER BY created_at DESC LIMIT ?`,
-		[limit]
-	);
+	return createWatchQuery(`SELECT * FROM orders ORDER BY created_at DESC LIMIT ?`, [limit]);
 }
 
 export function queryTopProducts() {
 	const firstDayOfMonth = new Date();
 	firstDayOfMonth.setDate(1);
 	firstDayOfMonth.setHours(0, 0, 0, 0);
-	const toDbDate = (d: Date) => d.toISOString().replace('T', ' ').replace('.000Z', '+00');
-
-	return createWatchQuery(`
+	return createWatchQuery(
+		`
 		SELECT product_name as name, variant_label as variantLabel,
 			sum(quantity) as totalQty, sum(quantity * price_at_sale) as totalRevenue
 		FROM order_items oi
@@ -354,7 +433,9 @@ export function queryTopProducts() {
 		GROUP BY product_name, variant_label
 		ORDER BY totalQty DESC
 		LIMIT 10
-	`, [toDbDate(firstDayOfMonth)]);
+	`,
+		[toDbDate(firstDayOfMonth)]
+	);
 }
 
 // --- Store Settings ---
@@ -364,32 +445,42 @@ export function queryStoreSettings() {
 
 // --- Write Operations ---
 export async function checkoutTransaction(
-	cart: { items: any[]; customer: any; paymentMethod: string; cashReceived: number; subtotal: number; globalDiscount: number | null },
+	cart: {
+		items: any[];
+		customer: any;
+		paymentMethod: string;
+		cashReceived: number;
+		subtotal: number;
+		globalDiscount: number | null;
+	},
 	userId: string
 ) {
-	const round2 = (val: number) => Math.round((val + Number.EPSILON) * 100) / 100;
 	const orderId = generateId();
-	const now = new Date().toISOString().replace('T', ' ').replace('.000Z', '+00');
+	const now = toDbDate(new Date());
 	const globalDiscount = Math.min(100, Math.max(0, cart.globalDiscount || 0));
 
 	await powersync.db.writeTransaction(async (tx: any) => {
 		// Validate stock and compute totals
 		let subtotal = 0;
 		let totalDiscount = 0;
-		const variantIds = cart.items.map(i => i.variantId);
+		const variantIds = cart.items.map((i) => i.variantId);
 		const placeholders = variantIds.map(() => '?').join(',');
-		const dbVariants = await tx.getAll(`
+		const dbVariants = await tx.getAll(
+			`
 			SELECT pv.id, pv.price, COALESCE(NULLIF(pv.cost_price, 0), p.cost_price, 0) as costPrice, p.name as productName, pv.size, pv.color, pv.stock_quantity as stockQuantity
 			FROM product_variants pv
 			INNER JOIN products p ON pv.product_id = p.id
 			WHERE pv.id IN (${placeholders})
-		`, variantIds);
+		`,
+			variantIds
+		);
 		const variantMap = new Map(dbVariants.map((v: any) => [v.id, v]));
 
 		for (const item of cart.items) {
 			const dbv = variantMap.get(item.variantId) as any;
 			if (!dbv) throw new Error(`Product not found: ${item.variantId}`);
-			if (dbv.stockQuantity < item.quantity) throw new Error(`Insufficient stock for ${dbv.productName}`);
+			if (dbv.stockQuantity < item.quantity)
+				throw new Error(`Insufficient stock for ${dbv.productName}`);
 
 			const linePrice = dbv.price * item.quantity;
 			const lineDiscount = round2(linePrice * ((item.discount || 0) / 100));
@@ -403,32 +494,77 @@ export async function checkoutTransaction(
 		const changeGiven = round2(Math.max(0, cart.cashReceived - totalAmount));
 
 		// Create order
-		await tx.execute(`
+		await tx.execute(
+			`
 			INSERT INTO orders (id, customer_id, user_id, total_amount, status, payment_method, discount_amount, cash_received, change_given, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, [orderId, cart.customer?.id || null, userId, totalAmount, 'completed', cart.paymentMethod, totalDiscount, cart.cashReceived, changeGiven, now]);
+		`,
+			[
+				orderId,
+				cart.customer?.id || null,
+				userId,
+				totalAmount,
+				'completed',
+				cart.paymentMethod,
+				totalDiscount,
+				cart.cashReceived,
+				changeGiven,
+				now
+			]
+		);
 
 		// Create items and update stock
 		for (const item of cart.items) {
 			const dbv = variantMap.get(item.variantId) as any;
-			await tx.execute(`
+			await tx.execute(
+				`
 				INSERT INTO order_items (id, order_id, variant_id, quantity, price_at_sale, cost_at_sale, discount, product_name, variant_label, status)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`, [generateId(), orderId, item.variantId, item.quantity, dbv.price, dbv.costPrice || 0, item.discount || 0, dbv.productName, `${dbv.size}${dbv.color ? ' / ' + dbv.color : ''}`, 'completed']);
+			`,
+				[
+					generateId(),
+					orderId,
+					item.variantId,
+					item.quantity,
+					dbv.price,
+					dbv.costPrice || 0,
+					item.discount || 0,
+					dbv.productName,
+					`${dbv.size}${dbv.color ? ' / ' + dbv.color : ''}`,
+					'completed'
+				]
+			);
 
-			await tx.execute('UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE id = ?', [item.quantity, item.variantId]);
+			await tx.execute(
+				'UPDATE product_variants SET stock_quantity = stock_quantity - ? WHERE id = ?',
+				[item.quantity, item.variantId]
+			);
 
-			await tx.execute(`
+			await tx.execute(
+				`
 				INSERT INTO stock_logs (id, variant_id, change_amount, reason, user_id, created_at)
 				VALUES (?, ?, ?, ?, ?, ?)
-			`, [generateId(), item.variantId, -item.quantity, 'sale', userId, now]);
+			`,
+				[generateId(), item.variantId, -item.quantity, 'sale', userId, now]
+			);
 		}
 
 		// Cashbook entry
-		await tx.execute(`
+		await tx.execute(
+			`
 			INSERT INTO cashbook (id, amount, type, category, description, user_id, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, [generateId(), totalAmount, 'in', 'sale', `Sale ${orderId.slice(0, 8).toUpperCase()}`, userId, now]);
+		`,
+			[
+				generateId(),
+				totalAmount,
+				'in',
+				'sale',
+				`Sale ${orderId.slice(0, 8).toUpperCase()}`,
+				userId,
+				now
+			]
+		);
 	});
 
 	return {
@@ -440,15 +576,22 @@ export async function checkoutTransaction(
 
 export async function addCustomerLocal(name: string, phone?: string) {
 	const id = generateId();
-	await powersync.db.execute('INSERT INTO customers (id, name, phone) VALUES (?, ?, ?)', [id, name, phone || null]);
+	await powersync.db.execute('INSERT INTO customers (id, name, phone) VALUES (?, ?, ?)', [
+		id,
+		name,
+		phone || null
+	]);
 	return { id, name, phone };
 }
 
 export async function addExpenseLocal(description: string, amount: number, userId: string) {
 	const id = generateId();
-	await powersync.db.execute(`
+	await powersync.db.execute(
+		`
 		INSERT INTO cashbook (id, amount, type, category, description, user_id, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, [id, amount, 'out', 'expense', description, userId, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
+	`,
+		[id, amount, 'out', 'expense', description, userId, toDbDate(new Date())]
+	);
 	return { id };
 }

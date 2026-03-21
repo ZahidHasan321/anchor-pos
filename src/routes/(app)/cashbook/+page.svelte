@@ -28,15 +28,14 @@
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { cn } from '$lib/utils';
+	import { cn, generateId, toDbDate } from '$lib/utils';
 	import { createDebounced } from '$lib/debounce.svelte';
 	import { fly, fade } from 'svelte/transition';
 	import { powersync } from '$lib/powersync.svelte';
 	import { browser } from '$app/environment';
+	import { isNative } from '$lib/electron-data.svelte';
 
 	let { data, form } = $props();
-
-	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
 
 	// Electron: client-side PowerSync data
 	let nativeDailyData = $state<any>(null);
@@ -44,7 +43,7 @@
 	let nativeTransactionsData = $state<any>(null);
 
 	async function loadNativeData() {
-		if (!browser || !(window as any).electron || !powersync.ready) return;
+		if (!browser || !isNative || !powersync.ready) return;
 
 		// Server passes ISO dates (with T separator), but PowerSync stores dates from
 		// PostgreSQL ::text cast (space separator). Convert for correct lexicographic comparison.
@@ -54,24 +53,33 @@
 
 		// Daily data
 		Promise.all([
-			powersync.db.getAll(`
+			powersync.db.getAll(
+				`
 				SELECT c.id, c.amount, c.type, c.description, c.created_at as createdAt, u.name as userName
 				FROM cashbook c LEFT JOIN users u ON c.user_id = u.id
 				WHERE c.created_at >= ? AND c.created_at < ?
 				ORDER BY c.created_at DESC
-			`, [dateStart, dateEnd]),
-			powersync.db.getAll(`
+			`,
+				[dateStart, dateEnd]
+			),
+			powersync.db.getAll(
+				`
 				SELECT type, sum(amount) as total FROM cashbook
 				WHERE created_at >= ? AND created_at < ? GROUP BY type
-			`, [dateStart, dateEnd]),
-			powersync.db.get(`
+			`,
+				[dateStart, dateEnd]
+			),
+			powersync.db.get(
+				`
 				SELECT coalesce(sum(oi.cost_at_sale * oi.quantity), 0) as total
 				FROM order_items oi INNER JOIN orders o ON oi.order_id = o.id
 				WHERE o.status = 'completed' AND o.created_at >= ? AND o.created_at < ?
-			`, [dateStart, dateEnd])
+			`,
+				[dateStart, dateEnd]
+			)
 		]).then(([entries, totals, cogs]) => {
-			const totalIn = (totals as any[]).find(t => t.type === 'in')?.total || 0;
-			const totalOut = (totals as any[]).find(t => t.type === 'out')?.total || 0;
+			const totalIn = (totals as any[]).find((t) => t.type === 'in')?.total || 0;
+			const totalOut = (totals as any[]).find((t) => t.type === 'out')?.total || 0;
 			const totalCogs = (cogs as any)?.total || 0;
 			const grossProfit = totalIn - totalCogs;
 			nativeDailyData = {
@@ -87,8 +95,9 @@
 		});
 
 		// Expense descriptions
-		powersync.db.getAll("SELECT DISTINCT description FROM cashbook WHERE type = 'out'")
-			.then((rows: any) => nativeExpenseDescriptions = (rows as any[]).map(r => r.description));
+		powersync.db
+			.getAll("SELECT DISTINCT description FROM cashbook WHERE type = 'out'")
+			.then((rows: any) => (nativeExpenseDescriptions = (rows as any[]).map((r) => r.description)));
 
 		// Transactions (if view is 'all')
 		if (data.view === 'all') {
@@ -99,22 +108,34 @@
 			const txOffset = (txPage - 1) * txLimit;
 			let where = 'WHERE 1=1';
 			const params: any[] = [];
-			if (txType === 'in' || txType === 'out') { where += ' AND type = ?'; params.push(txType); }
-			if (txSearch) { where += ' AND description LIKE ?'; params.push(`%${txSearch}%`); }
+			if (txType === 'in' || txType === 'out') {
+				where += ' AND type = ?';
+				params.push(txType);
+			}
+			if (txSearch) {
+				where += ' AND description LIKE ?';
+				params.push(`%${txSearch}%`);
+			}
 
 			Promise.all([
 				powersync.db.get(`SELECT count(*) as count FROM cashbook ${where}`, params),
-				powersync.db.getAll(`
+				powersync.db.getAll(
+					`
 					SELECT id, amount, type, description, created_at as createdAt,
 						COALESCE((SELECT name FROM users WHERE id = user_id), 'System') as userName
 					FROM cashbook ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?
-				`, [...params, txLimit, txOffset])
+				`,
+					[...params, txLimit, txOffset]
+				)
 			]).then(([countRes, txRes]) => {
 				const totalEntries = (countRes as any)?.count ?? 0;
 				nativeTransactionsData = {
 					transactions: txRes,
-					txPage, txTotalPages: Math.max(1, Math.ceil(totalEntries / txLimit)),
-					txTotalEntries: totalEntries, txType, txSearch
+					txPage,
+					txTotalPages: Math.max(1, Math.ceil(totalEntries / txLimit)),
+					txTotalEntries: totalEntries,
+					txType,
+					txSearch
 				};
 			});
 		}
@@ -128,10 +149,13 @@
 
 	async function handleNativeAddExpense(description: string, amount: number) {
 		if (!data.user) return;
-		await powersync.db.execute(`
+		await powersync.db.execute(
+			`
 			INSERT INTO cashbook (id, amount, type, category, description, user_id, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, [crypto.randomUUID(), amount, 'out', 'expense', description, data.user.id, new Date().toISOString().replace('T', ' ').replace('.000Z', '+00')]);
+		`,
+			[generateId(), amount, 'out', 'expense', description, data.user.id, toDbDate(new Date())]
+		);
 		// Reload data
 		loadNativeData();
 	}
@@ -223,7 +247,6 @@
 	<div class="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
 		<div>
 			<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Cashbook</h1>
-			<p class="text-sm text-muted-foreground sm:text-base">Track income and expenses.</p>
 		</div>
 		<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
 			{#if !isAllView}
@@ -255,7 +278,7 @@
 						<ChevronRight class="h-4 w-4" />
 					</Button>
 					{#if !isToday}
-						<Button variant="secondary" size="sm" class="h-9 cursor-pointer" onclick={goToToday}>
+						<Button variant="secondary" size="sm" class="cursor-pointer" onclick={goToToday}>
 							Today
 						</Button>
 					{/if}
@@ -305,7 +328,7 @@
 								{:else}
 									<div class="rounded-lg border bg-card p-3 sm:p-4">
 										<div class="flex items-center justify-between">
-											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+											<span class="text-[10px] font-bold text-muted-foreground uppercase"
 												>Cash In</span
 											>
 											<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
@@ -313,7 +336,7 @@
 											</div>
 										</div>
 										<div
-											class="mt-1.5 text-lg font-bold break-all text-emerald-600 sm:mt-2 sm:text-2xl"
+											class="mt-1.5 text-lg font-black break-all text-emerald-600 sm:mt-2 sm:text-2xl"
 										>
 											{formatCurrency(nativeDailyData.summary.totalIn)}
 										</div>
@@ -321,35 +344,39 @@
 
 									<div class="rounded-lg border bg-card p-3 sm:p-4">
 										<div class="flex items-center justify-between">
-											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+											<span class="text-[10px] font-bold text-muted-foreground uppercase"
 												>Expenses</span
 											>
 											<div class="hidden rounded-md bg-red-500/10 p-1.5 sm:block">
 												<ArrowDownCircle class="h-3.5 w-3.5 text-red-600" />
 											</div>
 										</div>
-										<div class="mt-1.5 text-lg font-bold break-all text-red-600 sm:mt-2 sm:text-2xl">
+										<div
+											class="mt-1.5 text-lg font-black break-all text-red-600 sm:mt-2 sm:text-2xl"
+										>
 											{formatCurrency(nativeDailyData.summary.totalOut)}
 										</div>
 									</div>
 
 									<div class="rounded-lg border bg-card p-3 sm:p-4">
 										<div class="flex items-center justify-between">
-											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+											<span class="text-[10px] font-bold text-muted-foreground uppercase"
 												>Gross Profit</span
 											>
 											<div class="hidden rounded-md bg-blue-500/10 p-1.5 sm:block">
 												<Wallet class="h-3.5 w-3.5 text-blue-600" />
 											</div>
 										</div>
-										<div class="mt-1.5 text-lg font-bold break-all text-blue-600 sm:mt-2 sm:text-2xl">
+										<div
+											class="mt-1.5 text-lg font-black break-all text-blue-600 sm:mt-2 sm:text-2xl"
+										>
 											{formatCurrency(nativeDailyData.summary.grossProfit)}
 										</div>
 									</div>
 
 									<div class="rounded-lg border bg-card p-3 sm:p-4">
 										<div class="flex items-center justify-between">
-											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+											<span class="text-[10px] font-bold text-muted-foreground uppercase"
 												>Net Profit</span
 											>
 											<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
@@ -357,7 +384,7 @@
 											</div>
 										</div>
 										<div
-											class="mt-1.5 text-lg font-bold break-all text-indigo-600 sm:mt-2 sm:text-2xl"
+											class="mt-1.5 text-lg font-black break-all text-indigo-600 sm:mt-2 sm:text-2xl"
 										>
 											{formatCurrency(nativeDailyData.summary.netProfit)}
 										</div>
@@ -374,7 +401,7 @@
 								{:then daily}
 									<div class="rounded-lg border bg-card p-3 sm:p-4">
 										<div class="flex items-center justify-between">
-											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+											<span class="text-[10px] font-bold text-muted-foreground uppercase"
 												>Cash In</span
 											>
 											<div class="hidden rounded-md bg-emerald-500/10 p-1.5 sm:block">
@@ -382,7 +409,7 @@
 											</div>
 										</div>
 										<div
-											class="mt-1.5 text-lg font-bold break-all text-emerald-600 sm:mt-2 sm:text-2xl"
+											class="mt-1.5 text-lg font-black break-all text-emerald-600 sm:mt-2 sm:text-2xl"
 										>
 											{formatCurrency(daily.summary.totalIn)}
 										</div>
@@ -390,35 +417,39 @@
 
 									<div class="rounded-lg border bg-card p-3 sm:p-4">
 										<div class="flex items-center justify-between">
-											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+											<span class="text-[10px] font-bold text-muted-foreground uppercase"
 												>Expenses</span
 											>
 											<div class="hidden rounded-md bg-red-500/10 p-1.5 sm:block">
 												<ArrowDownCircle class="h-3.5 w-3.5 text-red-600" />
 											</div>
 										</div>
-										<div class="mt-1.5 text-lg font-bold break-all text-red-600 sm:mt-2 sm:text-2xl">
+										<div
+											class="mt-1.5 text-lg font-black break-all text-red-600 sm:mt-2 sm:text-2xl"
+										>
 											{formatCurrency(daily.summary.totalOut)}
 										</div>
 									</div>
 
 									<div class="rounded-lg border bg-card p-3 sm:p-4">
 										<div class="flex items-center justify-between">
-											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+											<span class="text-[10px] font-bold text-muted-foreground uppercase"
 												>Gross Profit</span
 											>
 											<div class="hidden rounded-md bg-blue-500/10 p-1.5 sm:block">
 												<Wallet class="h-3.5 w-3.5 text-blue-600" />
 											</div>
 										</div>
-										<div class="mt-1.5 text-lg font-bold break-all text-blue-600 sm:mt-2 sm:text-2xl">
+										<div
+											class="mt-1.5 text-lg font-black break-all text-blue-600 sm:mt-2 sm:text-2xl"
+										>
 											{formatCurrency(daily.summary.grossProfit)}
 										</div>
 									</div>
 
 									<div class="rounded-lg border bg-card p-3 sm:p-4">
 										<div class="flex items-center justify-between">
-											<span class="text-[11px] font-medium text-muted-foreground sm:text-xs"
+											<span class="text-[10px] font-bold text-muted-foreground uppercase"
 												>Net Profit</span
 											>
 											<div class="hidden rounded-md bg-indigo-500/10 p-1.5 sm:block">
@@ -426,7 +457,7 @@
 											</div>
 										</div>
 										<div
-											class="mt-1.5 text-lg font-bold break-all text-indigo-600 sm:mt-2 sm:text-2xl"
+											class="mt-1.5 text-lg font-black break-all text-indigo-600 sm:mt-2 sm:text-2xl"
 										>
 											{formatCurrency(daily.summary.netProfit)}
 										</div>
@@ -440,7 +471,6 @@
 							<Card.Root class="lg:col-span-1">
 								<Card.Header>
 									<Card.Title>Add Expense</Card.Title>
-									<Card.Description>Record a new cash outflow.</Card.Description>
 								</Card.Header>
 								<Card.Content>
 									{#if isNative}
@@ -540,10 +570,9 @@
 							</Card.Root>
 
 							<!-- Entries Table -->
-							<Card.Root class="min-w-0 lg:col-span-2">
+							<Card.Root class="min-w-0 pb-0 lg:col-span-2">
 								<Card.Header>
-									<Card.Title>Entries</Card.Title>
-									<Card.Description>Transactions for {formatDate(data.date)}</Card.Description>
+									<Card.Title>Today's Entries</Card.Title>
 								</Card.Header>
 								<Card.Content class="p-0">
 									{#if isNative}
@@ -661,10 +690,9 @@
 					</div>
 				{:else}
 					<!-- All Transactions View -->
-					<Card.Root class="min-w-0">
+					<Card.Root class="min-w-0 pb-0">
 						<Card.Header>
 							<Card.Title>All Transactions</Card.Title>
-							<Card.Description>Browse and filter all entries.</Card.Description>
 						</Card.Header>
 						<Card.Content class="p-0">
 							<div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -675,14 +703,14 @@
 									<Input
 										id="tx-search"
 										type="text"
-										placeholder="Search..."
+										placeholder="Search…"
 										class="h-9 pr-9 pl-10"
 										bind:value={txSearchInput}
 									/>
 									{#if txSearchInput}<button
 											onclick={() => (txSearchInput = '')}
 											class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
-											><X class="h-4 w-4" /></button
+											aria-label="Clear search"><X class="h-4 w-4" /></button
 										>{/if}
 								</div>
 								<div class="flex items-center gap-2">
@@ -775,7 +803,10 @@
 													size="icon"
 													disabled={td.txPage <= 1}
 													aria-label="Previous page"
-													onclick={() => { nativeTransactionsData = null; loadNativeData(); }}
+													onclick={() => {
+														nativeTransactionsData = null;
+														loadNativeData();
+													}}
 													class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
 												>
 												<Button
@@ -783,7 +814,10 @@
 													size="icon"
 													disabled={td.txPage >= td.txTotalPages}
 													aria-label="Next page"
-													onclick={() => { nativeTransactionsData = null; loadNativeData(); }}
+													onclick={() => {
+														nativeTransactionsData = null;
+														loadNativeData();
+													}}
 													class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
 												>
 											</div>
@@ -817,7 +851,8 @@
 														<Table.Cell
 															><Badge
 																variant={tx.type === 'in' ? 'secondary' : 'destructive'}
-																class="capitalize">{tx.type === 'in' ? 'Cash In' : 'Cash Out'}</Badge
+																class="capitalize"
+																>{tx.type === 'in' ? 'Cash In' : 'Cash Out'}</Badge
 															></Table.Cell
 														>
 														<Table.Cell class="text-xs text-muted-foreground"

@@ -362,7 +362,7 @@
 						<Textarea
 							id="return_policy"
 							name="return_policy"
-							placeholder="e.g. Items can be returned within 7 days with original receipt..."
+							placeholder="e.g. Items can be returned within 7 days with original receipt…"
 							class="min-h-[90px]"
 							bind:value={previewData.return_policy}
 							readonly={!isEditing}
@@ -374,7 +374,7 @@
 						<Textarea
 							id="exchange_policy"
 							name="exchange_policy"
-							placeholder="e.g. Exchanges accepted within 14 days with original tag..."
+							placeholder="e.g. Exchanges accepted within 14 days with original tag…"
 							class="min-h-[90px]"
 							bind:value={previewData.exchange_policy}
 							readonly={!isEditing}
@@ -387,7 +387,7 @@
 					<Textarea
 						id="terms_conditions"
 						name="terms_conditions"
-						placeholder="Any terms and conditions to print on receipts..."
+						placeholder="Any terms and conditions to print on receipts…"
 						class="min-h-[80px]"
 						bind:value={previewData.terms_conditions}
 						readonly={!isEditing}
@@ -455,7 +455,7 @@
 						>
 							{#if loading}
 								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-								Saving...
+								Saving…
 							{:else}
 								Save Profile
 							{/if}

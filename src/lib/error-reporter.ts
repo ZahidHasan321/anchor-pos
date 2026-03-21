@@ -4,11 +4,7 @@
  * Only captures uncaught errors and unhandled promise rejections.
  */
 
-const isCapacitor = typeof window !== 'undefined' &&
-	'Capacitor' in window &&
-	(window as any).Capacitor?.isNativePlatform?.() === true;
-
-const API_BASE = isCapacitor ? 'https://anchorshop.cloud' : '';
+const API_BASE = '';
 const FLUSH_INTERVAL = 10_000; // 10s
 const MAX_QUEUE = 50;
 
@@ -25,7 +21,6 @@ let queue: ErrorEntry[] = [];
 let flushTimer: ReturnType<typeof setInterval> | null = null;
 
 function getPlatform(): string {
-	if (isCapacitor) return 'capacitor';
 	if (typeof window !== 'undefined' && 'electron' in window) return 'electron';
 	return 'web';
 }
@@ -86,12 +81,17 @@ export function initErrorReporter() {
 	console.error = (...args: any[]) => {
 		originalConsoleError.apply(console, args);
 
-		const message = args.map((a) =>
-			a instanceof Error ? a.message : typeof a === 'string' ? a : JSON.stringify(a)
-		).join(' ');
+		const message = args
+			.map((a) => (a instanceof Error ? a.message : typeof a === 'string' ? a : JSON.stringify(a)))
+			.join(' ');
 
 		// Only capture actual errors, not debug noise
-		if (message.includes('Error') || message.includes('error') || message.includes('fail') || message.includes('500')) {
+		if (
+			message.includes('Error') ||
+			message.includes('error') ||
+			message.includes('fail') ||
+			message.includes('500')
+		) {
 			enqueue({
 				timestamp: new Date().toISOString(),
 				message: message.slice(0, 2000),

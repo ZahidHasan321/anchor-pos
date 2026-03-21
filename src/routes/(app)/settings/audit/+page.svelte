@@ -3,19 +3,22 @@
 	import * as Table from '$lib/components/ui/table';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import {
-		ShieldCheck,
-		ShieldAlert,
-		User,
-		ChevronLeft,
-		ChevronRight
-	} from '@lucide/svelte';
+	import { ShieldCheck, ShieldAlert, User, ChevronLeft, ChevronRight } from '@lucide/svelte';
 	import { formatDateTime } from '$lib/format';
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import { goto } from '$app/navigation';
+	import { enhance } from '$app/forms';
+	import { Loader2 } from '@lucide/svelte';
 
-	let { data } = $props();
+	let { data, form } = $props();
+	let verifying = $state(false);
+	const integrity = $derived(form?.integrity ?? null);
+
+	let cachedStreamed = $state<any>(null);
+	$effect(() => {
+		data.streamed.then((result: any) => { cachedStreamed = result; });
+	});
 
 	function goToPage(pageNum: number) {
 		const params = new URLSearchParams(page.url.searchParams);
@@ -27,24 +30,32 @@
 <div class="space-y-6">
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<h2 class="text-xl font-bold tracking-tight">Audit Log</h2>
-		<div class="flex items-center gap-2 self-start rounded-full border px-4 py-1.5 sm:self-auto">
-			{#await data.streamed}
-				<Skeleton class="h-4 w-32" />
-			{:then streamed}
-				{#if streamed.integrity.valid}
-					<ShieldCheck class="h-4 w-4 text-emerald-500" />
-					<span class="text-xs font-medium text-emerald-500">Chain Verified: Valid</span>
-				{:else}
-					<ShieldAlert class="h-4 w-4 text-destructive" />
-					<span class="text-xs font-medium text-destructive"
-						>Chain Corrupted at #{streamed.integrity.brokenAt}</span
-					>
-				{/if}
-			{/await}
+		<div class="flex items-center gap-2 self-start sm:self-auto">
+			{#if integrity}
+				<div class="flex items-center gap-2 rounded-full border px-4 py-1.5">
+					{#if integrity.valid}
+						<ShieldCheck class="h-4 w-4 text-emerald-500" />
+						<span class="text-xs font-medium text-emerald-500">Chain Verified: Valid ({integrity.total} entries)</span>
+					{:else}
+						<ShieldAlert class="h-4 w-4 text-destructive" />
+						<span class="text-xs font-medium text-destructive">Chain Corrupted at #{integrity.brokenAt}</span>
+					{/if}
+				</div>
+			{/if}
+			<form method="POST" action="?/verify" use:enhance={() => { verifying = true; return async ({ update }) => { verifying = false; await update(); }; }}>
+				<Button type="submit" variant="outline" size="sm" disabled={verifying}>
+					{#if verifying}
+						<Loader2 class="mr-1 h-3 w-3 animate-spin" />
+					{:else}
+						<ShieldCheck class="mr-1 h-3 w-3" />
+					{/if}
+					Verify Chain
+				</Button>
+			</form>
 		</div>
 	</div>
 
-	<Card.Root>
+	<Card.Root class="py-0">
 		<Card.Content class="p-0">
 			<Table.Root>
 				<Table.Header>
@@ -58,14 +69,14 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#await data.streamed}
+					{#if !cachedStreamed}
 						{#each Array(10) as _}
 							<Table.Row>
 								{#each Array(6) as _}<Table.Cell><Skeleton class="h-8 w-full" /></Table.Cell>{/each}
 							</Table.Row>
 						{/each}
-					{:then streamed}
-						{#each streamed.logs as log}
+					{:else}
+						{#each cachedStreamed.logs as log}
 							<Table.Row>
 								<Table.Cell class="pl-6 text-xs whitespace-nowrap"
 									>{formatDateTime(log.createdAt)}</Table.Cell
@@ -85,26 +96,27 @@
 								<Table.Cell class="text-xs text-muted-foreground">{log.entity}</Table.Cell>
 								<Table.Cell class="max-w-md truncate text-xs">{log.details}</Table.Cell>
 								<Table.Cell class="pr-6 font-mono text-[9px] text-muted-foreground"
-									>{log.hash.substring(0, 10)}...</Table.Cell
+									>{log.hash.substring(0, 10)}…</Table.Cell
 								>
 							</Table.Row>
 						{/each}
-						{#if streamed.logs.length === 0}
+						{#if cachedStreamed.logs.length === 0}
 							<Table.Row
 								><Table.Cell colspan={6} class="h-48 text-center text-muted-foreground italic"
 									>No audit entries found.</Table.Cell
 								></Table.Row
 							>
 						{/if}
-					{/await}
+					{/if}
 				</Table.Body>
 			</Table.Root>
 		</Card.Content>
 		<Card.Footer class="border-t p-4">
-			{#await data.streamed then streamed}
+			{#if cachedStreamed}
+				{@const streamed = cachedStreamed}
 				<div class="flex w-full items-center justify-between">
-					<p class="text-sm text-muted-foreground">
-						Showing {streamed.logs.length} of {streamed.pagination.totalLogs} entries
+					<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+						{streamed.logs.length} of {streamed.pagination.totalLogs} Entries
 					</p>
 					{#if streamed.pagination.totalPages > 1}
 						<div class="flex gap-1">
@@ -116,6 +128,11 @@
 								onclick={() => goToPage(streamed.pagination.currentPage - 1)}
 								class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
 							>
+							<div
+								class="flex h-8 items-center rounded-md border bg-muted/30 px-3 text-[10px] font-bold"
+							>
+								{streamed.pagination.currentPage} / {streamed.pagination.totalPages}
+							</div>
 							<Button
 								variant="outline"
 								size="icon"
@@ -127,7 +144,7 @@
 						</div>
 					{/if}
 				</div>
-			{/await}
+			{/if}
 		</Card.Footer>
 	</Card.Root>
 </div>

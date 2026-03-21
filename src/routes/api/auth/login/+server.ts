@@ -6,14 +6,12 @@ import { verifyPassword } from '$lib/server/auth';
 import { rateLimit, getClientIp } from '$lib/server/rate-limit';
 import type { RequestHandler } from './$types';
 
-const ALLOWED_ORIGINS = [
-	'https://anchorshop.cloud',
-	'app://-'
-];
+const ALLOWED_ORIGINS = ['https://anchorshop.cloud', 'app://-'];
 
 function getCorsHeaders(request: Request): Record<string, string> {
 	const origin = request.headers.get('origin') || '';
-	const isAllowed = ALLOWED_ORIGINS.includes(origin) ||
+	const isAllowed =
+		ALLOWED_ORIGINS.includes(origin) ||
 		origin.startsWith('http://localhost') ||
 		origin.startsWith('http://127.0.0.1');
 	return {
@@ -34,10 +32,13 @@ export const POST: RequestHandler = async ({ request }) => {
 	const ip = getClientIp(request);
 	const limit = rateLimit(`login:${ip}`, { maxRequests: 5, windowMs: 60_000 });
 	if (!limit.allowed) {
-		return json({ error: 'Too many login attempts. Please try again later.' }, {
-			status: 429,
-			headers: { ...headers, 'Retry-After': String(Math.ceil(limit.retryAfterMs / 1000)) }
-		});
+		return json(
+			{ error: 'Too many login attempts. Please try again later.' },
+			{
+				status: 429,
+				headers: { ...headers, 'Retry-After': String(Math.ceil(limit.retryAfterMs / 1000)) }
+			}
+		);
 	}
 
 	try {

@@ -34,7 +34,9 @@
 					<Calendar.GridHead>
 						<Calendar.GridRow class="mb-1 flex w-full justify-between">
 							{#each weekdays as day}
-								<Calendar.HeadCell class="w-9 text-[10px] font-black text-muted-foreground uppercase">
+								<Calendar.HeadCell
+									class="w-9 text-[10px] font-black text-muted-foreground uppercase"
+								>
 									{day.slice(0, 2)}
 								</Calendar.HeadCell>
 							{/each}

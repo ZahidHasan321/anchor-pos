@@ -1,8 +1,7 @@
 name: Build and Deploy
 
 # Triggered when code lands on main (merge from dev) or manually.
-# Flow: bump patch version → tag → build Electron → deploy web → deploy Electron → GitHub Release
-# Capacitor/Android: still built locally via build-android.sh (needs Android SDK + keystore)
+# Flow: bump version → tag → build Electron + deploy web (parallel) → deploy Electron to VPS → GitHub Release
 
 on:
   push:
@@ -148,9 +147,10 @@ jobs:
           retention-days: 14
 
   # ── Deploy Electron artifacts to VPS + create GitHub Release ────────────────
+  # Runs AFTER deploy-web so the VPS downloads/ dir and nginx are ready
   deploy-electron:
     name: Deploy Electron to VPS
-    needs: [version, build-electron]
+    needs: [version, build-electron, deploy-web]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -168,6 +168,12 @@ jobs:
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vps_key
           echo "StrictHostKeyChecking no" >> ~/.ssh/config
 
+      - name: Ensure downloads dir exists on VPS
+        run: |
+          ssh -i ~/.ssh/vps_key -o ConnectTimeout=10 \
+            root@${{ secrets.VPS_HOST }} \
+            "mkdir -p /root/anchor-pos/downloads"
+
       - name: Upload to VPS downloads/
         run: |
           scp -i ~/.ssh/vps_key \
@@ -175,6 +181,12 @@ jobs:
             dist-electron/*.blockmap \
             dist-electron/latest.yml \
             root@${{ secrets.VPS_HOST }}:/root/anchor-pos/downloads/
+
+      - name: Reload nginx to clear any cached responses
+        run: |
+          ssh -i ~/.ssh/vps_key -o ConnectTimeout=10 \
+            root@${{ secrets.VPS_HOST }} \
+            "docker exec pos_nginx nginx -s reload"
 
       - name: Create GitHub Release
         env:
@@ -189,7 +201,7 @@ jobs:
             dist-electron/latest.yml
 
   # ── Web Deploy (VPS) ─────────────────────────────────────────────────────────
-  # Runs in parallel with the Electron build — no dependency between them.
+  # Runs in parallel with Electron build; deploy-electron waits for this to finish.
   deploy-web:
     name: Deploy Web to VPS
     needs: version

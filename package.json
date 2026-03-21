@@ -29,10 +29,7 @@
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
 		"db:reset-data": "pnpm tsx src/lib/server/db/reset-data.ts",
-		"db:bootstrap": "pnpm tsx scripts/bootstrap-admin.ts",
-		"cap:sync": "npx cap sync android",
-		"cap:open": "npx cap open android",
-		"build:android": "rm -rf build android/app/src/main/assets/public && cross-env BUILD_TARGET=capacitor VITE_BUILD_TARGET=capacitor pnpm run build && rm -rf build/client/uploads && npx cap sync android && find android/app/src/main/assets/public -name \"*.gz\" -delete"
+		"db:bootstrap": "pnpm tsx scripts/bootstrap-admin.ts"
 	},
 	"build": {
 		"npmRebuild": true,
@@ -66,7 +63,7 @@
 			"node_modules/**/*",
 			"build/**/*"
 		],
-		"extraFiles": [
+		"extraResources": [
 			{
 				"from": ".env",
 				"to": ".env"
@@ -101,7 +98,6 @@
 		"@lucide/svelte": "^0.561.0",
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/adapter-node": "^5.5.3",
-		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.50.2",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
 		"@tailwindcss/forms": "^0.5.11",
@@ -140,15 +136,11 @@
 		"vite-plugin-compression": "^0.5.1"
 	},
 	"dependencies": {
-		"@capacitor/android": "^8.2.0",
-		"@capacitor/cli": "^8.2.0",
-		"@capacitor/core": "^8.2.0",
 		"@oslojs/crypto": "^1.0.1",
 		"@oslojs/encoding": "^1.1.0",
 		"@powersync/common": "^1.49.0",
 		"@powersync/web": "^1.36.0",
 		"bson": "^7.2.0",
-		"capacitor-thermal-printer": "^0.2.5",
 		"chart.js": "^4.5.1",
 		"crypto-js": "^4.2.0",
 		"dotenv": "^17.3.1",

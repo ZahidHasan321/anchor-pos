@@ -34,7 +34,13 @@
 
 <div class="space-y-6 p-3 sm:p-6">
 	<div class="flex items-center gap-4">
-		<Button variant="outline" size="icon" href="/settings/users" class="cursor-pointer" aria-label="Back to users">
+		<Button
+			variant="outline"
+			size="icon"
+			href="/settings/users"
+			class="cursor-pointer"
+			aria-label="Back to users"
+		>
 			<ChevronLeft class="h-4 w-4" />
 		</Button>
 		<div>

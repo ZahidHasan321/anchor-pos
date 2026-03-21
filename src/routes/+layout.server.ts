@@ -5,9 +5,8 @@ import env from '$lib/server/env';
 import pkg from '../../package.json';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
-
-	// In Electron/Capacitor mode, settings are loaded client-side from PowerSync
-	if (env.IS_ELECTRON || env.IS_CAPACITOR) {
+	// In Electron mode, settings are loaded client-side from PowerSync
+	if (env.IS_ELECTRON) {
 		return { user: locals.user, storeSettings: {}, version: pkg.version };
 	}
 

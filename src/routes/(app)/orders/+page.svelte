@@ -7,17 +7,26 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import DatePicker from '$lib/components/ui/DatePicker.svelte';
-	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select';
-	import { Separator } from '$lib/components/ui/separator';
 	import * as Table from '$lib/components/ui/table';
 	import { formatCurrency, formatDate } from '$lib/format';
-	import { ChevronLeft, ChevronRight, Search, X } from '@lucide/svelte';
+	import { ChevronLeft, ChevronRight, Search, X, ShoppingBag } from '@lucide/svelte';
 	import { powersync } from '$lib/powersync.svelte';
-	import { browser } from '$app/environment';
+	import { isNative } from '$lib/electron-data.svelte';
 
 	let { data } = $props();
-	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
+
+	// Cache last streamed result so we don't flash skeletons on every filter/pagination
+	let cachedStreamed = $state<any>(null);
+	let isLoading = $state(false);
+
+	$effect(() => {
+		isLoading = true;
+		data.streamed.then((result: any) => {
+			cachedStreamed = result;
+			isLoading = false;
+		});
+	});
 
 	// Electron: client-side PowerSync data
 	let nativeOrders = $state<any[]>([]);
@@ -31,11 +40,21 @@
 		let where = 'WHERE 1=1';
 		const params: any[] = [];
 
-		if (dateFrom) { where += ' AND o.created_at >= ?'; params.push(dateFrom + ' 00:00:00'); }
-		if (dateTo) { where += ' AND o.created_at <= ?'; params.push(dateTo + ' 23:59:59'); }
-		if (statusFilter) { where += ' AND o.status = ?'; params.push(statusFilter); }
+		if (dateFrom) {
+			where += ' AND o.created_at >= ?';
+			params.push(dateFrom + ' 00:00:00');
+		}
+		if (dateTo) {
+			where += ' AND o.created_at <= ?';
+			params.push(dateTo + ' 23:59:59');
+		}
+		if (statusFilter) {
+			where += ' AND o.status = ?';
+			params.push(statusFilter);
+		}
 		if (searchQuery) {
-			where += ' AND (o.id LIKE ? OR CAST(o.order_number AS TEXT) LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)';
+			where +=
+				' AND (o.id LIKE ? OR CAST(o.order_number AS TEXT) LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)';
 			const p = `%${searchQuery}%`;
 			params.push(p, p, p, p);
 		}
@@ -43,8 +62,12 @@
 		try {
 			// 1. Get synced orders from PowerSync tables
 			const [countResult, syncedOrders] = await Promise.all([
-				powersync.db.get(`SELECT count(*) as count FROM orders o LEFT JOIN customers c ON o.customer_id = c.id ${where}`, params),
-				powersync.db.getAll(`
+				powersync.db.get(
+					`SELECT count(*) as count FROM orders o LEFT JOIN customers c ON o.customer_id = c.id ${where}`,
+					params
+				),
+				powersync.db.getAll(
+					`
 					SELECT o.id, o.order_number as orderNumber, o.total_amount as totalAmount,
 						o.status, o.payment_method as paymentMethod, o.created_at as createdAt,
 						c.name as customerName, u.name as userName
@@ -53,7 +76,9 @@
 					LEFT JOIN users u ON o.user_id = u.id
 					${where}
 					ORDER BY o.created_at DESC LIMIT ? OFFSET ?
-				`, [...params, perPage, offset])
+				`,
+					[...params, perPage, offset]
+				)
 			]);
 
 			// 2. Get PENDING mutations from PowerSync's internal upload queue
@@ -61,18 +86,21 @@
 			let pendingOrders: any[] = [];
 			try {
 				const uploadQueue = await powersync.getUploadQueue();
-				const pending = uploadQueue?.filter((m: any) => m.table === 'orders' && (m.op === 'PUT' || m.op === 'PATCH')) || [];
-				
+				const pending =
+					uploadQueue?.filter(
+						(m: any) => m.table === 'orders' && (m.op === 'PUT' || m.op === 'PATCH')
+					) || [];
+
 				pendingOrders = pending.map((m: any) => {
 					const data = m.data;
 					return {
 						id: data.id || m.id,
 						orderNumber: data.order_number || null,
 						totalAmount: data.total_amount,
-						status: 'syncing...',
+						status: 'syncing…',
 						paymentMethod: data.payment_method,
 						createdAt: data.created_at,
-						customerName: 'Pending...',
+						customerName: 'Pending…',
 						userName: data.user_id === data.user?.id ? data.user?.name : 'Local User'
 					};
 				});
@@ -82,9 +110,8 @@
 
 			// 3. Merge and deduplicate (pending only on page 1, synced take priority)
 			const syncedIds = new Set(syncedOrders.map((o: any) => o.id));
-			const uniquePending = currentPageNum === 1
-				? pendingOrders.filter((o: any) => !syncedIds.has(o.id))
-				: [];
+			const uniquePending =
+				currentPageNum === 1 ? pendingOrders.filter((o: any) => !syncedIds.has(o.id)) : [];
 
 			const merged = [...uniquePending, ...syncedOrders];
 
@@ -93,7 +120,12 @@
 
 			const total = (countResult as any)?.count ?? 0;
 			nativeOrders = merged.slice(0, perPage);
-			nativePagination = { currentPage: currentPageNum, totalPages: Math.ceil((total + pendingOrders.length) / perPage), totalOrders: total + pendingOrders.length, perPage };
+			nativePagination = {
+				currentPage: currentPageNum,
+				totalPages: Math.ceil((total + pendingOrders.length) / perPage),
+				totalOrders: total + pendingOrders.length,
+				perPage
+			};
 		} catch (e) {
 			console.error('[Orders] Load failed:', e);
 		}
@@ -185,35 +217,44 @@
 		dateFrom === formatDateStr(new Date()) && dateTo === formatDateStr(new Date())
 	);
 	const isThisWeek = $derived(
-		dateFrom === formatDateStr(new Date(new Date().setDate(new Date().getDate() - new Date().getDay()))) && 
-		dateTo === formatDateStr(new Date())
+		dateFrom ===
+			formatDateStr(new Date(new Date().setDate(new Date().getDate() - new Date().getDay()))) &&
+			dateTo === formatDateStr(new Date())
 	);
 	const isThisMonth = $derived(
-		dateFrom === formatDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) && 
-		dateTo === formatDateStr(new Date())
+		dateFrom === formatDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) &&
+			dateTo === formatDateStr(new Date())
 	);
+	const hasFilters = $derived(!!(dateFrom || dateTo || statusFilter || searchQuery));
 </script>
 
 {#snippet orderCard(order: any)}
 	<div
 		role="button"
 		tabindex="0"
-		class="relative rounded-lg border bg-card p-4 text-card-foreground shadow-sm transition-colors hover:bg-muted/50 cursor-pointer"
+		class="relative cursor-pointer rounded-lg border bg-card p-4 text-card-foreground shadow-sm transition-colors hover:bg-muted/50"
 		onclick={() => goto(`/orders/${order.id}`)}
 		onkeydown={(e) => e.key === 'Enter' && goto(`/orders/${order.id}`)}
 	>
 		<div class="mb-3 flex items-start justify-between">
 			<div class="space-y-1">
-				<div class="font-bold text-sm tracking-tight">#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}</div>
+				<div class="text-sm font-bold tracking-tight">
+					#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
+				</div>
 				<div class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
 					<span>{formatDate(order.createdAt)}</span>
 					<span class="h-1 w-1 rounded-full bg-muted-foreground/30"></span>
-					<span>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+					<span
+						>{new Date(order.createdAt).toLocaleTimeString([], {
+							hour: '2-digit',
+							minute: '2-digit'
+						})}</span
+					>
 				</div>
 			</div>
 			<Badge
 				variant={order.status === 'completed' ? 'secondary' : 'destructive'}
-				class="h-5 px-2 text-[9px] font-bold uppercase tracking-wider"
+				class="h-5 px-2 text-[9px] font-bold tracking-wider uppercase"
 			>
 				{order.status}
 			</Badge>
@@ -222,7 +263,8 @@
 			<div class="space-y-0.5">
 				<div class="text-xs font-semibold">{order.customerName ?? 'Walk-in'}</div>
 				<div class="text-[10px] text-muted-foreground capitalize">
-					{order.paymentMethod} <span class="mx-1 opacity-30">|</span> {order.userName}
+					{order.paymentMethod} <span class="mx-1 opacity-30">|</span>
+					{order.userName}
 				</div>
 			</div>
 			<div class="text-base font-black tracking-tight text-primary">
@@ -234,341 +276,238 @@
 
 <svelte:head><title>Order History — Clothing POS</title></svelte:head>
 
-<div class="space-y-6 p-4 sm:p-6">
-	<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-		<div>
-			<h1 class="text-2xl font-black tracking-tight sm:text-3xl">Order History</h1>
-			<p class="text-xs text-muted-foreground sm:text-sm">Manage and view your store's orders.</p>
-		</div>
-		<div class="relative w-full lg:w-96">
-			<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-			<Input
-				type="text"
-				placeholder="Search order #, customer, phone..."
-				class="h-11 border-primary/20 bg-muted/20 pr-10 pl-10 focus-visible:ring-primary/30"
-				bind:value={searchQuery}
-				oninput={handleSearchInput}
-			/>
-			{#if searchQuery}
-				<button
-					onclick={() => (searchQuery = '', applyFilters())}
-					class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+<div class="space-y-4 p-4 sm:space-y-5 sm:p-6">
+	<div>
+		<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Order History</h1>
+	</div>
+
+	<!-- Unified Filter Bar -->
+	<div class="space-y-3">
+		<!-- Row 1: Search + Status + Clear -->
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+			<div class="relative flex-1">
+				<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+				<Input
+					type="text"
+					placeholder="Search order #, customer, phone…"
+					class="pl-10"
+					bind:value={searchQuery}
+					oninput={handleSearchInput}
+				/>
+				{#if searchQuery}
+					<button
+						onclick={() => ((searchQuery = ''), applyFilters())}
+						class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						aria-label="Clear search"
+					>
+						<X class="h-3.5 w-3.5" />
+					</button>
+				{/if}
+			</div>
+			<div class="flex items-center gap-2">
+				<Select.Root
+					type="single"
+					bind:value={statusFilter}
+					onValueChange={(v) => { statusFilter = v; applyFilters(); }}
 				>
-					<X class="h-4 w-4" />
-				</button>
+					<Select.Trigger class="w-full text-xs sm:w-36 capitalize">
+						{statusFilter || 'All Status'}
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Item value="" class="text-xs">All Status</Select.Item>
+						<Select.Item value="completed" class="text-xs">Completed</Select.Item>
+						<Select.Item value="refunded" class="text-xs">Refunded</Select.Item>
+						<Select.Item value="void" class="text-xs">Void</Select.Item>
+					</Select.Content>
+				</Select.Root>
+				{#if hasFilters}
+					<Button
+						variant="ghost"
+						size="sm"
+						onclick={clearFilters}
+						class="shrink-0 cursor-pointer text-xs text-muted-foreground hover:text-destructive"
+					>
+						<X class="mr-1 h-3.5 w-3.5" /> Reset
+					</Button>
+				{/if}
+			</div>
+		</div>
+
+		<!-- Row 2: Date presets + custom range -->
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+			<div class="flex items-center gap-1.5">
+				<Button
+					variant={isToday ? 'default' : 'outline'}
+					size="sm"
+					onclick={setToday}
+					class="cursor-pointer text-xs">Today</Button
+				>
+				<Button
+					variant={isThisWeek ? 'default' : 'outline'}
+					size="sm"
+					onclick={setThisWeek}
+					class="cursor-pointer text-xs">This Week</Button
+				>
+				<Button
+					variant={isThisMonth ? 'default' : 'outline'}
+					size="sm"
+					onclick={setThisMonth}
+					class="cursor-pointer text-xs">This Month</Button
+				>
+			</div>
+			<div class="flex items-center gap-2">
+				<DatePicker bind:value={dateFrom} onchange={applyFilters} class="min-w-0 flex-1 sm:w-36 sm:flex-none" />
+				<span class="shrink-0 text-[10px] font-bold text-muted-foreground/40 uppercase">to</span>
+				<DatePicker bind:value={dateTo} onchange={applyFilters} class="min-w-0 flex-1 sm:w-36 sm:flex-none" />
+			</div>
+		</div>
+	</div>
+
+	{#snippet orderTable(orders: any[])}
+		<Table.Root>
+			<Table.Header>
+				<Table.Row>
+					<Table.Head class="w-[100px] pl-4">Order #</Table.Head>
+					<Table.Head>Date</Table.Head>
+					<Table.Head>Customer</Table.Head>
+					<Table.Head>Payment</Table.Head>
+					<Table.Head class="text-right">Amount</Table.Head>
+					<Table.Head class="pr-4 text-right">Status</Table.Head>
+				</Table.Row>
+			</Table.Header>
+			<Table.Body>
+				{#each orders as order}
+					<Table.Row
+						class="group cursor-pointer"
+						onclick={() => goto(`/orders/${order.id}`)}
+					>
+						<Table.Cell class="pl-4 font-bold tabular-nums text-primary">
+							#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
+						</Table.Cell>
+						<Table.Cell>
+							<span class="text-sm">{new Date(order.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dhaka' })}</span>
+						</Table.Cell>
+						<Table.Cell>
+							<div>
+								<span class="text-sm font-medium">{order.customerName ?? 'Walk-in'}</span>
+								{#if order.userName}
+									<span class="ml-1.5 text-[10px] text-muted-foreground">by {order.userName}</span>
+								{/if}
+							</div>
+						</Table.Cell>
+						<Table.Cell class="text-xs capitalize">{order.paymentMethod}</Table.Cell>
+						<Table.Cell class="text-right font-bold tabular-nums">{formatCurrency(order.totalAmount)}</Table.Cell>
+						<Table.Cell class="pr-4 text-right">
+							<Badge
+								variant={order.status === 'completed' ? 'secondary' : 'destructive'}
+								class="text-[10px] font-bold tracking-wider uppercase"
+							>
+								{order.status}
+							</Badge>
+						</Table.Cell>
+					</Table.Row>
+				{/each}
+			</Table.Body>
+		</Table.Root>
+	{/snippet}
+
+	{#snippet emptyOrders()}
+		<div class="flex flex-col items-center justify-center py-16 text-center sm:col-span-2">
+			<div class="mb-2 rounded-full bg-muted p-3">
+				<ShoppingBag class="h-5 w-5 text-muted-foreground/40" />
+			</div>
+			<p class="text-sm font-medium text-muted-foreground">No orders found</p>
+			{#if hasFilters}
+				<p class="mt-1 text-xs text-muted-foreground/60">Try adjusting your filters</p>
+			{:else}
+				<p class="mt-1 text-xs text-muted-foreground/60">Orders will appear here after the first sale</p>
 			{/if}
 		</div>
-	</div>
+	{/snippet}
 
-	<!-- Filters -->
-	<Card.Root class="border-primary/10 shadow-sm overflow-hidden">
-		<Card.Content class="p-0">
-			<div class="flex flex-col lg:flex-row lg:items-stretch">
-				<!-- Presets & Date Range -->
-				<div class="flex-1 space-y-4 border-b p-4 lg:border-b-0 lg:border-r">
-					<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-						<div class="space-y-3 flex-1">
-							<Label class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Presets</Label>
-							<div class="flex flex-wrap gap-2">
-								<Button
-									variant={isToday ? 'default' : 'outline'}
-									size="sm"
-									onclick={setToday}
-									class="h-9 px-4 text-xs cursor-pointer">Today</Button
-								>
-								<Button
-									variant={isThisWeek ? 'default' : 'outline'}
-									size="sm"
-									onclick={setThisWeek}
-									class="h-9 px-4 text-xs cursor-pointer">This Week</Button
-								>
-								<Button
-									variant={isThisMonth ? 'default' : 'outline'}
-									size="sm"
-									onclick={setThisMonth}
-									class="h-9 px-4 text-xs cursor-pointer">This Month</Button
-								>
-							</div>
-						</div>
-
-						<div class="space-y-3">
-							<Label class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Custom Range</Label>
-							<div class="flex items-center gap-2">
-								<DatePicker
-									bind:value={dateFrom}
-									onchange={applyFilters}
-									class="min-w-0 flex-1"
-								/>
-								<span class="shrink-0 text-[10px] font-bold text-muted-foreground/50 uppercase">to</span>
-								<DatePicker
-									bind:value={dateTo}
-									onchange={applyFilters}
-									class="min-w-0 flex-1"
-								/>
-							</div>
-						</div>
+	{#snippet pagination(itemCount: number, pag: any)}
+		{#if pag.totalPages > 1 || itemCount > 0}
+			<div class="flex items-center justify-between border-t px-4 py-3">
+				<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+					{itemCount} of {pag.totalOrders} orders
+				</p>
+				{#if pag.totalPages > 1}
+					<div class="flex items-center gap-1">
+						<Button
+							variant="outline"
+							size="icon-sm"
+							aria-label="Previous page"
+							disabled={pag.currentPage <= 1}
+							onclick={() => goToPage(pag.currentPage - 1)}
+						><ChevronLeft class="h-4 w-4" /></Button>
+						<span class="min-w-[4rem] text-center text-xs tabular-nums text-muted-foreground">
+							{pag.currentPage} / {pag.totalPages}
+						</span>
+						<Button
+							variant="outline"
+							size="icon-sm"
+							aria-label="Next page"
+							disabled={pag.currentPage >= pag.totalPages}
+							onclick={() => goToPage(pag.currentPage + 1)}
+						><ChevronRight class="h-4 w-4" /></Button>
 					</div>
-				</div>
-
-				<!-- Status & Clear Section -->
-				<div class="flex items-end gap-3 bg-muted/5 p-4 sm:flex-row">
-					<div class="flex-1 space-y-3">
-						<Label class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</Label>
-						<Select.Root
-							type="single"
-							bind:value={statusFilter}
-							onValueChange={(v) => {
-								statusFilter = v;
-								applyFilters();
-							}}
-						>
-							<Select.Trigger class="h-9 w-full text-xs sm:w-40 bg-background"
-								>{statusFilter || 'All Status'}</Select.Trigger
-							>
-							<Select.Content>
-								<Select.Item value="" class="text-xs">All Status</Select.Item>
-								<Select.Item value="completed" class="text-xs">Completed</Select.Item>
-								<Select.Item value="refunded" class="text-xs">Refunded</Select.Item>
-								<Select.Item value="void" class="text-xs">Void</Select.Item>
-							</Select.Content>
-						</Select.Root>
-					</div>
-					{#if dateFrom || dateTo || statusFilter || searchQuery}
-						<div class="flex-none">
-							<Button
-								variant="outline"
-								size="sm"
-								onclick={clearFilters}
-								class="h-9 border-destructive/20 px-3 text-xs text-destructive hover:bg-destructive hover:text-destructive-foreground cursor-pointer"
-							>
-								<X class="mr-1.5 h-3.5 w-3.5" /> Clear
-							</Button>
-						</div>
-					{/if}
-				</div>
+				{/if}
 			</div>
-		</Card.Content>
-	</Card.Root>
+		{/if}
+	{/snippet}
 
 	<!-- Orders List -->
-	<div class="space-y-4">
-		{#if isNative}
-			<!-- Mobile View (Native) -->
-			<div class="grid gap-3 sm:grid-cols-2 lg:hidden">
-				{#each nativeOrders as order}
-					{@render orderCard(order)}
-				{/each}
-				{#if nativeOrders.length === 0}
-					<div class="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground sm:col-span-2">
-						<p class="text-sm italic">No orders found.</p>
-					</div>
+	{#if isNative}
+		<!-- Mobile cards -->
+		<div class="grid gap-3 sm:grid-cols-2 lg:hidden">
+			{#each nativeOrders as order}
+				{@render orderCard(order)}
+			{:else}
+				{@render emptyOrders()}
+			{/each}
+		</div>
+		<!-- Desktop table -->
+		<Card.Root class="hidden py-0 lg:block">
+			<Card.Content class="p-0">
+				{#if nativeOrders.length > 0}
+					{@render orderTable(nativeOrders)}
+				{:else}
+					{@render emptyOrders()}
 				{/if}
+			</Card.Content>
+			{@render pagination(nativeOrders.length, nativePagination)}
+		</Card.Root>
+	{:else if !cachedStreamed}
+		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+			{#each Array(6) as _}
+				<Skeleton class="h-32 w-full rounded-xl" />
+			{/each}
+		</div>
+	{:else}
+		{@const streamed = cachedStreamed}
+		<div class="relative">
+			{#if isLoading}
+				<div class="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-lg bg-background/50"></div>
+			{/if}
+			<!-- Mobile cards -->
+			<div class="grid gap-3 sm:grid-cols-2 lg:hidden">
+				{#each streamed.orders as order}
+					{@render orderCard(order)}
+				{:else}
+					{@render emptyOrders()}
+				{/each}
 			</div>
-
-			<!-- Desktop View (Native) -->
-			<Card.Root class="hidden lg:block overflow-hidden">
+			<!-- Desktop table + pagination in one card -->
+			<Card.Root class="hidden py-0 lg:block">
 				<Card.Content class="p-0">
-					<Table.Root>
-						<Table.Header class="bg-muted/30">
-							<Table.Row>
-								<Table.Head class="w-[120px]">Order #</Table.Head>
-								<Table.Head>Date</Table.Head>
-								<Table.Head>Customer</Table.Head>
-								<Table.Head>Cashier</Table.Head>
-								<Table.Head>Payment</Table.Head>
-								<Table.Head>Amount</Table.Head>
-								<Table.Head>Status</Table.Head>
-								</Table.Row>
-								</Table.Header>
-								<Table.Body>
-								{#each nativeOrders as order}
-								<Table.Row
-									class="cursor-pointer group"
-									onclick={() => goto(`/orders/${order.id}`)}
-								>
-									<Table.Cell class="font-black text-primary">
-										#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
-									</Table.Cell>
-									<Table.Cell>
-										<div class="flex flex-col">
-											<span class="text-sm font-medium">{formatDate(order.createdAt)}</span>
-											<span class="text-[10px] text-muted-foreground"
-												>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span
-											>
-										</div>
-									</Table.Cell>
-									<Table.Cell>
-										<span class="text-sm font-medium">{order.customerName ?? 'Walk-in'}</span>
-									</Table.Cell>
-									<Table.Cell class="text-xs text-muted-foreground">{order.userName}</Table.Cell>
-									<Table.Cell class="text-xs capitalize">{order.paymentMethod}</Table.Cell>
-									<Table.Cell class="font-bold">{formatCurrency(order.totalAmount)}</Table.Cell>
-									<Table.Cell>
-										<Badge
-											variant={order.status === 'completed' ? 'secondary' : 'destructive'}
-											class="text-[10px] font-bold uppercase tracking-wider"
-										>
-											{order.status}
-										</Badge>
-									</Table.Cell>
-								</Table.Row>
-								{/each}
-								</Table.Body>
-
-					</Table.Root>
-					{#if nativeOrders.length === 0}
-						<div class="flex h-48 items-center justify-center text-muted-foreground italic">
-							No orders found.
-						</div>
+					{#if streamed.orders.length > 0}
+						{@render orderTable(streamed.orders)}
+					{:else}
+						{@render emptyOrders()}
 					{/if}
 				</Card.Content>
+				{@render pagination(streamed.orders.length, streamed.pagination)}
 			</Card.Root>
-
-		{:else}
-			{#await data.streamed}
-				<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-					{#each Array(6) as _}
-						<Skeleton class="h-32 w-full rounded-xl" />
-					{/each}
-				</div>
-			{:then streamed}
-				<!-- Mobile View (Streamed) -->
-				<div class="grid gap-3 sm:grid-cols-2 lg:hidden">
-					{#each streamed.orders as order}
-						{@render orderCard(order)}
-					{/each}
-					{#if streamed.orders.length === 0}
-						<div class="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground sm:col-span-2">
-							<p class="text-sm italic">No orders found.</p>
-						</div>
-					{/if}
-				</div>
-
-				<!-- Desktop View (Streamed) -->
-				<Card.Root class="hidden lg:block overflow-hidden">
-					<Card.Content class="p-0">
-						<Table.Root>
-							<Table.Header class="bg-muted/30">
-								<Table.Row>
-									<Table.Head class="w-[120px]">Order #</Table.Head>
-									<Table.Head>Date</Table.Head>
-									<Table.Head>Customer</Table.Head>
-									<Table.Head>Cashier</Table.Head>
-									<Table.Head>Payment</Table.Head>
-									<Table.Head>Amount</Table.Head>
-									<Table.Head>Status</Table.Head>
-								</Table.Row>
-							</Table.Header>
-							<Table.Body>
-								{#each streamed.orders as order}
-									<Table.Row
-										class="cursor-pointer group"
-										onclick={() => goto(`/orders/${order.id}`)}
-									>
-										<Table.Cell class="font-black text-primary">
-											#{order.orderNumber ?? order.id.slice(0, 8).toUpperCase()}
-										</Table.Cell>
-										<Table.Cell>
-											<div class="flex flex-col">
-												<span class="text-sm font-medium">{formatDate(order.createdAt)}</span>
-												<span class="text-[10px] text-muted-foreground"
-													>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span
-												>
-											</div>
-										</Table.Cell>
-										<Table.Cell>
-											<span class="text-sm font-medium">{order.customerName ?? 'Walk-in'}</span>
-										</Table.Cell>
-										<Table.Cell class="text-xs text-muted-foreground">{order.userName}</Table.Cell>
-										<Table.Cell class="text-xs capitalize">{order.paymentMethod}</Table.Cell>
-										<Table.Cell class="font-bold">{formatCurrency(order.totalAmount)}</Table.Cell>
-										<Table.Cell>
-											<Badge
-												variant={order.status === 'completed' ? 'secondary' : 'destructive'}
-												class="text-[10px] font-bold uppercase tracking-wider"
-											>
-												{order.status}
-											</Badge>
-										</Table.Cell>
-									</Table.Row>
-								{/each}
-							</Table.Body>
-						</Table.Root>
-						{#if streamed.orders.length === 0}
-							<div class="flex h-48 items-center justify-center text-muted-foreground italic">
-								No orders found.
-							</div>
-						{/if}
-					</Card.Content>
-				</Card.Root>
-			{/await}
-		{/if}
-
-		<!-- Pagination Footer -->
-		<Card.Root class="border-t-0 rounded-t-none">
-			<Card.Footer class="p-4">
-				{#if isNative}
-					<div class="flex w-full items-center justify-between">
-						<p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-							{nativeOrders.length} of {nativePagination.totalOrders} Records
-						</p>
-						{#if nativePagination.totalPages > 1}
-							<div class="flex gap-1">
-								<Button
-									variant="outline"
-									size="icon"
-									aria-label="Previous page"
-									disabled={nativePagination.currentPage <= 1}
-									onclick={() => goToPage(nativePagination.currentPage - 1)}
-									class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
-								>
-								<div class="flex h-8 items-center px-3 text-[10px] font-bold border rounded-md bg-muted/30">
-									{nativePagination.currentPage} / {nativePagination.totalPages}
-								</div>
-								<Button
-									variant="outline"
-									size="icon"
-									aria-label="Next page"
-									disabled={nativePagination.currentPage >= nativePagination.totalPages}
-									onclick={() => goToPage(nativePagination.currentPage + 1)}
-									class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
-								>
-							</div>
-						{/if}
-					</div>
-				{:else}
-				{#await data.streamed then streamed}
-					<div class="flex w-full items-center justify-between">
-						<p class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-							{streamed.orders.length} of {streamed.pagination.totalOrders} Records
-						</p>
-						{#if streamed.pagination.totalPages > 1}
-							<div class="flex gap-1">
-								<Button
-									variant="outline"
-									size="icon"
-									aria-label="Previous page"
-									disabled={streamed.pagination.currentPage <= 1}
-									onclick={() => goToPage(streamed.pagination.currentPage - 1)}
-									class="h-8 w-8"><ChevronLeft class="h-4 w-4" /></Button
-								>
-								<div class="flex h-8 items-center px-3 text-[10px] font-bold border rounded-md bg-muted/30">
-									{streamed.pagination.currentPage} / {streamed.pagination.totalPages}
-								</div>
-								<Button
-									variant="outline"
-									size="icon"
-									aria-label="Next page"
-									disabled={streamed.pagination.currentPage >= streamed.pagination.totalPages}
-									onclick={() => goToPage(streamed.pagination.currentPage + 1)}
-									class="h-8 w-8"><ChevronRight class="h-4 w-4" /></Button
-								>
-							</div>
-						{/if}
-					</div>
-				{/await}
-				{/if}
-			</Card.Footer>
-		</Card.Root>
-	</div>
+		</div>
+	{/if}
 </div>

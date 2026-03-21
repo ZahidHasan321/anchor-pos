@@ -86,7 +86,11 @@ function hashForCache(password: string, salt?: string): string {
 /**
  * Cache user credentials after a successful VPS login.
  */
-export function cacheCredentials(username: string, password: string, userPayload: CachedUser['payload']) {
+export function cacheCredentials(
+	username: string,
+	password: string,
+	userPayload: CachedUser['payload']
+) {
 	if (!env.IS_ELECTRON) return;
 	const cache = readCache();
 	// Generate a random salt for this cache entry
@@ -102,7 +106,10 @@ export function cacheCredentials(username: string, password: string, userPayload
 /**
  * Validate credentials against cache. Returns the user payload if valid, null otherwise.
  */
-function validateCachedCredentials(username: string, password: string): CachedUser['payload'] | null {
+function validateCachedCredentials(
+	username: string,
+	password: string
+): CachedUser['payload'] | null {
 	const cache = readCache();
 	const cached = cache.users[username];
 	if (!cached) return null;
@@ -155,11 +162,19 @@ async function getOrCreateLocalKeys() {
 
 	// Save to disk
 	try {
-		fs.writeFileSync(keyPath, JSON.stringify({
-			privateKey: privateJwk,
-			publicKey: publicJwk,
-			createdAt: new Date().toISOString()
-		}, null, 2), 'utf8');
+		fs.writeFileSync(
+			keyPath,
+			JSON.stringify(
+				{
+					privateKey: privateJwk,
+					publicKey: publicJwk,
+					createdAt: new Date().toISOString()
+				},
+				null,
+				2
+			),
+			'utf8'
+		);
 	} catch (e) {
 		console.warn('[offline-auth] Failed to save keys:', e);
 	}
@@ -172,7 +187,10 @@ async function getOrCreateLocalKeys() {
 /**
  * Attempt offline login. Returns { token, expiresAt } or null if failed.
  */
-export async function attemptOfflineLogin(username: string, password: string): Promise<{ token: string; expiresAt: Date } | null> {
+export async function attemptOfflineLogin(
+	username: string,
+	password: string
+): Promise<{ token: string; expiresAt: Date } | null> {
 	if (!env.IS_ELECTRON) return null;
 
 	const userPayload = validateCachedCredentials(username, password);
@@ -184,7 +202,7 @@ export async function attemptOfflineLogin(username: string, password: string): P
 
 		const token = await new SignJWT({
 			...userPayload,
-			offline: true, // Mark as offline-issued
+			offline: true // Mark as offline-issued
 		})
 			.setProtectedHeader({ alg: 'RS256', kid: 'offline-local-key' })
 			.setIssuedAt()

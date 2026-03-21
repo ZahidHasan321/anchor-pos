@@ -1,9 +1,7 @@
 /**
  * Bluetooth thermal printer module.
  *
- * Two transports:
- * 1. Capacitor Native (Android/iOS) — Classic Bluetooth SPP via capacitor-thermal-printer plugin
- * 2. Web Bluetooth API — BLE fallback for browsers (Chrome)
+ * Uses the Web Bluetooth API (BLE) for browsers (Chrome).
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -12,16 +10,7 @@
 // Platform detection
 // ============================================================
 
-export function isCapacitorNative(): boolean {
-	return (
-		typeof window !== 'undefined' &&
-		'Capacitor' in window &&
-		(window as any).Capacitor?.isNativePlatform?.() === true
-	);
-}
-
 export function isBluetoothSupported(): boolean {
-	if (isCapacitorNative()) return true;
 	return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
 }
 
@@ -63,123 +52,16 @@ export type BluetoothReceiptData = {
 
 export type DiscoveredDevice = { name: string; address: string };
 
-// ============================================================
-// Capacitor Native transport
-// ============================================================
-
-let capPlugin: any = null;
-let capDiscoveredDevices: DiscoveredDevice[] = [];
-let capScanCallbacks: Array<(devices: DiscoveredDevice[]) => void> = [];
-let capScanFinishCallbacks: Array<() => void> = [];
-let capConnectedDevice: { name: string; address: string } | null = null;
-let capConnectedFlag = false;
-
-async function getCapPlugin(): Promise<any> {
-	if (!capPlugin) {
-		const mod = await import('capacitor-thermal-printer');
-		capPlugin = mod.CapacitorThermalPrinter;
-
-		await capPlugin.addListener('discoverDevices', (event: any) => {
-			const devices = event?.devices ?? (Array.isArray(event) ? event : []);
-			capDiscoveredDevices = devices;
-			capScanCallbacks.forEach((cb) => cb(devices));
-		});
-
-		await capPlugin.addListener('discoveryFinish', () => {
-			capScanFinishCallbacks.forEach((cb) => cb());
-		});
-
-		await capPlugin.addListener('connected', (device: any) => {
-			capConnectedFlag = true;
-			if (device) capConnectedDevice = device;
-		});
-
-		await capPlugin.addListener('disconnected', () => {
-			capConnectedFlag = false;
-			capConnectedDevice = null;
-		});
-	}
-	return capPlugin;
-}
-
-export async function scanDevices(): Promise<void> {
-	const plugin = await getCapPlugin();
-	// The plugin's native bluetoothCheck() handles permission requests internally
-	// and re-invokes the method after granting, so no JS-side permission logic needed.
-	capDiscoveredDevices = [];
-	await plugin.startScan();
-}
-
-export async function stopScan(): Promise<void> {
-	const plugin = await getCapPlugin();
-	await plugin.stopScan();
-}
-
-export function getDiscoveredDevices(): DiscoveredDevice[] {
-	return capDiscoveredDevices;
-}
-
-export function onDevicesDiscovered(callback: (devices: DiscoveredDevice[]) => void): () => void {
-	capScanCallbacks.push(callback);
-	return () => {
-		capScanCallbacks = capScanCallbacks.filter((cb) => cb !== callback);
-	};
-}
-
-export function onScanFinished(callback: () => void): () => void {
-	capScanFinishCallbacks.push(callback);
-	return () => {
-		capScanFinishCallbacks = capScanFinishCallbacks.filter((cb) => cb !== callback);
-	};
-}
-
-export async function connectToDevice(
-	address: string
-): Promise<{ success: boolean; name?: string; error?: string }> {
+function currencySymbol(currency?: string): string {
+	if (!currency) return '';
 	try {
-		const plugin = await getCapPlugin();
-
-		if (isCapacitorNative()) {
-			// Disconnect existing connection before connecting to a new device
-			if (capConnectedFlag) {
-				await capDisconnect();
-			}
-			// The plugin's native bluetoothCheck() handles permission requests internally.
-		}
-
-		const device = await plugin.connect({ address });
-		if (device) {
-			capConnectedFlag = true;
-			capConnectedDevice = device;
-			localStorage.setItem('pos-bt-printer-name', device.name || 'Thermal Printer');
-			localStorage.setItem('pos-bt-printer-address', address);
-			return { success: true, name: device.name || 'Thermal Printer' };
-		}
-		return { success: false, error: 'Failed to connect to device' };
-	} catch (e: any) {
-		return { success: false, error: e.message || 'Connection failed' };
-	}
-}
-
-async function capDisconnect(): Promise<void> {
-	try {
-		const plugin = await getCapPlugin();
-		await plugin.disconnect();
+		return (
+			new Intl.NumberFormat('en', { style: 'currency', currency })
+				.formatToParts(0)
+				.find((p) => p.type === 'currency')?.value ?? ''
+		);
 	} catch {
-		// ignore
-	}
-	capConnectedFlag = false;
-	capConnectedDevice = null;
-}
-
-async function capIsConnected(): Promise<boolean> {
-	try {
-		const plugin = await getCapPlugin();
-		const result = await plugin.isConnected();
-		capConnectedFlag = typeof result === 'boolean' ? result : !!result?.value;
-		return capConnectedFlag;
-	} catch {
-		return false;
+		return '';
 	}
 }
 
@@ -200,183 +82,8 @@ function wordWrap(text: string, width: number): string[] {
 	return lines;
 }
 
-function currencySymbol(currency?: string): string {
-	if (!currency) return '';
-	try {
-		return new Intl.NumberFormat('en', { style: 'currency', currency }).formatToParts(0).find(p => p.type === 'currency')?.value ?? '';
-	} catch {
-		return '';
-	}
-}
-
-function leftRightStr(left: string, right: string, width: number): string {
-	const gap = width - left.length - right.length;
-	if (gap > 0) return left + ' '.repeat(gap) + right;
-	return left + ' ' + right;
-}
-
-async function printReceiptNative(
-	data: BluetoothReceiptData
-): Promise<{ success: boolean; error?: string }> {
-	try {
-		const plugin = await getCapPlugin();
-
-		const connected = await capIsConnected();
-		if (!connected) {
-			const lastAddr = localStorage.getItem('pos-bt-printer-address');
-			if (lastAddr) {
-				const r = await connectToDevice(lastAddr);
-				if (!r.success) return r;
-			} else {
-				return { success: false, error: 'No printer connected. Set up in Settings.' };
-			}
-		}
-
-		const pw = localStorage.getItem('pos-bt-printer-width') === '58' ? 32 : 48;
-		const s = data.storeSettings;
-		const sym = currencySymbol(s.store_currency);
-
-		plugin.begin();
-
-		// Header
-		plugin.align('center');
-		plugin.doubleHeight(true);
-		plugin.bold(true);
-		plugin.text((s.store_name || 'STORE').toUpperCase() + '\n');
-		plugin.doubleHeight(false);
-		plugin.bold(false);
-
-		if (s.store_address) plugin.text(s.store_address + '\n');
-		if (s.store_phone) plugin.text('Phone: ' + s.store_phone + '\n');
-		if (s.store_email) plugin.text(s.store_email + '\n');
-		if (s.store_tax_id) plugin.text('VAT: ' + s.store_tax_id + '\n');
-		if (s.store_bin) plugin.text('BIN: ' + s.store_bin + '\n');
-
-		// Refund banners
-		const hasRefunds = data.items.some((i) => i.status === 'refunded') || data.status === 'refunded';
-		if (data.status === 'refunded') {
-			plugin.text('-'.repeat(pw) + '\n');
-			plugin.align('center');
-			plugin.bold(true);
-			plugin.text('*** FULL REFUND ***\n');
-			plugin.bold(false);
-		} else if (hasRefunds) {
-			plugin.text('-'.repeat(pw) + '\n');
-			plugin.align('center');
-			plugin.bold(true);
-			plugin.text('*** PARTIAL REFUND ***\n');
-			plugin.bold(false);
-		}
-
-		plugin.text('-'.repeat(pw) + '\n');
-		plugin.align('left');
-		plugin.text('Order: ' + data.orderId + (data.isReprint ? ' (REPRINT)' : '') + '\n');
-		plugin.text('Date: ' + data.date + '\n');
-		plugin.text('Cashier: ' + data.cashier + '\n');
-		if (data.paymentMethod) plugin.text('Payment: ' + data.paymentMethod.charAt(0).toUpperCase() + data.paymentMethod.slice(1) + '\n');
-		plugin.text('-'.repeat(pw) + '\n');
-
-		// Column header
-		plugin.bold(true);
-		plugin.text(leftRightStr('Item', 'Qty   Total', pw) + '\n');
-		plugin.bold(false);
-
-		// Items
-		for (const item of data.items) {
-			const prefix = item.status === 'refunded' ? '[R] ' : '';
-			const sign = item.status === 'refunded' ? '-' : '';
-			const qtyStr = item.qty.toString().padStart(3);
-			const totalStr = (sign + item.total.toFixed(2)).padStart(8);
-			const right = qtyStr + totalStr;
-			const maxName = pw - right.length - 1;
-			const itemName = prefix + item.name;
-			const name = itemName.length > maxName ? itemName.substring(0, maxName) : itemName;
-			plugin.text(leftRightStr(name, right, pw) + '\n');
-			if (item.variant) {
-				plugin.text('  ' + item.variant + '\n');
-			}
-		}
-
-		plugin.text('-'.repeat(pw) + '\n');
-
-		// Totals
-		const refundAmount = data.originalTotal ? data.originalTotal - data.total : 0;
-		if (data.originalTotal && data.originalTotal !== data.total) {
-			plugin.text(leftRightStr('ORIGINAL TOTAL', sym + data.originalTotal.toFixed(2), pw) + '\n');
-			plugin.text(leftRightStr('TOTAL REFUND', '-' + sym + refundAmount.toFixed(2), pw) + '\n');
-		}
-		plugin.bold(true);
-		plugin.text(leftRightStr('NET TOTAL', sym + data.total.toFixed(2), pw) + '\n');
-		plugin.bold(false);
-
-		if (data.cashReceived) {
-			plugin.text(leftRightStr('Cash Received', sym + data.cashReceived.toFixed(2), pw) + '\n');
-			plugin.text(leftRightStr('Change', sym + data.changeGiven.toFixed(2), pw) + '\n');
-		}
-
-		// Policies
-		if (s.return_policy || s.exchange_policy || s.terms_conditions) {
-			plugin.text('-'.repeat(pw) + '\n');
-			if (s.return_policy) wordWrap('Return: ' + s.return_policy, pw).forEach(l => plugin.text(l + '\n'));
-			if (s.exchange_policy) wordWrap('Exchange: ' + s.exchange_policy, pw).forEach(l => plugin.text(l + '\n'));
-			if (s.terms_conditions) wordWrap('T&C: ' + s.terms_conditions, pw).forEach(l => plugin.text(l + '\n'));
-		}
-
-		// Social
-		if (s.store_facebook || s.store_instagram) {
-			plugin.text('\n');
-			plugin.align('center');
-			if (s.store_facebook) plugin.text('FB: ' + s.store_facebook + '\n');
-			if (s.store_instagram) plugin.text('IG: ' + s.store_instagram + '\n');
-		}
-
-		// Footer
-		plugin.text('\n');
-		plugin.align('center');
-		plugin.text((s.receipt_footer || 'Thank you!') + '\n');
-		plugin.text('*** End of Receipt ***\n');
-		plugin.text('\n\n\n');
-		plugin.cutPaper();
-
-		await plugin.write();
-		return { success: true };
-	} catch (e: any) {
-		return { success: false, error: e.message || 'Failed to send data to printer' };
-	}
-}
-
-async function testPrintNative(): Promise<{ success: boolean; error?: string }> {
-	try {
-		const plugin = await getCapPlugin();
-
-		const connected = await capIsConnected();
-		if (!connected) return { success: false, error: 'Printer not connected' };
-
-		const pw = localStorage.getItem('pos-bt-printer-width') === '58' ? 32 : 48;
-
-		plugin.begin();
-		plugin.align('center');
-		plugin.bold(true);
-		plugin.text('=== BT PRINTER TEST ===\n');
-		plugin.bold(false);
-		plugin.text('Connection: OK\n');
-		plugin.text('Device: ' + (capConnectedDevice?.name || 'Unknown') + '\n');
-		plugin.text('-'.repeat(pw) + '\n');
-		plugin.text('ABCDabcd1234!@#$\n');
-		plugin.text('Bluetooth test passed.\n');
-		plugin.text('-'.repeat(pw) + '\n');
-		plugin.text('\n\n\n');
-		plugin.cutPaper();
-
-		await plugin.write();
-		return { success: true };
-	} catch (e: any) {
-		return { success: false, error: e.message || 'Failed to send test data' };
-	}
-}
-
 // ============================================================
-// Web Bluetooth (BLE) transport — fallback for browsers
+// Web Bluetooth (BLE) transport
 // ============================================================
 
 type BluetoothDevice = any;
@@ -393,7 +100,7 @@ declare global {
 
 // NOTE: Most thermal POS printers (XPPrinter 365B, ZJ-5805, etc.) use Classic Bluetooth SPP,
 // NOT BLE. Web Bluetooth API only supports BLE, so it won't work with those printers.
-// Use Capacitor native (Classic BT SPP via Rongta SDK) or Electron + COM port instead.
+// Use Electron + COM port for Classic BT SPP printers instead.
 // The BLE UUIDs below are for the minority of printers that DO support BLE.
 const PRINTER_SERVICE_UUIDS = [
 	'000018f0-0000-1000-8000-00805f9b34fb', // Standard BLE print service (MTP-2/3, Goojprt)
@@ -487,8 +194,7 @@ async function findWriteCharacteristic(
 				}
 				// Any writable characteristic
 				writeChar =
-					chars.find((c: any) => c.properties.writeWithoutResponse || c.properties.write) ??
-					null;
+					chars.find((c: any) => c.properties.writeWithoutResponse || c.properties.write) ?? null;
 				if (writeChar) return writeChar;
 			} catch {
 				continue;
@@ -551,7 +257,11 @@ async function webBtConnect(): Promise<{ success: boolean; name?: string; error?
 
 		if (!writeChar) {
 			server.disconnect();
-			return { success: false, error: 'No writable characteristic found on printer. This device may not be a supported thermal printer.' };
+			return {
+				success: false,
+				error:
+					'No writable characteristic found on printer. This device may not be a supported thermal printer.'
+			};
 		}
 
 		webBt = {
@@ -570,7 +280,8 @@ async function webBtConnect(): Promise<{ success: boolean; name?: string; error?
 
 		return { success: true, name: webBt.deviceName };
 	} catch (e: any) {
-		if (e.name === 'NotFoundError') return { success: false, error: 'No printer selected (cancelled)' };
+		if (e.name === 'NotFoundError')
+			return { success: false, error: 'No printer selected (cancelled)' };
 		return { success: false, error: e.message || 'Failed to connect' };
 	}
 }
@@ -713,7 +424,10 @@ async function webBtPrintReceipt(
 				return { success: false, error: 'Printer disconnected. Please reconnect in Settings.' };
 			}
 		} else {
-			return { success: false, error: 'No printer connected. Set up Bluetooth printer in Settings.' };
+			return {
+				success: false,
+				error: 'No printer connected. Set up Bluetooth printer in Settings.'
+			};
 		}
 	}
 
@@ -737,7 +451,8 @@ async function webBtPrintReceipt(
 	if (s.store_bin) b.println('BIN: ' + s.store_bin);
 
 	// Refund banners
-	const hasRefundsBle = data.items.some((i) => i.status === 'refunded') || data.status === 'refunded';
+	const hasRefundsBle =
+		data.items.some((i) => i.status === 'refunded') || data.status === 'refunded';
 	if (data.status === 'refunded') {
 		b.drawLine(paperWidth);
 		b.alignCenter();
@@ -757,7 +472,10 @@ async function webBtPrintReceipt(
 	b.println('Order: ' + data.orderId + (data.isReprint ? ' (REPRINT)' : ''));
 	b.println('Date: ' + data.date);
 	b.println('Cashier: ' + data.cashier);
-	if (data.paymentMethod) b.println('Payment: ' + data.paymentMethod.charAt(0).toUpperCase() + data.paymentMethod.slice(1));
+	if (data.paymentMethod)
+		b.println(
+			'Payment: ' + data.paymentMethod.charAt(0).toUpperCase() + data.paymentMethod.slice(1)
+		);
 	b.drawLine(paperWidth);
 
 	b.bold(true);
@@ -794,9 +512,12 @@ async function webBtPrintReceipt(
 
 	if (s.return_policy || s.exchange_policy || s.terms_conditions) {
 		b.drawLine(paperWidth);
-		if (s.return_policy) wordWrap('Return: ' + s.return_policy, paperWidth).forEach(l => b.println(l));
-		if (s.exchange_policy) wordWrap('Exchange: ' + s.exchange_policy, paperWidth).forEach(l => b.println(l));
-		if (s.terms_conditions) wordWrap('T&C: ' + s.terms_conditions, paperWidth).forEach(l => b.println(l));
+		if (s.return_policy)
+			wordWrap('Return: ' + s.return_policy, paperWidth).forEach((l) => b.println(l));
+		if (s.exchange_policy)
+			wordWrap('Exchange: ' + s.exchange_policy, paperWidth).forEach((l) => b.println(l));
+		if (s.terms_conditions)
+			wordWrap('T&C: ' + s.terms_conditions, paperWidth).forEach((l) => b.println(l));
 	}
 
 	if (s.store_facebook || s.store_instagram) {
@@ -850,57 +571,35 @@ async function webBtTestPrint(): Promise<{ success: boolean; error?: string }> {
 }
 
 // ============================================================
-// Unified public API
+// Public API
 // ============================================================
 
 export function getConnectedPrinterName(): string {
-	if (isCapacitorNative()) {
-		return capConnectedDevice?.name || localStorage.getItem('pos-bt-printer-name') || '';
-	}
 	return webBt.deviceName;
 }
 
 export function isConnected(): boolean {
-	if (isCapacitorNative()) return capConnectedFlag;
 	return webBtIsConnected();
 }
 
-/**
- * Connect to a printer.
- * - Capacitor native: reconnects to last known device, or returns error prompting scan.
- * - Web: shows the browser's Bluetooth device picker.
- */
 export async function connectPrinter(): Promise<{
 	success: boolean;
 	name?: string;
 	error?: string;
 }> {
-	if (isCapacitorNative()) {
-		const lastAddress = localStorage.getItem('pos-bt-printer-address');
-		if (lastAddress) return connectToDevice(lastAddress);
-		return { success: false, error: 'Use the scanner to find and select a printer first.' };
-	}
 	return webBtConnect();
 }
 
 export async function disconnectPrinter() {
-	if (isCapacitorNative()) {
-		await capDisconnect();
-		localStorage.removeItem('pos-bt-printer-name');
-		localStorage.removeItem('pos-bt-printer-address');
-		return;
-	}
 	webBtDisconnect();
 }
 
 export async function printBluetoothReceipt(
 	data: BluetoothReceiptData
 ): Promise<{ success: boolean; error?: string }> {
-	if (isCapacitorNative()) return printReceiptNative(data);
 	return webBtPrintReceipt(data);
 }
 
 export async function testBluetoothPrint(): Promise<{ success: boolean; error?: string }> {
-	if (isCapacitorNative()) return testPrintNative();
 	return webBtTestPrint();
 }

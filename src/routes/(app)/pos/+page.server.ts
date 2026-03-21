@@ -11,8 +11,8 @@ import {
 	cashbook,
 	storeSettings
 } from '$lib/server/db/schema';
-import { eq, sql, inArray, and, gt } from 'drizzle-orm';
-import { generateId } from '$lib/utils';
+import { eq, sql, inArray, and, gt, desc } from 'drizzle-orm';
+import { generateId, round2 } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import { queryVariants } from '$lib/server/pos-query';
 import env from '$lib/server/env';
@@ -24,7 +24,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 	const search = url.searchParams.get('search') || '';
 	const category = url.searchParams.get('category') || 'All';
-	const isElectron = env.IS_ELECTRON;
+	const isNative = env.IS_NATIVE;
 
 	// Immediate return, deferred streaming for everything else
 	return {
@@ -32,16 +32,15 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		category,
 		user: locals.user,
 
-		isElectron,
+		isNative,
 
 		// Streamed data
 		streamed: (async () => {
-			if (isElectron) {
+			if (isNative) {
 				return {
 					products: [],
 					hasMore: false,
 					categories: ['All'],
-					customers: [],
 					storeSettings: {}
 				};
 			}
@@ -51,20 +50,16 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 					products: [],
 					hasMore: false,
 					categories: ['All'],
-					customers: [],
 					storeSettings: {}
 				};
 
-			const [variantsData, categoryRows, recentCustomers, settingsRows] = await Promise.all([
+			const [variantsData, categoryRows, settingsRows] = await Promise.all([
 				queryVariants(search, category),
-				// Filter categories to only those with in-stock products
 				db
 					.selectDistinct({ category: products.category })
 					.from(products)
 					.innerJoin(productVariants, eq(products.id, productVariants.productId))
 					.where(gt(productVariants.stockQuantity, 0)),
-				// Only load 50 recent customers to prevent large payload
-				db.select().from(customers).limit(50),
 				db.select().from(storeSettings)
 			]);
 
@@ -80,7 +75,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 				products: variantsData.items,
 				hasMore: variantsData.hasMore,
 				categories: ['All', ...categoryRows.map((r: { category: string }) => r.category).sort()],
-				customers: recentCustomers,
 				storeSettings: settings
 			};
 		})()
@@ -110,7 +104,7 @@ interface DBVariant {
 export const actions: Actions = {
 	checkout: async ({ request, locals }) => {
 		if (!locals.user) return fail(401);
-		const isElectron = env.IS_ELECTRON;
+		const isNative = env.IS_NATIVE;
 
 		const data = await request.formData();
 		const cartItemsRaw = data.get('cartItems') as string;
@@ -142,12 +136,26 @@ export const actions: Actions = {
 			return fail(400, { error: 'Cart is empty' });
 		}
 
-		// Precision helper for financial rounding
-		const round2 = (val: number) => Math.round((val + Number.EPSILON) * 100) / 100;
+		// Validate all quantities are positive integers
+		for (const item of cartItems) {
+			if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+				return fail(400, { error: 'Invalid item quantity' });
+			}
+		}
+
+		// Validate split payment amounts sum to total
+		if (paymentMethod === 'split') {
+			const splitSum = cashAmount + cardAmount + mobileAmount;
+			// We'll validate against the calculated total later, but ensure amounts are non-negative
+			if (cashAmount < 0 || cardAmount < 0 || mobileAmount < 0) {
+				return fail(400, { error: 'Split payment amounts cannot be negative' });
+			}
+		}
+
 		const variantIds = cartItems.map((item: CartItem) => item.variantId);
 
 		// In Electron mode, checkout is handled client-side via PowerSync Web
-		if (isElectron) {
+		if (isNative) {
 			return fail(400, { error: 'Electron checkout should use client-side PowerSync' });
 		}
 
@@ -155,6 +163,15 @@ export const actions: Actions = {
 
 		try {
 			const result = await db.transaction(async (tx: any) => {
+				// 0. Generate sequential order number (within the lock scope of the transaction)
+				const lastOrder = await tx
+					.select({ orderNumber: orders.orderNumber })
+					.from(orders)
+					.where(sql`${orders.orderNumber} IS NOT NULL`)
+					.orderBy(desc(orders.orderNumber))
+					.limit(1);
+				const nextOrderNumber = (lastOrder[0]?.orderNumber ?? 1000) + 1;
+
 				// 1. Fetch & Lock variants for stock integrity
 				const dbVariants = await tx
 					.select({
@@ -204,9 +221,20 @@ export const actions: Actions = {
 
 				const changeGiven = round2(Math.max(0, cashReceived - totalAmount));
 
+				// Validate split payment amounts match total
+				if (paymentMethod === 'split') {
+					const splitSum = round2(cashAmount + cardAmount + mobileAmount);
+					if (Math.abs(splitSum - totalAmount) > 0.01) {
+						throw new Error(
+							`Split payment amounts (${splitSum}) don't match order total (${totalAmount})`
+						);
+					}
+				}
+
 				// 3. Create order
 				await tx.insert(orders).values({
 					id: orderId,
+					orderNumber: nextOrderNumber,
 					customerId,
 					userId: locals.user!.id,
 					totalAmount,
@@ -266,7 +294,7 @@ export const actions: Actions = {
 					userId: locals.user!.id
 				});
 
-				return { orderId, orderNumber: orderId.slice(0, 8).toUpperCase(), changeGiven };
+				return { orderId, orderNumber: nextOrderNumber, changeGiven };
 			});
 
 			await logAuditEvent({
@@ -285,7 +313,8 @@ export const actions: Actions = {
 		}
 	},
 
-	addCustomer: async ({ request }) => {
+	addCustomer: async ({ request, locals }) => {
+		if (!locals.user) return fail(401, { error: 'Unauthorized' });
 		if (!db) return fail(503, { error: 'Direct database connection unavailable.' });
 		const data = await request.formData();
 		const name = (data.get('name') as string)?.trim();

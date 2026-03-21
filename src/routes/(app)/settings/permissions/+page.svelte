@@ -48,7 +48,7 @@
 	function isRoleEmpty(role: string) {
 		const roleState = checkedState[role];
 		if (!roleState) return true;
-		return !Object.values(roleState).some(v => v);
+		return !Object.values(roleState).some((v) => v);
 	}
 </script>
 
@@ -96,7 +96,7 @@
 										name="resources"
 										value={resource}
 										bind:checked={checkedState[role][resource]}
-										class="h-4 w-4 rounded border-input text-primary accent-primary cursor-pointer"
+										class="h-4 w-4 cursor-pointer rounded border-input text-primary accent-primary"
 									/>
 									<span class="text-sm font-medium">{resourceLabels[resource] ?? resource}</span>
 								</label>

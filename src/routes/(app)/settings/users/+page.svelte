@@ -7,14 +7,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Table from '$lib/components/ui/table';
 	import { Badge } from '$lib/components/ui/badge';
-	import {
-		Eye,
-		EyeOff,
-		UserPlus,
-		KeyRound,
-		ExternalLink,
-		Camera
-	} from '@lucide/svelte';
+	import { Eye, EyeOff, UserPlus, KeyRound, ExternalLink, Camera } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { page } from '$app/state';
 	import * as Avatar from '$lib/components/ui/avatar';
@@ -48,7 +41,7 @@
 		</Button>
 	</div>
 
-	<Card.Root>
+	<Card.Root class="py-0">
 		<Card.Header>
 			<Card.Title>All Users</Card.Title>
 			<Card.Description>Manage your team members and their access levels.</Card.Description>
@@ -242,7 +235,7 @@
 					/>
 					<button
 						type="button"
-						class="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+						class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
 						onclick={() => (showPassword = !showPassword)}
 						tabindex={-1}
 					>
@@ -284,7 +277,7 @@
 					/>
 					<button
 						type="button"
-						class="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+						class="absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
 						onclick={() => (showPassword = !showPassword)}
 						tabindex={-1}
 					>

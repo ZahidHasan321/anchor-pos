@@ -25,6 +25,7 @@ Thumbs.db
 /certbot/
 /postgres_data/
 /ssl/cloudflare/
+/downloads/
 
 # Capacitor
 # /android/

@@ -29,13 +29,7 @@ export const actions: Actions = {
 		if (!db) return fail(503, { error: 'Database connection unavailable' });
 
 		const data = await request.formData();
-		const keys = [
-			'low_stock_threshold',
-			'tax_enabled',
-			'tax_rate',
-			'sd_enabled',
-			'sd_rate'
-		];
+		const keys = ['low_stock_threshold', 'tax_enabled', 'tax_rate', 'sd_enabled', 'sd_rate'];
 
 		try {
 			await db.transaction(async (tx: any) => {

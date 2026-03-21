@@ -4,14 +4,27 @@ import { db } from '$lib/server/db';
 import { products } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
+import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
 		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
 
-	if (!db) {
-		redirect(302, '/inventory');
+	if (env.IS_NATIVE || !db) {
+		return {
+			product: {
+				id: params.id,
+				name: '',
+				category: '',
+				templatePrice: 0,
+				costPrice: 0,
+				defaultDiscount: 0,
+				description: null
+			},
+			categories: [],
+			productId: params.id
+		};
 	}
 
 	const productRows = await db.select().from(products).where(eq(products.id, params.id)).limit(1);
@@ -21,10 +34,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, '/inventory');
 	}
 
-		const categoryRows = await db.selectDistinct({ category: products.category }).from(products);
-		const categories = categoryRows.map((r: { category: string }) => r.category);
+	const categoryRows = await db.selectDistinct({ category: products.category }).from(products);
+	const categories = categoryRows.map((r: { category: string }) => r.category);
 
-	return { product, categories: categories.sort() };
+	return { product, categories: categories.sort(), productId: params.id };
 };
 
 export const actions: Actions = {
@@ -40,10 +53,11 @@ export const actions: Actions = {
 		const templatePrice = parseFloat(data.get('templatePrice') as string);
 
 		// Normalize category by finding existing case-insensitive match
-				const catRows = await db.selectDistinct({ category: products.category }).from(products);
-				const existingCategories = catRows.map((r: { category: string }) => r.category);
-				const normalizedCategory =
-					existingCategories.find((c: string) => c.toLowerCase() === category?.toLowerCase()) || category;
+		const catRows = await db.selectDistinct({ category: products.category }).from(products);
+		const existingCategories = catRows.map((r: { category: string }) => r.category);
+		const normalizedCategory =
+			existingCategories.find((c: string) => c.toLowerCase() === category?.toLowerCase()) ||
+			category;
 
 		const costPrice = parseFloat(data.get('costPrice') as string) || 0;
 		const defaultDiscount = parseFloat(data.get('defaultDiscount') as string) || 0;

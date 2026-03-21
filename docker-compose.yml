@@ -18,10 +18,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db_init:
     image: postgres:17-alpine
     container_name: db_init
+    restart: "no"
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
     command: >
@@ -71,9 +77,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
     depends_on:
       pos_db:
         condition: service_healthy
+      db_init:
+        condition: service_completed_successfully
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   pos_powersync:
     image: journeyapps/powersync-service:latest
@@ -94,6 +108,11 @@ services:
         condition: service_healthy
       db_init:
         condition: service_completed_successfully
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   pos_nginx:
     image: nginx:alpine
@@ -109,6 +128,11 @@ services:
     depends_on:
       - pos_app
       - pos_powersync
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
 
 volumes:
   postgres_data:

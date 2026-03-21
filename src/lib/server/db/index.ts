@@ -6,19 +6,20 @@ import { dev, browser } from '$app/environment';
 import { building } from '$app/environment';
 
 // Robust check for Electron environment
-const isElectron = env.BUILD_TARGET === 'electron' || 
-                  (typeof process !== 'undefined' && process.env?.BUILD_TARGET === 'electron');
+const isElectron =
+	env.BUILD_TARGET === 'electron' ||
+	(typeof process !== 'undefined' && process.env?.BUILD_TARGET === 'electron');
 
 // Force DATABASE_URL to null in Electron to prevent any unintended Postgres connections
 // However, allow it in development mode for testing and migrations
-const connectionString = (isElectron && !dev) ? null : env.DATABASE_URL;
+const connectionString = isElectron && !dev ? null : env.DATABASE_URL;
 
 if (!connectionString && !building && !isElectron) {
-    throw new Error('DATABASE_URL is not set');
+	throw new Error('DATABASE_URL is not set');
 }
 
 if (dev) {
-    console.log(`[DB] Initializing in dev mode...`);
+	console.log(`[DB] Initializing in dev mode...`);
 }
 
 // Only initialize if we have a connection string
@@ -26,19 +27,36 @@ let dbInstance: any = null;
 let client: any = null;
 
 if (connectionString) {
-    client = (globalThis as any).__POS_DB_CLIENT__ || postgres(connectionString, {
-        prepare: false,
-        idle_timeout: 30,
-        max: 10
-    });
+	client =
+		(globalThis as any).__POS_DB_CLIENT__ ||
+		postgres(connectionString, {
+			prepare: false,
+			idle_timeout: 30,
+			max: 10,
+			types: {
+				// Parse numeric/decimal (OID 1700) and bigint/int8 (OID 20) as JS numbers.
+				// Without this, sql<number> aggregates return strings from postgres.
+				numeric: {
+					to: 1700,
+					from: [1700],
+					serialize: (x: number) => String(x),
+					parse: (x: string) => parseFloat(x)
+				},
+				bigint: {
+					to: 20,
+					from: [20],
+					serialize: (x: number) => String(x),
+					parse: (x: string) => Number(x)
+				}
+			}
+		});
 
-    if (dev) {
-        (globalThis as any).__POS_DB_CLIENT__ = client;
-    }
-    dbInstance = drizzle(client, { schema });
+	if (dev) {
+		(globalThis as any).__POS_DB_CLIENT__ = client;
+	}
+	dbInstance = drizzle(client, { schema });
 } else if (!building) {
-    console.warn('[DB] No DATABASE_URL found. Running in offline-only mode.');
+	console.warn('[DB] No DATABASE_URL found. Running in offline-only mode.');
 }
 
 export const db = dbInstance;
-

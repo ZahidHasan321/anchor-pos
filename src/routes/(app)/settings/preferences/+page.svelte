@@ -7,14 +7,7 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
 	import * as Card from '$lib/components/ui/card';
-	import {
-		Loader2,
-		Printer,
-		Percent,
-		Package,
-		CircleDollarSign,
-		Settings
-	} from '@lucide/svelte';
+	import { Loader2, Printer, Percent, Package, CircleDollarSign, Settings } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { confirmState } from '$lib/confirm.svelte';
 	import { printReceipt } from '$lib/print-receipt';
@@ -23,19 +16,11 @@
 	import * as Select from '$lib/components/ui/select';
 	import {
 		isBluetoothSupported,
-		isCapacitorNative,
 		connectPrinter,
 		disconnectPrinter,
 		isConnected as isBtConnected,
 		getConnectedPrinterName,
-		testBluetoothPrint,
-		scanDevices,
-		stopScan,
-		getDiscoveredDevices,
-		onDevicesDiscovered,
-		onScanFinished,
-		connectToDevice,
-		type DiscoveredDevice
+		testBluetoothPrint
 	} from '$lib/bluetooth-printer';
 	import { Bluetooth, Search } from '@lucide/svelte';
 
@@ -60,9 +45,8 @@
 	let testingThermal = $state(false);
 	let detectedComPorts: Array<{ name: string; description: string }> = $state([]);
 
-	// --- Bluetooth Printer Settings (Mobile/Web/Capacitor) ---
+	// --- Bluetooth Printer Settings (Web BLE) ---
 	let btSupported = $state(false);
-	let isNativeBt = $state(false);
 	let useBtPrinter = $state(false);
 	let btPrinterName = $state('');
 	let btConnected = $state(false);
@@ -70,29 +54,14 @@
 	let btTesting = $state(false);
 	let btPaperWidth = $state('58');
 	let btSlowMode = $state(false);
-	let btScanning = $state(false);
-	let btDevices: DiscoveredDevice[] = $state([]);
 
 	$effect(() => {
 		btSupported = isBluetoothSupported();
-		isNativeBt = isCapacitorNative();
 		useBtPrinter = localStorage.getItem('pos-use-bt-printer') === 'true';
 		btPrinterName = localStorage.getItem('pos-bt-printer-name') || '';
 		btPaperWidth = localStorage.getItem('pos-bt-printer-width') || '58';
 		btSlowMode = localStorage.getItem('pos-bt-printer-slow') === 'true';
 		btConnected = isBtConnected();
-
-		// Capacitor native: subscribe to device discovery events
-		let unsubDevices: (() => void) | undefined;
-		let unsubFinish: (() => void) | undefined;
-		if (isNativeBt) {
-			unsubDevices = onDevicesDiscovered((devices) => {
-				btDevices = devices;
-			});
-			unsubFinish = onScanFinished(() => {
-				btScanning = false;
-			});
-		}
 
 		const interval = setInterval(() => {
 			btConnected = isBtConnected();
@@ -102,8 +71,6 @@
 		}, 2000);
 		return () => {
 			clearInterval(interval);
-			unsubDevices?.();
-			unsubFinish?.();
 		};
 	});
 
@@ -258,42 +225,6 @@
 		toast.success('Bluetooth printer settings saved');
 	}
 
-	async function handleBtScan() {
-		btScanning = true;
-		btDevices = [];
-		try {
-			await scanDevices();
-			// discoveryFinish event will set btScanning = false
-			// Timeout fallback in case event doesn't fire
-			setTimeout(() => {
-				btScanning = false;
-				btDevices = getDiscoveredDevices();
-			}, 15000);
-		} catch (e: any) {
-			toast.error(`Scan error: ${e.message}`);
-			btScanning = false;
-		}
-	}
-
-	async function handleBtConnectDevice(address: string) {
-		btConnecting = true;
-		try {
-			await stopScan().catch(() => {});
-			btScanning = false;
-			const result = await connectToDevice(address);
-			if (result.success) {
-				btPrinterName = result.name || 'Unknown';
-				btConnected = true;
-				toast.success(`Connected to ${btPrinterName}`);
-			} else {
-				toast.error(result.error || 'Failed to connect');
-			}
-		} catch (e: any) {
-			toast.error(`Bluetooth error: ${e.message}`);
-		}
-		btConnecting = false;
-	}
-
 	async function handleBtConnect() {
 		btConnecting = true;
 		try {
@@ -395,7 +326,7 @@
 		>
 			{#if loading}
 				<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-				Saving...
+				Saving…
 			{:else}
 				Save Preferences
 			{/if}
@@ -421,9 +352,7 @@
 			<div class="max-w-xs space-y-2">
 				<Label for="low_stock_threshold">Low Stock Threshold</Label>
 				<div class="relative">
-					<Package
-						class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-					/>
+					<Package class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 					<Input
 						id="low_stock_threshold"
 						name="low_stock_threshold"
@@ -563,8 +492,11 @@
 			</Card.Header>
 			<Card.Content class="space-y-4 px-4 sm:px-6">
 				{#if printerList.length === 0 && !loadingPrinters}
-					<div class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-						No printers detected. Make sure your printer drivers are installed and the printer is connected.
+					<div
+						class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground"
+					>
+						No printers detected. Make sure your printer drivers are installed and the printer is
+						connected.
 					</div>
 				{:else}
 					<div class="grid gap-4 sm:grid-cols-2">
@@ -580,7 +512,9 @@
 									{defaultReceiptPrinter || 'System default (dialog)'}
 								</Select.Trigger>
 								<Select.Content>
-									<Select.Item value="" label="System default (dialog)">System default (dialog)</Select.Item>
+									<Select.Item value="" label="System default (dialog)"
+										>System default (dialog)</Select.Item
+									>
 									{#each printerList as printer}
 										<Select.Item value={printer.name} label={printer.name}>
 											{printer.name}{printer.isDefault ? ' (OS default)' : ''}
@@ -618,7 +552,9 @@
 									{defaultLabelPrinter || 'System default (dialog)'}
 								</Select.Trigger>
 								<Select.Content>
-									<Select.Item value="" label="System default (dialog)">System default (dialog)</Select.Item>
+									<Select.Item value="" label="System default (dialog)"
+										>System default (dialog)</Select.Item
+									>
 									{#each printerList as printer}
 										<Select.Item value={printer.name} label={printer.name}>
 											{printer.name}{printer.isDefault ? ' (OS default)' : ''}
@@ -651,18 +587,32 @@
 						<div class="flex items-center justify-between gap-4">
 							<div class="min-w-0 space-y-0.5">
 								<Label>Native ESC/POS Thermal Printing</Label>
-								<p class="text-xs text-muted-foreground">Bypass HTML rendering and print directly using thermal commands (supports cash drawer). Works with XPrinter and other ESC/POS printers.</p>
+								<p class="text-xs text-muted-foreground">
+									Bypass HTML rendering and print directly using thermal commands (supports cash
+									drawer). Works with XPrinter and other ESC/POS printers.
+								</p>
 							</div>
 							<Switch
 								checked={useThermalPrinter}
-								onCheckedChange={(v) => { useThermalPrinter = v; saveThermalSettings(); }}
+								onCheckedChange={(v) => {
+									useThermalPrinter = v;
+									saveThermalSettings();
+								}}
 							/>
 						</div>
 
 						{#if useThermalPrinter}
-							<div class="space-y-4 animate-in duration-200 fade-in slide-in-from-top-1 rounded-lg border bg-muted/20 p-4">
+							<div
+								class="animate-in space-y-4 rounded-lg border bg-muted/20 p-4 duration-200 fade-in slide-in-from-top-1"
+							>
 								<div class="flex justify-end">
-									<Button variant="ghost" size="sm" class="cursor-pointer text-xs h-7" onclick={refreshPrinters} disabled={loadingPrinters}>
+									<Button
+										variant="ghost"
+										size="sm"
+										class="h-7 cursor-pointer text-xs"
+										onclick={refreshPrinters}
+										disabled={loadingPrinters}
+									>
 										{#if loadingPrinters}
 											<Loader2 class="mr-1 h-3 w-3 animate-spin" />
 										{:else}
@@ -684,12 +634,24 @@
 										}}
 									>
 										<Select.Trigger class="w-full cursor-pointer">
-											{thermalConnectionType === 'usb_share' ? 'USB (Windows Share)' : thermalConnectionType === 'bluetooth' ? 'Bluetooth (COM Port)' : thermalConnectionType === 'usb_direct' ? 'USB (Direct COM Port)' : 'USB (Windows Share)'}
+											{thermalConnectionType === 'usb_share'
+												? 'USB (Windows Share)'
+												: thermalConnectionType === 'bluetooth'
+													? 'Bluetooth (COM Port)'
+													: thermalConnectionType === 'usb_direct'
+														? 'USB (Direct COM Port)'
+														: 'USB (Windows Share)'}
 										</Select.Trigger>
 										<Select.Content>
-											<Select.Item value="usb_share" label="USB (Windows Share)">USB (Windows Share)</Select.Item>
-											<Select.Item value="usb_direct" label="USB (Direct COM Port)">USB (Direct COM Port)</Select.Item>
-											<Select.Item value="bluetooth" label="Bluetooth (COM Port)">Bluetooth (COM Port) — for XPPrinter 365B, ZJ, etc.</Select.Item>
+											<Select.Item value="usb_share" label="USB (Windows Share)"
+												>USB (Windows Share)</Select.Item
+											>
+											<Select.Item value="usb_direct" label="USB (Direct COM Port)"
+												>USB (Direct COM Port)</Select.Item
+											>
+											<Select.Item value="bluetooth" label="Bluetooth (COM Port)"
+												>Bluetooth (COM Port) — for XPPrinter 365B, ZJ, etc.</Select.Item
+											>
 										</Select.Content>
 									</Select.Root>
 								</div>
@@ -699,29 +661,44 @@
 									<Label for="thermal_interface">Printer Interface</Label>
 									{#if thermalConnectionType === 'usb_share'}
 										{#if printerList.length > 0}
-											<div class="rounded-md border divide-y max-h-36 overflow-y-auto">
+											<div class="max-h-36 divide-y overflow-y-auto rounded-md border">
 												{#each printerList as printer}
 													{@const sharePath = `//localhost/${printer.name}`}
 													<button
 														type="button"
-														class="flex w-full items-center justify-between gap-2 p-2.5 text-left hover:bg-muted/50 transition-colors cursor-pointer {thermalPrinterInterface === sharePath ? 'bg-primary/10 border-l-2 border-l-primary' : ''}"
-														onclick={() => { thermalPrinterInterface = sharePath; saveThermalSettings(); }}
+														class="flex w-full cursor-pointer items-center justify-between gap-2 p-2.5 text-left transition-colors hover:bg-muted/50 {thermalPrinterInterface ===
+														sharePath
+															? 'border-l-2 border-l-primary bg-primary/10'
+															: ''}"
+														onclick={() => {
+															thermalPrinterInterface = sharePath;
+															saveThermalSettings();
+														}}
 													>
 														<div class="min-w-0">
-															<div class="text-sm font-medium truncate">{printer.name}</div>
-															<div class="text-[10px] text-muted-foreground font-mono">{sharePath}</div>
+															<div class="truncate text-sm font-medium">{printer.name}</div>
+															<div class="font-mono text-[10px] text-muted-foreground">
+																{sharePath}
+															</div>
 														</div>
 														{#if thermalPrinterInterface === sharePath}
-															<div class="text-xs font-bold text-primary shrink-0">Selected</div>
+															<div class="shrink-0 text-xs font-bold text-primary">Selected</div>
 														{:else if printer.isDefault}
-															<div class="text-[10px] text-muted-foreground shrink-0">Default</div>
+															<div class="shrink-0 text-[10px] text-muted-foreground">Default</div>
 														{/if}
 													</button>
 												{/each}
 											</div>
-											<p class="text-[10px] text-muted-foreground">Select your thermal printer above, or type manually below. Make sure the printer is shared in Windows (Printer Settings &gt; Right-click &gt; Properties &gt; Sharing).</p>
+											<p class="text-[10px] text-muted-foreground">
+												Select your thermal printer above, or type manually below. Make sure the
+												printer is shared in Windows (Printer Settings &gt; Right-click &gt;
+												Properties &gt; Sharing).
+											</p>
 										{:else}
-											<p class="text-[10px] text-muted-foreground">No printers detected. Share your USB printer in Windows first, then click Refresh.</p>
+											<p class="text-[10px] text-muted-foreground">
+												No printers detected. Share your USB printer in Windows first, then click
+												Refresh.
+											</p>
 										{/if}
 										<Input
 											id="thermal_interface"
@@ -731,20 +708,28 @@
 										/>
 									{:else if thermalConnectionType === 'usb_direct'}
 										{#if detectedComPorts.length > 0}
-											<div class="rounded-md border divide-y max-h-36 overflow-y-auto">
+											<div class="max-h-36 divide-y overflow-y-auto rounded-md border">
 												{#each detectedComPorts as port}
 													{@const comPath = `\\\\.\\${port.name}`}
 													<button
 														type="button"
-														class="flex w-full items-center justify-between gap-2 p-2.5 text-left hover:bg-muted/50 transition-colors cursor-pointer {thermalPrinterInterface === comPath ? 'bg-primary/10 border-l-2 border-l-primary' : ''}"
-														onclick={() => { thermalPrinterInterface = comPath; saveThermalSettings(); }}
+														class="flex w-full cursor-pointer items-center justify-between gap-2 p-2.5 text-left transition-colors hover:bg-muted/50 {thermalPrinterInterface ===
+														comPath
+															? 'border-l-2 border-l-primary bg-primary/10'
+															: ''}"
+														onclick={() => {
+															thermalPrinterInterface = comPath;
+															saveThermalSettings();
+														}}
 													>
 														<div class="min-w-0">
-															<div class="text-sm font-medium truncate">{port.name}</div>
-															<div class="text-[10px] text-muted-foreground truncate">{port.description}</div>
+															<div class="truncate text-sm font-medium">{port.name}</div>
+															<div class="truncate text-[10px] text-muted-foreground">
+																{port.description}
+															</div>
 														</div>
 														{#if thermalPrinterInterface === comPath}
-															<div class="text-xs font-bold text-primary shrink-0">Selected</div>
+															<div class="shrink-0 text-xs font-bold text-primary">Selected</div>
 														{/if}
 													</button>
 												{/each}
@@ -756,28 +741,49 @@
 											bind:value={thermalPrinterInterface}
 											onblur={saveThermalSettings}
 										/>
-										<p class="text-[10px] text-muted-foreground">Select a detected port above or type manually. Check Device Manager &gt; Ports for your printer's COM port.</p>
+										<p class="text-[10px] text-muted-foreground">
+											Select a detected port above or type manually. Check Device Manager &gt; Ports
+											for your printer's COM port.
+										</p>
 									{:else}
 										{#if detectedComPorts.length > 0}
-											<div class="rounded-md border divide-y max-h-36 overflow-y-auto">
-												{#each detectedComPorts.filter(p => p.description.toLowerCase().includes('bluetooth') || p.description.toLowerCase().includes('serial')) as port}
+											<div class="max-h-36 divide-y overflow-y-auto rounded-md border">
+												{#each detectedComPorts.filter((p) => p.description
+															.toLowerCase()
+															.includes('bluetooth') || p.description
+															.toLowerCase()
+															.includes('serial')) as port}
 													{@const comPath = `\\\\.\\${port.name}`}
 													<button
 														type="button"
-														class="flex w-full items-center justify-between gap-2 p-2.5 text-left hover:bg-muted/50 transition-colors cursor-pointer {thermalPrinterInterface === comPath ? 'bg-primary/10 border-l-2 border-l-primary' : ''}"
-														onclick={() => { thermalPrinterInterface = comPath; saveThermalSettings(); }}
+														class="flex w-full cursor-pointer items-center justify-between gap-2 p-2.5 text-left transition-colors hover:bg-muted/50 {thermalPrinterInterface ===
+														comPath
+															? 'border-l-2 border-l-primary bg-primary/10'
+															: ''}"
+														onclick={() => {
+															thermalPrinterInterface = comPath;
+															saveThermalSettings();
+														}}
 													>
 														<div class="min-w-0">
-															<div class="text-sm font-medium truncate">{port.name}</div>
-															<div class="text-[10px] text-muted-foreground truncate">{port.description}</div>
+															<div class="truncate text-sm font-medium">{port.name}</div>
+															<div class="truncate text-[10px] text-muted-foreground">
+																{port.description}
+															</div>
 														</div>
 														{#if thermalPrinterInterface === comPath}
-															<div class="text-xs font-bold text-primary shrink-0">Selected</div>
+															<div class="shrink-0 text-xs font-bold text-primary">Selected</div>
 														{/if}
 													</button>
 												{/each}
-												{#if detectedComPorts.filter(p => p.description.toLowerCase().includes('bluetooth') || p.description.toLowerCase().includes('serial')).length === 0}
-													<div class="p-2.5 text-sm text-muted-foreground">No Bluetooth serial ports found. Pair your printer first.</div>
+												{#if detectedComPorts.filter((p) => p.description
+															.toLowerCase()
+															.includes('bluetooth') || p.description
+															.toLowerCase()
+															.includes('serial')).length === 0}
+													<div class="p-2.5 text-sm text-muted-foreground">
+														No Bluetooth serial ports found. Pair your printer first.
+													</div>
 												{/if}
 											</div>
 										{/if}
@@ -788,8 +794,11 @@
 											onblur={saveThermalSettings}
 										/>
 										<p class="text-[10px] text-muted-foreground">
-										Steps: 1) Turn on printer 2) Open Windows Settings &gt; Bluetooth &gt; Add device 3) Pair the printer (PIN: 1234 or 0000) 4) Click "Refresh Devices" above 5) Select the COM port that appears. Common for XPPrinter 365B, ZJ-5805, RPP02N.
-									</p>
+											Steps: 1) Turn on printer 2) Open Windows Settings &gt; Bluetooth &gt; Add
+											device 3) Pair the printer (PIN: 1234 or 0000) 4) Click "Refresh Devices"
+											above 5) Select the COM port that appears. Common for XPPrinter 365B, ZJ-5805,
+											RPP02N.
+										</p>
 									{/if}
 								</div>
 
@@ -800,17 +809,24 @@
 										<Select.Root
 											type="single"
 											value={thermalPrinterType}
-											onValueChange={(v) => { thermalPrinterType = v ?? 'epson'; saveThermalSettings(); }}
+											onValueChange={(v) => {
+												thermalPrinterType = v ?? 'epson';
+												saveThermalSettings();
+											}}
 										>
 											<Select.Trigger class="w-full cursor-pointer">
 												{thermalPrinterType === 'star' ? 'Star PRNT' : 'EPSON (ESC/POS)'}
 											</Select.Trigger>
 											<Select.Content>
-												<Select.Item value="epson" label="EPSON (ESC/POS)">EPSON (ESC/POS)</Select.Item>
+												<Select.Item value="epson" label="EPSON (ESC/POS)"
+													>EPSON (ESC/POS)</Select.Item
+												>
 												<Select.Item value="star" label="Star PRNT">Star PRNT</Select.Item>
 											</Select.Content>
 										</Select.Root>
-										<p class="text-[10px] text-muted-foreground">XPrinter uses ESC/POS. Most thermal printers are ESC/POS compatible.</p>
+										<p class="text-[10px] text-muted-foreground">
+											XPrinter uses ESC/POS. Most thermal printers are ESC/POS compatible.
+										</p>
 									</div>
 
 									<!-- Paper Width -->
@@ -819,14 +835,19 @@
 										<Select.Root
 											type="single"
 											value={thermalPaperWidth}
-											onValueChange={(v) => { thermalPaperWidth = v ?? '80'; saveThermalSettings(); }}
+											onValueChange={(v) => {
+												thermalPaperWidth = v ?? '80';
+												saveThermalSettings();
+											}}
 										>
 											<Select.Trigger class="w-full cursor-pointer">
 												{thermalPaperWidth === '58' ? '58mm (32 chars)' : '80mm (48 chars)'}
 											</Select.Trigger>
 											<Select.Content>
-												<Select.Item value="80" label="80mm (48 chars)">80mm (48 chars)</Select.Item>
-												<Select.Item value="58" label="58mm (32 chars)">58mm (32 chars)</Select.Item>
+												<Select.Item value="80" label="80mm (48 chars)">80mm (48 chars)</Select.Item
+												>
+												<Select.Item value="58" label="58mm (32 chars)">58mm (32 chars)</Select.Item
+												>
 											</Select.Content>
 										</Select.Root>
 									</div>
@@ -837,32 +858,60 @@
 										<Select.Root
 											type="single"
 											value={thermalCharacterSet}
-											onValueChange={(v) => { thermalCharacterSet = v ?? 'PC437_USA'; saveThermalSettings(); }}
+											onValueChange={(v) => {
+												thermalCharacterSet = v ?? 'PC437_USA';
+												saveThermalSettings();
+											}}
 										>
 											<Select.Trigger class="w-full cursor-pointer">
-												{thermalCharacterSet === 'PC437_USA' ? 'PC437 USA (Default)' : thermalCharacterSet === 'PC850_MULTILINGUAL' ? 'PC850 Multilingual' : thermalCharacterSet === 'PC852_LATIN2' ? 'PC852 Latin 2' : thermalCharacterSet === 'PC858_EURO' ? 'PC858 Euro' : thermalCharacterSet === 'WPC1252' ? 'WPC1252 Latin' : 'PC437 USA (Default)'}
+												{thermalCharacterSet === 'PC437_USA'
+													? 'PC437 USA (Default)'
+													: thermalCharacterSet === 'PC850_MULTILINGUAL'
+														? 'PC850 Multilingual'
+														: thermalCharacterSet === 'PC852_LATIN2'
+															? 'PC852 Latin 2'
+															: thermalCharacterSet === 'PC858_EURO'
+																? 'PC858 Euro'
+																: thermalCharacterSet === 'WPC1252'
+																	? 'WPC1252 Latin'
+																	: 'PC437 USA (Default)'}
 											</Select.Trigger>
 											<Select.Content>
-												<Select.Item value="PC437_USA" label="PC437 USA (Default)">PC437 USA (Default)</Select.Item>
-												<Select.Item value="PC850_MULTILINGUAL" label="PC850 Multilingual">PC850 Multilingual</Select.Item>
-												<Select.Item value="PC852_LATIN2" label="PC852 Latin 2">PC852 Latin 2</Select.Item>
+												<Select.Item value="PC437_USA" label="PC437 USA (Default)"
+													>PC437 USA (Default)</Select.Item
+												>
+												<Select.Item value="PC850_MULTILINGUAL" label="PC850 Multilingual"
+													>PC850 Multilingual</Select.Item
+												>
+												<Select.Item value="PC852_LATIN2" label="PC852 Latin 2"
+													>PC852 Latin 2</Select.Item
+												>
 												<Select.Item value="PC858_EURO" label="PC858 Euro">PC858 Euro</Select.Item>
-												<Select.Item value="WPC1252" label="WPC1252 Latin">WPC1252 Latin</Select.Item>
+												<Select.Item value="WPC1252" label="WPC1252 Latin"
+													>WPC1252 Latin</Select.Item
+												>
 											</Select.Content>
 										</Select.Root>
-										<p class="text-[10px] text-muted-foreground">Change if special characters print incorrectly.</p>
+										<p class="text-[10px] text-muted-foreground">
+											Change if special characters print incorrectly.
+										</p>
 									</div>
 								</div>
 
 								<!-- Cash Drawer Toggle -->
-								<div class="flex items-center justify-between gap-4 mt-2">
+								<div class="mt-2 flex items-center justify-between gap-4">
 									<div class="min-w-0 space-y-0.5">
 										<Label>Open Cash Drawer on Print</Label>
-										<p class="text-xs text-muted-foreground">Sends command to open drawer after printing.</p>
+										<p class="text-xs text-muted-foreground">
+											Sends command to open drawer after printing.
+										</p>
 									</div>
 									<Switch
 										checked={thermalPrinterDrawer}
-										onCheckedChange={(v) => { thermalPrinterDrawer = v; saveThermalSettings(); }}
+										onCheckedChange={(v) => {
+											thermalPrinterDrawer = v;
+											saveThermalSettings();
+										}}
 									/>
 								</div>
 
@@ -877,13 +926,15 @@
 									>
 										{#if testingThermal}
 											<Loader2 class="mr-1 h-3 w-3 animate-spin" />
-											Testing...
+											Testing…
 										{:else}
 											<Printer class="mr-1 h-3 w-3" />
 											Test Thermal Print
 										{/if}
 									</Button>
-									<p class="text-[10px] text-muted-foreground mt-1">Sends a test page directly via ESC/POS commands to verify the connection.</p>
+									<p class="mt-1 text-[10px] text-muted-foreground">
+										Sends a test page directly via ESC/POS commands to verify the connection.
+									</p>
 								</div>
 							</div>
 						{/if}
@@ -893,7 +944,7 @@
 		</Card.Root>
 	{/if}
 
-	<!-- ==================== BLUETOOTH PRINTER (Mobile/Web/Capacitor/Electron) ==================== -->
+	<!-- ==================== BLUETOOTH PRINTER (Web BLE / Electron) ==================== -->
 	{#if btSupported || isElectron}
 		<Card.Root>
 			<Card.Header class="px-4 pb-4 sm:px-6">
@@ -906,9 +957,12 @@
 						<Card.Description class="text-xs sm:text-sm">
 							Connect to a Bluetooth thermal printer for receipt printing.
 							{#if isElectron}
-								Most POS printers (XPPrinter 365B, ZJ, etc.) use Classic Bluetooth — pair via Windows Bluetooth Settings, then use "Bluetooth (COM Port)" in the ESC/POS Thermal section above.
-							{:else if !isNativeBt}
-								Web Bluetooth only supports BLE printers. Most POS printers (XPPrinter 365B, ZJ, etc.) use Classic Bluetooth and won't appear here — use the Android app or desktop app instead.
+								Most POS printers (XPPrinter 365B, ZJ, etc.) use Classic Bluetooth — pair via
+								Windows Bluetooth Settings, then use "Bluetooth (COM Port)" in the ESC/POS Thermal
+								section above.
+							{:else}
+								Web Bluetooth only supports BLE printers. Most POS printers (XPPrinter 365B, ZJ,
+								etc.) use Classic Bluetooth and won't appear here — use the desktop app instead.
 							{/if}
 						</Card.Description>
 					</div>
@@ -918,31 +972,40 @@
 				<div class="flex items-center justify-between gap-4">
 					<div class="min-w-0 space-y-0.5">
 						<Label>Enable Bluetooth Printing</Label>
-						<p class="text-xs text-muted-foreground">Print receipts via Bluetooth instead of the browser print dialog.</p>
+						<p class="text-xs text-muted-foreground">
+							Print receipts via Bluetooth instead of the browser print dialog.
+						</p>
 					</div>
 					<Switch
 						checked={useBtPrinter}
-						onCheckedChange={(v) => { useBtPrinter = v; saveBtSettings(); }}
+						onCheckedChange={(v) => {
+							useBtPrinter = v;
+							saveBtSettings();
+						}}
 					/>
 				</div>
 
 				{#if useBtPrinter}
-					<div class="space-y-4 animate-in duration-200 fade-in slide-in-from-top-1 rounded-lg border bg-muted/20 p-4">
+					<div
+						class="animate-in space-y-4 rounded-lg border bg-muted/20 p-4 duration-200 fade-in slide-in-from-top-1"
+					>
 						<!-- Connection Status -->
 						<div class="flex items-center justify-between gap-3">
 							<div class="min-w-0">
 								<div class="flex items-center gap-2">
-									<div class="h-2.5 w-2.5 rounded-full {btConnected ? 'bg-emerald-500' : 'bg-red-400'}"></div>
+									<div
+										class="h-2.5 w-2.5 rounded-full {btConnected ? 'bg-emerald-500' : 'bg-red-400'}"
+									></div>
 									<span class="text-sm font-medium">
 										{btConnected ? btPrinterName : 'Not connected'}
 									</span>
 								</div>
 								{#if btConnected}
-									<p class="text-xs text-muted-foreground mt-0.5">Ready to print</p>
-								{:else if isNativeBt}
-									<p class="text-xs text-muted-foreground mt-0.5">Tap "Scan" to discover nearby Bluetooth printers</p>
+									<p class="mt-0.5 text-xs text-muted-foreground">Ready to print</p>
 								{:else}
-									<p class="text-xs text-muted-foreground mt-0.5">Tap "Connect" and select your printer</p>
+									<p class="mt-0.5 text-xs text-muted-foreground">
+										Tap "Connect" and select your printer
+									</p>
 								{/if}
 							</div>
 							<div class="flex gap-2">
@@ -955,25 +1018,6 @@
 									>
 										Disconnect
 									</Button>
-								{:else if isNativeBt}
-									<!-- Capacitor native: Scan for devices -->
-									<Button
-										variant="default"
-										size="sm"
-										class="cursor-pointer text-xs"
-										onclick={handleBtScan}
-										disabled={btScanning || btConnecting}
-									>
-										{#if btScanning}
-											<Loader2 class="mr-1 h-3 w-3 animate-spin" />
-											Scanning...
-										{:else}
-											<Search class="mr-1 h-3 w-3" />
-											Scan
-										{/if}
-									</Button>
-								{:else}
-									<!-- Web Bluetooth: Browser device picker -->
 									<Button
 										variant="default"
 										size="sm"
@@ -983,7 +1027,7 @@
 									>
 										{#if btConnecting}
 											<Loader2 class="mr-1 h-3 w-3 animate-spin" />
-											Connecting...
+											Connecting…
 										{:else}
 											<Bluetooth class="mr-1 h-3 w-3" />
 											Connect
@@ -993,56 +1037,16 @@
 							</div>
 						</div>
 
-						<!-- Capacitor Native: Discovered Devices List -->
-						{#if isNativeBt && !btConnected && (btDevices.length > 0 || btScanning)}
-							<div class="space-y-2">
-								<Label>Discovered Devices</Label>
-								<div class="rounded-md border divide-y max-h-48 overflow-y-auto">
-									{#if btDevices.length === 0 && btScanning}
-										<div class="p-3 text-center text-sm text-muted-foreground">
-											<Loader2 class="inline mr-1 h-3 w-3 animate-spin" />
-											Searching for printers...
-										</div>
-									{/if}
-									{#each btDevices as device}
-										<button
-											type="button"
-											class="flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-muted/50 transition-colors cursor-pointer"
-											onclick={() => handleBtConnectDevice(device.address)}
-											disabled={btConnecting}
-										>
-											<div class="min-w-0">
-												<div class="text-sm font-medium truncate">{device.name || 'Unknown Device'}</div>
-												<div class="text-[10px] text-muted-foreground font-mono">{device.address}</div>
-											</div>
-											{#if btConnecting}
-												<Loader2 class="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
-											{:else}
-												<Bluetooth class="h-4 w-4 shrink-0 text-muted-foreground" />
-											{/if}
-										</button>
-									{/each}
-								</div>
-								{#if btScanning}
-									<Button
-										variant="ghost"
-										size="sm"
-										class="cursor-pointer text-xs"
-										onclick={async () => { await stopScan().catch(() => {}); btScanning = false; }}
-									>
-										Stop Scanning
-									</Button>
-								{/if}
-							</div>
-						{/if}
-
 						<!-- Paper Width -->
 						<div class="space-y-2">
 							<Label>Paper Width</Label>
 							<Select.Root
 								type="single"
 								value={btPaperWidth}
-								onValueChange={(v) => { btPaperWidth = v ?? '58'; saveBtSettings(); }}
+								onValueChange={(v) => {
+									btPaperWidth = v ?? '58';
+									saveBtSettings();
+								}}
 							>
 								<Select.Trigger class="w-full cursor-pointer">
 									{btPaperWidth === '58' ? '58mm (32 chars)' : '80mm (48 chars)'}
@@ -1052,18 +1056,26 @@
 									<Select.Item value="80" label="80mm (48 chars)">80mm (48 chars)</Select.Item>
 								</Select.Content>
 							</Select.Root>
-							<p class="text-[10px] text-muted-foreground">Most portable Bluetooth printers use 58mm paper. XPPrinter 365B uses 80mm.</p>
+							<p class="text-[10px] text-muted-foreground">
+								Most portable Bluetooth printers use 58mm paper. XPPrinter 365B uses 80mm.
+							</p>
 						</div>
 
 						<!-- Slow Mode Toggle -->
 						<div class="flex items-center justify-between gap-4">
 							<div class="min-w-0 space-y-0.5">
 								<Label>Slow Printing Mode</Label>
-								<p class="text-xs text-muted-foreground">Enable if the printer cuts off or garbles receipts. Uses longer delays between data chunks.</p>
+								<p class="text-xs text-muted-foreground">
+									Enable if the printer cuts off or garbles receipts. Uses longer delays between
+									data chunks.
+								</p>
 							</div>
 							<Switch
 								checked={btSlowMode}
-								onCheckedChange={(v) => { btSlowMode = v; saveBtSettings(); }}
+								onCheckedChange={(v) => {
+									btSlowMode = v;
+									saveBtSettings();
+								}}
 							/>
 						</div>
 
@@ -1079,7 +1091,7 @@
 								>
 									{#if btTesting}
 										<Loader2 class="mr-1 h-3 w-3 animate-spin" />
-										Testing...
+										Testing…
 									{:else}
 										<Printer class="mr-1 h-3 w-3" />
 										Test Print

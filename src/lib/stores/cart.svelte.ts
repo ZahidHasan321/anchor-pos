@@ -193,15 +193,33 @@ function createCart() {
 			customer = c;
 		},
 
+		get splitTotal() {
+			return (cashAmount ?? 0) + (cardAmount ?? 0) + (mobileAmount ?? 0);
+		},
+
+		get splitValid() {
+			if (paymentMethod !== 'split') return true;
+			return Math.abs(this.splitTotal - subtotal) < 0.01;
+		},
+
+		resetPaymentFields() {
+			cashReceived = null;
+			cashAmount = null;
+			cardAmount = null;
+			mobileAmount = 0;
+			mobileMethod = 'bkash';
+			mobileTrxId = '';
+			cardType = 'debit';
+			cardRef = '';
+		},
+
 		clear() {
 			items = [];
 			customer = null;
 			paymentMethod = 'cash';
 			cashReceived = 0;
 			globalDiscount = null;
-			mobileAmount = 0;
-			cardType = 'debit';
-			cardRef = '';
+			this.resetPaymentFields();
 		}
 	};
 }

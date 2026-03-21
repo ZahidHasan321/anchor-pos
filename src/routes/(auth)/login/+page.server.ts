@@ -10,6 +10,7 @@ import {
 	setSessionTokenCookie
 } from '$lib/server/auth';
 import { logAuditEvent } from '$lib/server/audit';
+import { rateLimit, getClientIp } from '$lib/server/rate-limit';
 import { getDefaultRedirect } from '$lib/server/permissions';
 import { cacheCredentials, attemptOfflineLogin } from '$lib/server/offline-auth';
 import env from '$lib/server/env';
@@ -31,11 +32,21 @@ export const actions: Actions = {
 			return fail(400, { error: 'Username and password required', username });
 		}
 
+		// Rate limit login attempts per IP
+		const ip = getClientIp(request);
+		const limit = rateLimit(`login:${ip}`, { maxRequests: 5, windowMs: 60_000 });
+		if (!limit.allowed) {
+			return fail(429, { error: 'Too many login attempts. Please try again later.', username });
+		}
+
 		if (env.IS_ELECTRON) {
 			// In Electron: try VPS first, fall back to offline cached credentials
 			try {
 				if (!env.POWERSYNC_API_URL) {
-					return fail(500, { error: 'env.POWERSYNC_API_URL not configured. Check your .env file.', username });
+					return fail(500, {
+						error: 'env.POWERSYNC_API_URL not configured. Check your .env file.',
+						username
+					});
 				}
 				const controller = new AbortController();
 				const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -45,7 +56,7 @@ export const actions: Actions = {
 					headers: {
 						'Content-Type': 'application/json',
 						'x-app-secret': env.APP_SECRET_HEADER,
-						'User-Agent': 'AutoPOS-Electron/1.0',
+						'User-Agent': 'AutoPOS-Electron/1.0'
 					},
 					body: JSON.stringify({ username, password }),
 					signal: controller.signal
@@ -74,7 +85,7 @@ export const actions: Actions = {
 					phone: payload.phone || '',
 					image_url: payload.image_url || '',
 					is_active: true,
-					theme: payload.theme || 'system',
+					theme: payload.theme || 'system'
 				});
 
 				setSessionTokenCookie(event, token, new Date(expiresAt));
@@ -93,7 +104,11 @@ export const actions: Actions = {
 					throw redirect(303, await getDefaultRedirect(payload.role));
 				}
 
-				return fail(500, { error: 'No internet connection and no cached login found. Please connect to the internet for first-time login.', username });
+				return fail(500, {
+					error:
+						'No internet connection and no cached login found. Please connect to the internet for first-time login.',
+					username
+				});
 			}
 		}
 
@@ -105,7 +120,7 @@ export const actions: Actions = {
 		const userRows = await db.select().from(users).where(eq(users.username, username)).limit(1);
 		const user = userRows[0];
 
-		if (!user || !await verifyPassword(password, user.passwordHash)) {
+		if (!user || !(await verifyPassword(password, user.passwordHash))) {
 			return fail(401, { error: 'Invalid username or password', username });
 		}
 
@@ -127,5 +142,5 @@ export const actions: Actions = {
 		});
 
 		throw redirect(303, await getDefaultRedirect(user.role));
-	},
+	}
 };

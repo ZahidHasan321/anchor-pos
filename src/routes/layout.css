@@ -9,11 +9,11 @@
 	--radius: 0.625rem;
 
 	/* Base surfaces */
-	--background: oklch(0.98 0.002 250); /* Very light blue-gray */
+	--background: oklch(0.955 0.004 250); /* Visible gray so cards pop */
 	--foreground: oklch(0.18 0.02 260); /* Deep blue-gray text */
 
 	/* Cards get a clean white */
-	--card: oklch(1 0 0); /* Pure white */
+	--card: oklch(1 0 0); /* Pure white — stands out on gray bg */
 	--card-foreground: oklch(0.18 0.02 260);
 
 	/* Popover */
@@ -29,8 +29,8 @@
 	--secondary-foreground: oklch(0.3 0.1 180); /* Dark teal text */
 
 	/* Muted: Cool gray */
-	--muted: oklch(0.96 0.005 260); /* Light cool gray */
-	--muted-foreground: oklch(0.5 0.02 260); /* Medium gray text */
+	--muted: oklch(0.94 0.006 260); /* Visible cool gray */
+	--muted-foreground: oklch(0.45 0.02 260); /* Darker gray text for readability */
 
 	/* Accent: Amber/warm */
 	--accent: oklch(0.94 0.04 85); /* Warm amber tint */
@@ -40,8 +40,8 @@
 	--destructive: oklch(0.55 0.24 25); /* Material Red */
 
 	/* Borders & inputs */
-	--border: oklch(0.9 0.01 260); /* Soft blue-gray border */
-	--input: oklch(0.9 0.01 260);
+	--border: oklch(0.86 0.012 260); /* Visible border — not washed out */
+	--input: oklch(0.86 0.012 260);
 	--ring: oklch(0.55 0.15 265); /* Indigo ring */
 
 	/* Chart colors — vibrant Material palette */
@@ -52,23 +52,23 @@
 	--chart-5: oklch(0.6 0.24 25); /* Red-Orange */
 
 	/* Sidebar — slightly tinted */
-	--sidebar: oklch(0.97 0.005 260);
+	--sidebar: oklch(0.96 0.006 260);
 	--sidebar-foreground: oklch(0.18 0.02 260);
 	--sidebar-primary: oklch(0.45 0.18 265);
 	--sidebar-primary-foreground: oklch(0.98 0 0);
-	--sidebar-accent: oklch(0.93 0.02 265);
+	--sidebar-accent: oklch(0.92 0.02 265);
 	--sidebar-accent-foreground: oklch(0.25 0.05 265);
-	--sidebar-border: oklch(0.9 0.01 260);
+	--sidebar-border: oklch(0.86 0.012 260);
 	--sidebar-ring: oklch(0.55 0.15 265);
 }
 
 .dark {
 	color-scheme: dark;
 	/* Dark theme: deep blue-gray backgrounds */
-	--background: oklch(0.16 0.02 260); /* Deep blue-gray */
+	--background: oklch(0.14 0.02 260); /* Darker bg so cards stand out */
 	--foreground: oklch(0.93 0.005 260); /* Light text */
 
-	--card: oklch(0.2 0.02 260); /* Slightly lighter card */
+	--card: oklch(0.2 0.02 260); /* Clearly elevated from bg */
 	--card-foreground: oklch(0.93 0.005 260);
 
 	--popover: oklch(0.22 0.02 260);
@@ -83,8 +83,8 @@
 	--secondary-foreground: oklch(0.85 0.06 180);
 
 	/* Muted */
-	--muted: oklch(0.25 0.015 260);
-	--muted-foreground: oklch(0.65 0.015 260);
+	--muted: oklch(0.24 0.015 260);
+	--muted-foreground: oklch(0.6 0.015 260);
 
 	/* Accent */
 	--accent: oklch(0.28 0.04 85);
@@ -94,8 +94,8 @@
 	--destructive: oklch(0.65 0.22 25);
 
 	/* Borders */
-	--border: oklch(0.3 0.015 260);
-	--input: oklch(0.28 0.02 260);
+	--border: oklch(0.33 0.015 260);
+	--input: oklch(0.33 0.015 260);
 	--ring: oklch(0.65 0.15 265);
 
 	/* Charts — brighter for dark bg */
@@ -106,13 +106,13 @@
 	--chart-5: oklch(0.7 0.22 25);
 
 	/* Sidebar */
-	--sidebar: oklch(0.18 0.02 260);
+	--sidebar: oklch(0.17 0.02 260);
 	--sidebar-foreground: oklch(0.93 0.005 260);
 	--sidebar-primary: oklch(0.7 0.17 265);
 	--sidebar-primary-foreground: oklch(0.15 0.02 265);
 	--sidebar-accent: oklch(0.25 0.03 265);
 	--sidebar-accent-foreground: oklch(0.9 0.01 260);
-	--sidebar-border: oklch(0.3 0.015 260);
+	--sidebar-border: oklch(0.33 0.015 260);
 	--sidebar-ring: oklch(0.65 0.15 265);
 }
 
@@ -162,6 +162,7 @@
 	html,
 	body {
 		@apply bg-background text-foreground;
+		font-variant-numeric: tabular-nums;
 	}
 
 	button,
@@ -173,5 +174,31 @@
 	input[type='radio'],
 	.cursor-pointer {
 		cursor: pointer;
+	}
+
+	/* Prevent double-tap zoom delay on touch devices */
+	button,
+	a,
+	[role='button'],
+	input,
+	select,
+	textarea {
+		touch-action: manipulation;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	/* Tabular numbers for aligned numeric columns */
+	.tabular-nums {
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Hide number input spinners — they waste space and nobody uses them */
+	input[type='number']::-webkit-inner-spin-button,
+	input[type='number']::-webkit-outer-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+	input[type='number'] {
+		-moz-appearance: textfield;
 	}
 }

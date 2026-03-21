@@ -21,11 +21,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 		redirect(302, '/dashboard');
 	}
 
-	if (!db) return {
-		permissionsByRole: {},
-		allResources: ALL_RESOURCES,
-		configurableRoles: CONFIGURABLE_ROLES
-	};
+	if (!db)
+		return {
+			permissionsByRole: {},
+			allResources: ALL_RESOURCES,
+			configurableRoles: CONFIGURABLE_ROLES
+		};
 
 	const allPerms = await db.select().from(rolePermissions);
 

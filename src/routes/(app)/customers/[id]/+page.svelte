@@ -14,11 +14,9 @@
 	import { toast } from 'svelte-sonner';
 	import { confirmState } from '$lib/confirm.svelte';
 	import { powersync } from '$lib/powersync.svelte';
-	import { browser } from '$app/environment';
+	import { isNative } from '$lib/electron-data.svelte';
 
 	let { data, form } = $props();
-
-	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
 
 	let nativeCustomer = $state<any>(null);
 	let nativeOrders = $state<any[]>([]);
@@ -35,17 +33,31 @@
 
 		const [customerRows, completedCount, spentResult, allCount, orderRows] = await Promise.all([
 			powersync.db.getAll('SELECT * FROM customers WHERE id = ?', [customerId]),
-			powersync.db.get("SELECT count(*) as count FROM orders WHERE customer_id = ? AND status = 'completed'", [customerId]),
-			powersync.db.get("SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE customer_id = ? AND status = 'completed'", [customerId]),
+			powersync.db.get(
+				"SELECT count(*) as count FROM orders WHERE customer_id = ? AND status = 'completed'",
+				[customerId]
+			),
+			powersync.db.get(
+				"SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE customer_id = ? AND status = 'completed'",
+				[customerId]
+			),
 			powersync.db.get('SELECT count(*) as count FROM orders WHERE customer_id = ?', [customerId]),
-			powersync.db.getAll('SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?', [customerId, perPage, offset])
+			powersync.db.getAll(
+				'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+				[customerId, perPage, offset]
+			)
 		]);
 
 		nativeCustomer = (customerRows as any[])[0] ?? null;
 		nativeTotalOrders = (completedCount as any)?.count ?? 0;
 		nativeTotalSpent = (spentResult as any)?.total ?? 0;
 		const total = (allCount as any)?.count ?? 0;
-		nativePagination = { currentPage: pg, totalPages: Math.max(1, Math.ceil(total / perPage)), totalOrders: total, perPage };
+		nativePagination = {
+			currentPage: pg,
+			totalPages: Math.max(1, Math.ceil(total / perPage)),
+			totalOrders: total,
+			perPage
+		};
 		nativeOrders = (orderRows as any[]).map((o: any) => ({
 			...o,
 			orderNumber: o.order_number,
@@ -70,6 +82,32 @@
 	const pagination = $derived(isNative ? nativePagination : data.pagination);
 
 	let editDialogOpen = $state(false);
+	let editLoading = $state(false);
+
+	async function nativeEditCustomer(formData: FormData) {
+		if (!isNative || !powersync.ready || !customer) return;
+		editLoading = true;
+		try {
+			const name = (formData.get('name') as string)?.trim();
+			const phone = (formData.get('phone') as string)?.trim() || null;
+			const email = (formData.get('email') as string)?.trim() || null;
+			if (!name) {
+				toast.error('Name is required');
+				return;
+			}
+			await powersync.db.execute(
+				`UPDATE customers SET name = ?, phone = ?, email = ? WHERE id = ?`,
+				[name, phone, email, customer.id]
+			);
+			toast.success('Customer updated successfully');
+			editDialogOpen = false;
+			loadNativeCustomerDetail();
+		} catch (e) {
+			toast.error('Failed to update customer');
+		} finally {
+			editLoading = false;
+		}
+	}
 
 	$effect(() => {
 		if (form?.success) {
@@ -94,7 +132,13 @@
 	{#if customer}
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-4">
-				<Button variant="outline" size="icon" href="/customers" aria-label="Back to customers" class="cursor-pointer">
+				<Button
+					variant="outline"
+					size="icon"
+					href="/customers"
+					aria-label="Back to customers"
+					class="cursor-pointer"
+				>
 					<ArrowLeft class="h-4 w-4" />
 				</Button>
 				<div>
@@ -148,7 +192,7 @@
 			</Card.Root>
 
 			<!-- Order History with pagination -->
-			<Card.Root class="md:col-span-2">
+			<Card.Root class="pb-0 md:col-span-2">
 				<Card.Header>
 					<Card.Title>Order History</Card.Title>
 					<Card.Description>
@@ -207,7 +251,7 @@
 								size="icon"
 								disabled={pagination.currentPage <= 1}
 								onclick={() => goToPage(pagination.currentPage - 1)}
-							aria-label="Previous page"
+								aria-label="Previous page"
 								class="cursor-pointer"
 							>
 								<ChevronLeft class="h-4 w-4" />
@@ -217,7 +261,7 @@
 								size="icon"
 								disabled={pagination.currentPage >= pagination.totalPages}
 								onclick={() => goToPage(pagination.currentPage + 1)}
-							aria-label="Next page"
+								aria-label="Next page"
 								class="cursor-pointer"
 							>
 								<ChevronRight class="h-4 w-4" />
@@ -240,38 +284,81 @@
 		<Dialog.Header>
 			<Dialog.Title>Edit Customer</Dialog.Title>
 		</Dialog.Header>
-		<form method="POST" action="?/edit" use:enhance class="space-y-4">
-			<div class="space-y-2">
-				<Label for="edit-name">Full Name</Label>
-				<Input id="edit-name" name="name" value={customer?.name ?? ''} required />
-			</div>
-			<div class="space-y-2">
-				<Label for="edit-phone">Phone</Label>
-				<Input id="edit-phone" name="phone" value={customer?.phone ?? ''} />
-			</div>
-			<div class="space-y-2">
-				<Label for="edit-email">Email</Label>
-				<Input id="edit-email" name="email" type="email" value={customer?.email ?? ''} />
-			</div>
-			<Button
-				type="button"
-				class="w-full cursor-pointer"
-				onclick={async (e) => {
-					const formElement = e.currentTarget.closest('form');
-					if (
-						await confirmState.confirm({
-							title: 'Update Customer',
-							message: 'Are you sure you want to save these changes to the customer profile?',
-							confirmText: 'Save Changes',
-							variant: 'default'
-						})
-					) {
-						formElement?.requestSubmit();
-					}
+		{#if isNative}
+			<form
+				class="space-y-4"
+				onsubmit={(e) => {
+					e.preventDefault();
+					nativeEditCustomer(new FormData(e.currentTarget as HTMLFormElement));
 				}}
 			>
-				Save Changes
-			</Button>
-		</form>
+				<div class="space-y-2">
+					<Label for="edit-name">Full Name</Label>
+					<Input id="edit-name" name="name" value={customer?.name ?? ''} required />
+				</div>
+				<div class="space-y-2">
+					<Label for="edit-phone">Phone</Label>
+					<Input id="edit-phone" name="phone" value={customer?.phone ?? ''} />
+				</div>
+				<div class="space-y-2">
+					<Label for="edit-email">Email</Label>
+					<Input id="edit-email" name="email" type="email" value={customer?.email ?? ''} />
+				</div>
+				<Button
+					type="button"
+					class="w-full cursor-pointer"
+					disabled={editLoading}
+					onclick={async (e) => {
+						const formElement = e.currentTarget.closest('form');
+						if (
+							await confirmState.confirm({
+								title: 'Update Customer',
+								message: 'Are you sure you want to save these changes to the customer profile?',
+								confirmText: 'Save Changes',
+								variant: 'default'
+							})
+						) {
+							formElement?.requestSubmit();
+						}
+					}}
+				>
+					Save Changes
+				</Button>
+			</form>
+		{:else}
+			<form method="POST" action="?/edit" use:enhance class="space-y-4">
+				<div class="space-y-2">
+					<Label for="edit-name">Full Name</Label>
+					<Input id="edit-name" name="name" value={customer?.name ?? ''} required />
+				</div>
+				<div class="space-y-2">
+					<Label for="edit-phone">Phone</Label>
+					<Input id="edit-phone" name="phone" value={customer?.phone ?? ''} />
+				</div>
+				<div class="space-y-2">
+					<Label for="edit-email">Email</Label>
+					<Input id="edit-email" name="email" type="email" value={customer?.email ?? ''} />
+				</div>
+				<Button
+					type="button"
+					class="w-full cursor-pointer"
+					onclick={async (e) => {
+						const formElement = e.currentTarget.closest('form');
+						if (
+							await confirmState.confirm({
+								title: 'Update Customer',
+								message: 'Are you sure you want to save these changes to the customer profile?',
+								confirmText: 'Save Changes',
+								variant: 'default'
+							})
+						) {
+							formElement?.requestSubmit();
+						}
+					}}
+				>
+					Save Changes
+				</Button>
+			</form>
+		{/if}
 	</Dialog.Content>
 </Dialog.Root>

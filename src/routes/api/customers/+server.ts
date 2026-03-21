@@ -2,7 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { customers } from '$lib/server/db/schema';
-import { or, like, ilike } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
+import { fuzzyMatch } from '$lib/server/search';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
 	if (!locals.user) {
@@ -14,16 +15,17 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		return json({ items: [] });
 	}
 
-	const pattern = `%${search}%`;
 	const items = await db
 		.select()
 		.from(customers)
 		.where(
-			or(
-				ilike(customers.name, pattern),
-				ilike(customers.phone, pattern)
-			)
+			sql`(
+				${customers.name} ILIKE ${'%' + search + '%'}
+				OR similarity(${customers.name}, ${search}) > 0.15
+				OR ${customers.phone} ILIKE ${'%' + search + '%'}
+			)`
 		)
+		.orderBy(sql`similarity(${customers.name}, ${search}) DESC`)
 		.limit(20);
 
 	return json({ items });

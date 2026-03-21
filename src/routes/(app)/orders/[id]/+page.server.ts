@@ -21,14 +21,14 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, '/login');
 	}
 
-	const isElectron = env.IS_ELECTRON;
-	if (isElectron || !db) {
+	const isNative = env.IS_NATIVE;
+	if (isNative || !db) {
 		return {
 			order: null,
 			items: [],
 			storeSettings: {},
 			user: locals.user,
-			isElectron,
+			isNative,
 			orderId: params.id
 		};
 	}
@@ -92,7 +92,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		items,
 		storeSettings: settings,
 		user: locals.user,
-		isElectron: false,
+		isNative: false,
 		orderId: params.id
 	};
 };
@@ -108,19 +108,31 @@ export const actions: Actions = {
 		const itemId = data.get('itemId') as string;
 
 		try {
-			const item = (await db.select().from(orderItems).where(eq(orderItems.id, itemId)).limit(1))[0];
-			if (!item || item.status === 'refunded') {
-				return fail(400, { error: 'Item not found or already refunded' });
-			}
+			// All reads and writes inside a single transaction with FOR UPDATE locks
+			// to prevent double-refund race conditions
+			const itemTotal = await db.transaction(async (tx: any) => {
+				// Lock the item row — concurrent refund requests will wait here
+				const item = (
+					await tx
+						.select()
+						.from(orderItems)
+						.where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, params.id)))
+						.for('update')
+						.limit(1)
+				)[0];
+				if (!item || item.status === 'refunded') {
+					throw new Error('ITEM_ALREADY_REFUNDED');
+				}
 
-			const order = (await db.select().from(orders).where(eq(orders.id, params.id)).limit(1))[0];
-			if (!order || order.status !== 'completed') {
-				return fail(400, { error: 'Order cannot be partially refunded' });
-			}
+				const order = (
+					await tx.select().from(orders).where(eq(orders.id, params.id)).for('update').limit(1)
+				)[0];
+				if (!order || order.status !== 'completed') {
+					throw new Error('ORDER_NOT_REFUNDABLE');
+				}
 
-			const itemTotal = item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100);
+				const total = item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100);
 
-			await db.transaction(async (tx: any) => {
 				// 1. Update item status
 				await tx.update(orderItems).set({ status: 'refunded' }).where(eq(orderItems.id, itemId));
 
@@ -128,7 +140,7 @@ export const actions: Actions = {
 				await tx
 					.update(orders)
 					.set({
-						totalAmount: sql`${orders.totalAmount} - ${itemTotal}`
+						totalAmount: sql`${orders.totalAmount} - ${total}`
 					})
 					.where(eq(orders.id, params.id));
 
@@ -149,18 +161,16 @@ export const actions: Actions = {
 					});
 				}
 
-				// 4. Add to cashbook (if it was a cash payment)
-				if (order.paymentMethod === 'cash') {
-					await tx.insert(cashbook).values({
-						id: generateId(),
-						amount: itemTotal,
-						type: 'out',
-						category: 'refund',
-						description: `Refund: ${item.productName} (Order #${order.orderNumber ?? params.id.slice(0, 8)})`,
-						userId: locals.user!.id,
-						createdAt: new Date()
-					});
-				}
+				// 4. Add refund to cashbook for all payment methods
+				await tx.insert(cashbook).values({
+					id: generateId(),
+					amount: total,
+					type: 'out',
+					category: 'refund',
+					description: `Refund (${order.paymentMethod}): ${item.productName} (Order #${order.orderNumber ?? params.id.slice(0, 8)})`,
+					userId: locals.user!.id,
+					createdAt: new Date()
+				});
 
 				await logAuditEvent({
 					userId: locals.user!.id,
@@ -168,10 +178,18 @@ export const actions: Actions = {
 					action: 'REFUND_ORDER_ITEM',
 					entity: 'orders',
 					entityId: params.id,
-					details: `Refunded item: ${item.productName} (${item.variantLabel}) - Amount: ${itemTotal}`
+					details: `Refunded item: ${item.productName} (${item.variantLabel}) - Amount: ${total} - Payment: ${order.paymentMethod}`
 				});
+
+				return total;
 			});
-		} catch (e) {
+		} catch (e: any) {
+			if (e.message === 'ITEM_ALREADY_REFUNDED') {
+				return fail(400, { error: 'Item not found or already refunded' });
+			}
+			if (e.message === 'ORDER_NOT_REFUNDABLE') {
+				return fail(400, { error: 'Order cannot be partially refunded' });
+			}
 			console.error('Failed to refund item:', e);
 			return fail(500, { error: 'Database error' });
 		}
@@ -193,9 +211,18 @@ export const actions: Actions = {
 
 		try {
 			await db.transaction(async (tx: any) => {
+				// Lock the order row to prevent concurrent status changes
+				const orderData = (
+					await tx.select().from(orders).where(eq(orders.id, params.id)).for('update').limit(1)
+				)[0];
+
+				if (!orderData || orderData.status !== 'completed') {
+					throw new Error('ORDER_NOT_REFUNDABLE');
+				}
+
 				await tx
 					.update(orders)
-					.set({ status: status as 'completed' | 'refunded' | 'void' })
+					.set({ status: status as typeof orders.$inferInsert.status })
 					.where(eq(orders.id, params.id));
 
 				await logAuditEvent({
@@ -206,8 +233,6 @@ export const actions: Actions = {
 					entityId: params.id,
 					details: `Changed order status to ${status}`
 				});
-
-				const orderData = (await tx.select().from(orders).where(eq(orders.id, params.id)).limit(1))[0];
 
 				// If refunded, restore stock and log cash
 				if (status === 'refunded') {
@@ -236,18 +261,16 @@ export const actions: Actions = {
 						.set({ status: 'refunded' })
 						.where(eq(orderItems.orderId, params.id));
 
-					// Log to cashbook (if it was a cash payment)
-					if (orderData.paymentMethod === 'cash') {
-						await tx.insert(cashbook).values({
-							id: generateId(),
-							amount: orderData.totalAmount,
-							type: 'out',
-							category: 'refund',
-							description: `Full Refund: Order #${orderData.orderNumber ?? params.id.slice(0, 8)}`,
-							userId: locals.user!.id,
-							createdAt: new Date()
-						});
-					}
+					// Log refund to cashbook for all payment methods
+					await tx.insert(cashbook).values({
+						id: generateId(),
+						amount: orderData.totalAmount,
+						type: 'out',
+						category: 'refund',
+						description: `Full Refund (${orderData.paymentMethod}): Order #${orderData.orderNumber ?? params.id.slice(0, 8)}`,
+						userId: locals.user!.id,
+						createdAt: new Date()
+					});
 				} else if (status === 'void') {
 					// If voided, we also restore stock but log as VOID
 					const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, params.id));
@@ -274,21 +297,22 @@ export const actions: Actions = {
 						.set({ status: 'voided' })
 						.where(and(eq(orderItems.orderId, params.id), sql`${orderItems.status} != 'refunded'`));
 
-					// Log to cashbook if it was a cash payment (money returned)
-					if (orderData.paymentMethod === 'cash') {
-						await tx.insert(cashbook).values({
-							id: generateId(),
-							amount: orderData.totalAmount,
-							type: 'out',
-							category: 'refund',
-							description: `Void: Order #${orderData.orderNumber ?? params.id.slice(0, 8)}`,
-							userId: locals.user!.id,
-							createdAt: new Date()
-						});
-					}
+					// Log void to cashbook for all payment methods
+					await tx.insert(cashbook).values({
+						id: generateId(),
+						amount: orderData.totalAmount,
+						type: 'out',
+						category: 'refund',
+						description: `Void (${orderData.paymentMethod}): Order #${orderData.orderNumber ?? params.id.slice(0, 8)}`,
+						userId: locals.user!.id,
+						createdAt: new Date()
+					});
 				}
 			});
-		} catch (e) {
+		} catch (e: any) {
+			if (e.message === 'ORDER_NOT_REFUNDABLE') {
+				return fail(400, { error: 'Order is not in a refundable state' });
+			}
 			console.error('Failed to update order status:', e);
 			return fail(500, { error: 'Database error' });
 		}

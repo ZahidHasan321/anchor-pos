@@ -8,7 +8,7 @@ import { eq } from 'drizzle-orm';
 import { env as privateEnv } from '$env/dynamic/private';
 import { jwtVerify, importJWK } from 'jose';
 import { getLocalPublicKey } from '$lib/server/offline-auth';
-import { cleanupAuditLogs } from '$lib/server/audit';
+import { runMaintenance } from '$lib/server/maintenance';
 import env from '$lib/server/env';
 
 // Cache for public key used in offline JWT validation
@@ -50,13 +50,6 @@ async function bootstrapAdmin() {
 			});
 		}
 
-		// Perform maintenance tasks on start (infrequent)
-		const retentionDays = parseInt(privateEnv.AUDIT_LOG_RETENTION_DAYS || '365');
-		const deletedCount = await cleanupAuditLogs(retentionDays);
-		if (deletedCount > 0) {
-			console.log(`[Maintenance] Cleaned up ${deletedCount} old audit logs.`);
-		}
-
 		isBootstrapped = true;
 	} catch (e) {
 		console.error('[Bootstrap] Failed to check/create admin user:', e);
@@ -67,7 +60,11 @@ export const handleError: HandleServerError = ({ error, event }) => {
 	console.error(`[${new Date().toISOString()}] Server error at ${event.url.pathname}:`, error);
 	const message = error instanceof Error ? error.message : String(error);
 
-	if (message.includes('ECONNREFUSED') || message.includes('ETIMEDOUT') || message.includes('database connection failed')) {
+	if (
+		message.includes('ECONNREFUSED') ||
+		message.includes('ETIMEDOUT') ||
+		message.includes('database connection failed')
+	) {
 		return {
 			message: 'The service is temporarily unavailable. Please try again later.',
 			code: 'SERVICE_UNAVAILABLE'
@@ -82,6 +79,11 @@ export const handleError: HandleServerError = ({ error, event }) => {
 
 export const handle: Handle = async ({ event, resolve }) => {
 	await bootstrapAdmin();
+
+	// Periodic cleanup — throttled internally to once per hour, non-blocking
+	const auditRetentionDays = parseInt(privateEnv.AUDIT_LOG_RETENTION_DAYS || '365');
+	runMaintenance({ auditRetentionDays }).catch(() => {});
+
 	const token = event.cookies.get('session');
 
 	// DEV MODE: fake admin user when no DB is available
@@ -96,7 +98,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 			email: null,
 			phone: null
 		};
-		event.locals.session = { id: 'dev-session', userId: 'dev-user', expiresAt: new Date(Date.now() + 86400000) };
+		event.locals.session = {
+			id: 'dev-session',
+			userId: 'dev-user',
+			expiresAt: new Date(Date.now() + 86400000)
+		};
 	} else if (!token) {
 		event.locals.user = null;
 		event.locals.session = null;
@@ -135,10 +141,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 				username: payload.username as string,
 				role: payload.role as any,
 				name: payload.name as string,
-				email: payload.email as string || null,
-				phone: payload.phone as string || null,
-				imageUrl: payload.image_url as string || null,
-				theme: payload.theme as any || 'system'
+				email: (payload.email as string) || null,
+				phone: (payload.phone as string) || null,
+				imageUrl: (payload.image_url as string) || null,
+				theme: (payload.theme as any) || 'system'
 			};
 			event.locals.session = {
 				id: 'jwt-session',
@@ -155,27 +161,32 @@ export const handle: Handle = async ({ event, resolve }) => {
 		// STANDARD DB SESSION VALIDATION FOR WEB
 		const { session, user } = await validateSessionToken(token);
 		event.locals.session = session;
-		event.locals.user = user ? {
-			id: user.id,
-			name: user.name,
-			username: user.username,
-			role: user.role,
-			theme: user.theme,
-			imageUrl: user.imageUrl,
-			email: user.email,
-			phone: user.phone
-		} : null;
+		event.locals.user = user
+			? {
+					id: user.id,
+					name: user.name,
+					username: user.username,
+					role: user.role,
+					theme: user.theme,
+					imageUrl: user.imageUrl,
+					email: user.email,
+					phone: user.phone
+				}
+			: null;
 	}
 
 	// Global Route Guard
 	const isAuthRoute = event.url.pathname.startsWith('/login');
 	const isApiRoute = event.url.pathname.startsWith('/api');
-	const isRemoteAuthRoute = event.url.pathname.startsWith('/api/auth/remote-login') || event.url.pathname.startsWith('/api/auth/remote-powersync-token') || event.url.pathname.startsWith('/api/auth/mobile-login') || event.url.pathname.startsWith('/api/auth/mobile-logout') || event.url.pathname.startsWith('/api/powersync/upload') || event.url.pathname.startsWith('/api/powersync/token') || event.url.pathname.startsWith('/api/errors');
+	const isRemoteAuthRoute =
+		event.url.pathname.startsWith('/api/auth/remote-login') ||
+		event.url.pathname.startsWith('/api/auth/remote-powersync-token') ||
+		event.url.pathname.startsWith('/api/powersync/upload') ||
+		event.url.pathname.startsWith('/api/powersync/token') ||
+		event.url.pathname.startsWith('/api/errors');
 	const isWellKnown = event.url.pathname.startsWith('/.well-known');
 
-	// In Capacitor static builds, the adapter-static server calls hooks for fallback page generation.
-	// Skip the route guard — auth is handled client-side in the SPA.
-	if (!env.IS_CAPACITOR && !event.locals.user && !isAuthRoute && !isRemoteAuthRoute && !isWellKnown) {
+	if (!event.locals.user && !isAuthRoute && !isRemoteAuthRoute && !isWellKnown) {
 		if (isApiRoute) {
 			return new Response(JSON.stringify({ error: 'Unauthorized' }), {
 				status: 401,
@@ -192,24 +203,23 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// CORS & Security Headers
 	const origin = event.request.headers.get('origin');
-	const ALLOWED_ORIGINS = ['https://anchorshop.cloud', 'app://-'];
-	const isLocalOrigin = origin && (
-		origin.startsWith('http://localhost') ||
-		origin.startsWith('http://127.0.0.1') ||
-		origin.startsWith('app://') ||
-		origin === 'https://localhost' ||      // Capacitor Android (androidScheme: 'https')
-		origin === 'https://anchorshop.cloud'
-	);
+	const ALLOWED_ORIGINS = new Set([
+		'https://anchorshop.cloud',
+		'app://-',
+		'http://localhost:3000',
+		'http://127.0.0.1:3000'
+	]);
+	const isLocalOrigin = origin && ALLOWED_ORIGINS.has(origin);
 
 	if (event.request.method === 'OPTIONS' && isLocalOrigin) {
-			return new Response(null, {
-					headers: {
-							'Access-Control-Allow-Origin': origin!,
-							'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-							'Access-Control-Allow-Headers': 'Content-Type, x-app-secret, x-user-id',
-							'Access-Control-Allow-Credentials': 'true'
-					}
-			});
+		return new Response(null, {
+			headers: {
+				'Access-Control-Allow-Origin': origin!,
+				'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+				'Access-Control-Allow-Headers': 'Content-Type, x-app-secret, x-user-token',
+				'Access-Control-Allow-Credentials': 'true'
+			}
+		});
 	}
 	const response = await resolve(event);
 
@@ -227,7 +237,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 			"img-src 'self' data: blob: https:; " +
 			"font-src 'self' data:; " +
 			"connect-src 'self' https://anchorshop.cloud https://*.anchorshop.cloud wss://powersync.anchorshop.cloud" +
-			(env.IS_ELECTRON ? " http://127.0.0.1:* ws://127.0.0.1:*" : "") + "; " +
+			(env.IS_ELECTRON ? ' http://127.0.0.1:* ws://127.0.0.1:*' : '') +
+			'; ' +
 			"worker-src 'self' blob:; " +
 			"frame-ancestors 'none';" +
 			(env.IS_ELECTRON ? '' : ' upgrade-insecure-requests;')

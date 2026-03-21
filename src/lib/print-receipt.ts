@@ -1,5 +1,9 @@
 import { getCurrencySymbol } from './format';
-import { isConnected as isBtConnected, printBluetoothReceipt, isCapacitorNative, connectPrinter } from './bluetooth-printer';
+import {
+	isConnected as isBtConnected,
+	printBluetoothReceipt,
+	connectPrinter
+} from './bluetooth-printer';
 import { printerState } from './stores/printer.svelte';
 import qrcodeMinJs from './vendor/qrcode.min.js?raw';
 
@@ -20,10 +24,14 @@ async function generateQRDataUrl(text: string): Promise<string> {
 			}
 
 			const QRCode = (window as any).QRCode;
-			if (!QRCode) { resolve(''); return; }
+			if (!QRCode) {
+				resolve('');
+				return;
+			}
 
 			const container = document.createElement('div');
-			container.style.cssText = 'position:fixed;left:-9999px;width:100px;height:100px;visibility:hidden;';
+			container.style.cssText =
+				'position:fixed;left:-9999px;width:100px;height:100px;visibility:hidden;';
 			document.body.appendChild(container);
 
 			try {
@@ -91,14 +99,16 @@ export type ReceiptData = {
 	status?: string;
 };
 
-export async function printReceipt(data: ReceiptData, preview = false): Promise<{ success: boolean; error?: string } | void> {
+export async function printReceipt(
+	data: ReceiptData,
+	preview = false
+): Promise<{ success: boolean; error?: string } | void> {
 	const s = data.storeSettings;
 	const symbol = getCurrencySymbol();
 
 	// Pre-render QR code as a static image so print services don't show raw JS as text
-	const qrDataUrl = typeof window !== 'undefined'
-		? await generateQRDataUrl(data.orderUuid || data.orderId)
-		: '';
+	const qrDataUrl =
+		typeof window !== 'undefined' ? await generateQRDataUrl(data.orderUuid || data.orderId) : '';
 
 	const itemsHtml = data.items
 		.map(
@@ -113,7 +123,7 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 		)
 		.join('');
 
-	const hasRefunds = data.items.some(i => i.status === 'refunded') || data.status === 'refunded';
+	const hasRefunds = data.items.some((i) => i.status === 'refunded') || data.status === 'refunded';
 	const refundAmount = data.originalTotal ? data.originalTotal - data.total : 0;
 
 	const html = `<!DOCTYPE html>
@@ -185,15 +195,21 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 			${s.store_bin ? `<div style="font-size: 11px; margin-top: 2px;">BIN: ${s.store_bin}</div>` : ''}
 		</div>
 
-		${data.status === 'refunded' ? `
+		${
+			data.status === 'refunded'
+				? `
 			<div style="text-align:center; border: 2px solid #000; padding: 5px; margin: 10px 0; font-weight: bold; font-size: 16px;">
 				FULL REFUND
 			</div>
-		` : hasRefunds ? `
+		`
+				: hasRefunds
+					? `
 			<div style="text-align:center; border: 1px solid #000; padding: 3px; margin: 10px 0; font-weight: bold; font-size: 12px;">
 				PARTIAL REFUND
 			</div>
-		` : ''}
+		`
+					: ''
+		}
 
 		<div class="line"></div>
 
@@ -222,7 +238,9 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 		<div class="line"></div>
 
 		<table>
-			${data.originalTotal && data.originalTotal !== data.total ? `
+			${
+				data.originalTotal && data.originalTotal !== data.total
+					? `
 				<tr style="font-size: 12px;">
 					<td>ORIGINAL TOTAL</td>
 					<td style="text-align:right">${symbol}${data.originalTotal.toFixed(2)}</td>
@@ -231,11 +249,16 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 					<td>TOTAL REFUND</td>
 					<td style="text-align:right">-${symbol}${refundAmount.toFixed(2)}</td>
 				</tr>
-			` : ''}
+			`
+					: ''
+			}
 			<tr class="total-line">
 				<td>NET TOTAL</td>
 				<td style="text-align:right">${symbol}${data.total.toFixed(2)}</td>
 			</tr>
+			${
+				data.cashReceived
+					? `
 			<tr style="font-size: 11px;">
 				<td>Cash Received</td>
 				<td style="text-align:right">${symbol}${data.cashReceived.toFixed(2)}</td>
@@ -244,6 +267,9 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 				<td>Change Given</td>
 				<td style="text-align:right">${symbol}${data.changeGiven.toFixed(2)}</td>
 			</tr>
+			`
+					: ''
+			}
 		</table>
 
 		<div class="line"></div>
@@ -310,11 +336,16 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 			console.error('printToDevice failed, falling back:', e);
 			// fall through to web printing
 		}
-	// @ts-ignore
-	} else if (typeof window !== 'undefined' && window.electron?.printNative) {
 		// @ts-ignore
-		window.electron.printNative(html, preview);
-		return { success: true };
+	} else if (typeof window !== 'undefined' && window.electron?.printNative) {
+		try {
+			// @ts-ignore
+			await window.electron.printNative(html, preview);
+			return { success: true };
+		} catch (e) {
+			console.error('printNative failed:', e);
+			return { success: false, error: (e as Error).message || 'Print failed' };
+		}
 	}
 
 	// --- Bluetooth Thermal Printing (Mobile/Web) ---
@@ -323,13 +354,10 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 		if (useBt) {
 			// Auto-reconnect to last known printer if not connected
 			if (!isBtConnected()) {
-				const lastAddr = localStorage.getItem('pos-bt-printer-address');
-				if (lastAddr || isCapacitorNative()) {
-					try {
-						await connectPrinter();
-					} catch (e) {
-						console.error('Auto-reconnect to BT printer failed:', e);
-					}
+				try {
+					await connectPrinter();
+				} catch (e) {
+					console.error('Auto-reconnect to BT printer failed:', e);
 				}
 			}
 
@@ -343,13 +371,7 @@ export async function printReceipt(data: ReceiptData, preview = false): Promise<
 					printerState.refresh();
 					// fall through to web printing
 				}
-			} else if (isCapacitorNative()) {
-				printerState.refresh();
-				// No web print fallback on Capacitor — it won't show anything
-				return { success: false, error: 'Bluetooth printer not connected. Tap Reconnect or set up in Settings > Preferences.' };
 			}
-		} else if (isCapacitorNative()) {
-			return { success: false, error: 'Enable Bluetooth printing in Settings > Preferences.' };
 		}
 	}
 

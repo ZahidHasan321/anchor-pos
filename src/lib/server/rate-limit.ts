@@ -39,10 +39,12 @@ export function rateLimit(
 }
 
 /**
- * Get a rate limit key from a request (uses IP or forwarded IP).
+ * Get a rate limit key from a request.
+ * Uses X-Real-IP set by nginx (from $remote_addr, not client-spoofable),
+ * falling back to the socket address.
  */
 export function getClientIp(request: Request): string {
-	return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-		request.headers.get('x-real-ip') ||
-		'unknown';
+	// X-Real-IP is set by our nginx from $remote_addr — trustworthy
+	// Do NOT trust X-Forwarded-For as it can be spoofed by the client
+	return request.headers.get('x-real-ip') || 'unknown';
 }

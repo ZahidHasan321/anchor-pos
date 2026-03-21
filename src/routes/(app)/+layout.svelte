@@ -39,7 +39,7 @@
 
 	let { data, children } = $props();
 	let isMobileMenuOpen = $state(false);
-	const isElectron = $derived(
+	const isNative = $derived(
 		browser && (import.meta.env.BUILD_TARGET === 'electron' || (window as any).electron)
 	);
 
@@ -105,11 +105,13 @@
 	function setTheme(theme: 'light' | 'dark' | 'system') {
 		if (theme === 'system') resetMode();
 		else setMode(theme);
-		fetch('/api/theme', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ theme })
-		});
+		if (!isNative) {
+			fetch('/api/theme', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ theme })
+			});
+		}
 	}
 
 	async function handleLogout(e: Event, form: HTMLFormElement) {
@@ -126,18 +128,8 @@
 		});
 		if (!confirmed) return;
 
-		if (import.meta.env.VITE_BUILD_TARGET === 'capacitor') {
-			// Capacitor: call VPS logout endpoint, clear local state, navigate to login
-			await fetch('https://anchorshop.cloud/api/auth/mobile-logout', {
-				method: 'POST',
-				credentials: 'include'
-			}).catch(() => {});
-			localStorage.removeItem('cap_user');
-			goto('/login');
-		} else {
-			logoutInProgress = true;
-			form.requestSubmit();
-		}
+		logoutInProgress = true;
+		form.requestSubmit();
 	}
 </script>
 
@@ -213,7 +205,7 @@
 		<!-- Bottom Section -->
 		<div class="mt-auto space-y-2 border-t p-3">
 			<!-- Connection Status (Electron only) -->
-			{#if isElectron}
+			{#if isNative}
 				{#if collapsed}
 					<Tooltip.Root delayDuration={0}>
 						<Tooltip.Trigger class="w-full">
@@ -231,7 +223,7 @@
 						</Tooltip.Trigger>
 						<Tooltip.Content side="right" class="font-medium">
 							{powersync.connectionStatus === 'syncing'
-								? 'Syncing...'
+								? 'Syncing…'
 								: powersync.connectionStatus === 'online'
 									? 'Online'
 									: 'Offline'}
@@ -243,7 +235,7 @@
 					>
 						{#if powersync.connectionStatus === 'syncing'}
 							<RefreshCw class="h-3.5 w-3.5 animate-spin text-blue-500" />
-							<span class="text-blue-500">Syncing...</span>
+							<span class="text-blue-500">Syncing…</span>
 						{:else if powersync.connectionStatus === 'online'}
 							<span class="h-2 w-2 rounded-full bg-green-500"></span>
 							<span class="text-green-500">Online</span>
@@ -261,7 +253,11 @@
 					<Tooltip.Root delayDuration={0}>
 						<Tooltip.Trigger class="w-full">
 							{#snippet child({ props })}
-								<div {...props} class="flex items-center justify-center rounded-md p-2">
+								<a
+									{...props}
+									href="/settings/preferences"
+									class="flex items-center justify-center rounded-md p-2 transition-colors hover:bg-muted"
+								>
 									{#if printerState.status === 'connected'}
 										<PrinterCheck class="h-4 w-4 text-green-500" />
 									{:else if printerState.status === 'connecting'}
@@ -269,32 +265,35 @@
 									{:else}
 										<Printer class="h-4 w-4 text-amber-500" />
 									{/if}
-								</div>
+								</a>
 							{/snippet}
 						</Tooltip.Trigger>
 						<Tooltip.Content side="right" class="font-medium">
 							{printerState.status === 'connected'
 								? printerState.name || 'Printer Ready'
 								: printerState.status === 'connecting'
-									? 'Connecting...'
+									? 'Connecting…'
 									: 'Printer Disconnected'}
 						</Tooltip.Content>
 					</Tooltip.Root>
 				{:else}
-					<div
-						class="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground"
+					<a
+						href="/settings/preferences"
+						class="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
 					>
 						{#if printerState.status === 'connected'}
 							<PrinterCheck class="h-3.5 w-3.5 text-green-500" />
-							<span class="truncate text-green-500" title={printerState.name}>{printerState.name || 'Printer Ready'}</span>
+							<span class="truncate text-green-500" title={printerState.name}
+								>{printerState.name || 'Printer Ready'}</span
+							>
 						{:else if printerState.status === 'connecting'}
 							<Printer class="h-3.5 w-3.5 animate-pulse text-blue-500" />
-							<span class="text-blue-500">Connecting...</span>
+							<span class="text-blue-500">Connecting…</span>
 						{:else}
 							<Printer class="h-3.5 w-3.5 text-amber-500" />
 							<span class="text-amber-500">Printer Offline</span>
 						{/if}
-					</div>
+					</a>
 				{/if}
 			{/if}
 
@@ -379,7 +378,8 @@
 			<button
 				onclick={toggleSidebar}
 				class="flex w-full cursor-pointer items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-				title={collapsed ? 'Expand' : 'Collapse'}
+				title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+				aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
 			>
 				{#if collapsed}<ChevronRight class="h-5 w-5" />{:else}<ChevronLeft class="h-5 w-5" />{/if}
 			</button>
@@ -399,8 +399,12 @@
 		<Sheet.Root bind:open={isMobileMenuOpen}>
 			<Sheet.Trigger>
 				{#snippet child({ props })}
-					<Button {...props} variant="ghost" size="icon" class="cursor-pointer" aria-label="Open menu"
-						><Menu class="h-5 w-5" /></Button
+					<Button
+						{...props}
+						variant="ghost"
+						size="icon"
+						class="cursor-pointer"
+						aria-label="Open menu"><Menu class="h-5 w-5" /></Button
 					>
 				{/snippet}
 			</Sheet.Trigger>
@@ -440,14 +444,26 @@
 					<Separator class="my-4" />
 					<div class="flex items-center gap-2 px-3 py-2">
 						<span class="text-sm text-muted-foreground">Theme:</span>
-						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('light')} aria-label="Light theme"
-							><Sun class="h-4 w-4" /></Button
+						<Button
+							variant="ghost"
+							size="icon"
+							class="h-8 w-8"
+							onclick={() => setTheme('light')}
+							aria-label="Light theme"><Sun class="h-4 w-4" /></Button
 						>
-						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('dark')} aria-label="Dark theme"
-							><Moon class="h-4 w-4" /></Button
+						<Button
+							variant="ghost"
+							size="icon"
+							class="h-8 w-8"
+							onclick={() => setTheme('dark')}
+							aria-label="Dark theme"><Moon class="h-4 w-4" /></Button
 						>
-						<Button variant="ghost" size="icon" class="h-8 w-8" onclick={() => setTheme('system')} aria-label="System theme"
-							><Monitor class="h-4 w-4" /></Button
+						<Button
+							variant="ghost"
+							size="icon"
+							class="h-8 w-8"
+							onclick={() => setTheme('system')}
+							aria-label="System theme"><Monitor class="h-4 w-4" /></Button
 						>
 					</div>
 					<Separator class="my-4" />
@@ -478,7 +494,7 @@
 					<Printer class="h-3.5 w-3.5 text-amber-500" />
 				{/if}
 			{/if}
-			{#if isElectron}
+			{#if isNative}
 				{#if powersync.connectionStatus === 'syncing'}
 					<RefreshCw class="h-3.5 w-3.5 animate-spin text-blue-500" />
 				{:else if powersync.connectionStatus === 'online'}

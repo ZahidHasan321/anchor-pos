@@ -10,74 +10,24 @@
 		User,
 		Loader2,
 		AlertCircle,
-		ShieldCheck,
 		Eye,
 		EyeOff,
 		Sun,
 		Moon,
 		Monitor
 	} from '@lucide/svelte';
-	import { fade, slide } from 'svelte/transition';
+	import { slide } from 'svelte/transition';
 	import { setMode, resetMode } from 'mode-watcher';
-	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { APP_NAME } from '$lib/constants';
 
 	let { form } = $props();
 	let loading = $state(false);
 	let showPassword = $state(false);
-	let capacitorError = $state('');
-
-	// Build-time constant: true when compiled for Capacitor (local asset serving, no SSR server)
-	const IS_CAPACITOR = import.meta.env.VITE_BUILD_TARGET === 'capacitor';
 
 	function setTheme(theme: 'light' | 'dark' | 'system') {
 		if (theme === 'system') resetMode();
 		else setMode(theme);
-	}
-
-	// Capacitor: no local SvelteKit server — call the VPS mobile-login endpoint directly.
-	// The session cookie is set with SameSite=None so it's sent cross-origin on subsequent API calls.
-	async function handleCapacitorSubmit(e: SubmitEvent) {
-		if (!IS_CAPACITOR) return; // let use:enhance handle it for web
-		e.preventDefault();
-		capacitorError = '';
-		loading = true;
-		const formEl = e.target as HTMLFormElement;
-		const data = new FormData(formEl);
-		const username = (data.get('username') as string)?.trim();
-		const password = data.get('password') as string;
-
-		try {
-			const res = await fetch('https://anchorshop.cloud/api/auth/mobile-login', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ username, password }),
-				credentials: 'include' // stores the session cookie for cross-origin requests
-			});
-
-			if (!res.ok) {
-				const body = await res.json().catch(() => ({ message: 'Login failed' }));
-				capacitorError = body.message || 'Invalid username or password';
-				loading = false;
-				return;
-			}
-
-			const { user } = await res.json();
-			// Store user info for client-side route guard in (app)/+layout.ts
-			localStorage.setItem('cap_user', JSON.stringify(user));
-
-			// Client-side navigation — no server round-trip needed
-			const roleDefaultRoutes: Record<string, string> = {
-				admin: '/dashboard',
-				manager: '/dashboard',
-				sales: '/pos'
-			};
-			goto(roleDefaultRoutes[user.role] ?? '/dashboard');
-		} catch {
-			capacitorError = 'Network error. Check your connection and try again.';
-			loading = false;
-		}
 	}
 </script>
 
@@ -122,33 +72,26 @@
 	</div>
 
 	<div class="w-full max-w-[400px] space-y-6">
-		<!-- Brand Logo -->
-		<div
-			class="flex flex-col items-center justify-center space-y-2 text-center"
-			in:fade={{ duration: 600 }}
-		>
+		<!-- Brand -->
+		<div class="flex flex-col items-center justify-center space-y-2 text-center">
 			<div
 				class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-2xl font-black text-primary-foreground italic shadow-xl shadow-primary/20"
 			>
 				{APP_NAME.charAt(0)}
 			</div>
-			<h1 class="text-3xl font-black tracking-tighter text-primary uppercase italic">{APP_NAME}</h1>
-			<p class="text-sm font-medium text-muted-foreground">Clothing POS System</p>
+			<h1 class="text-3xl font-black tracking-tighter text-primary uppercase italic">
+				{APP_NAME}
+			</h1>
 		</div>
 
 		<Card.Root class="border-border/50 shadow-2xl">
-			<Card.Header class="space-y-1">
-				<Card.Title class="text-center text-2xl">Welcome back</Card.Title>
-				<Card.Description class="text-center"
-					>Enter your credentials to access your account</Card.Description
-				>
+			<Card.Header>
+				<Card.Title class="text-center text-xl">Sign in to continue</Card.Title>
 			</Card.Header>
 			<Card.Content>
 				<form
 					method="POST"
-					onsubmit={handleCapacitorSubmit}
 					use:enhance={() => {
-						if (IS_CAPACITOR) return; // handled by handleCapacitorSubmit
 						loading = true;
 						return async ({ result, update }) => {
 							loading = false;
@@ -168,15 +111,7 @@
 					}}
 					class="space-y-4"
 				>
-					{#if capacitorError}
-						<div
-							in:slide={{ duration: 200 }}
-							class="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm font-medium text-destructive"
-						>
-							<AlertCircle class="h-4 w-4 shrink-0" />
-							<p>{capacitorError}</p>
-						</div>
-					{:else if form?.error}
+					{#if form?.error}
 						<div
 							in:slide={{ duration: 200 }}
 							class="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm font-medium text-destructive"
@@ -223,8 +158,9 @@
 							/>
 							<button
 								type="button"
-								class="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer text-muted-foreground transition-colors hover:text-foreground focus:outline-hidden"
+								class="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 								onclick={() => (showPassword = !showPassword)}
+								aria-label={showPassword ? 'Hide password' : 'Show password'}
 								tabindex="-1"
 							>
 								{#if showPassword}
@@ -243,26 +179,13 @@
 					>
 						{#if loading}
 							<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-							Signing in...
+							Signing in…
 						{:else}
 							Sign In
 						{/if}
 					</Button>
 				</form>
 			</Card.Content>
-			<Card.Footer class="flex flex-col items-center rounded-b-lg border-t bg-muted/20 py-4">
-				<div
-					class="flex items-center gap-2 text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
-				>
-					<ShieldCheck class="h-3 w-3" />
-					Secure Environment
-				</div>
-			</Card.Footer>
 		</Card.Root>
-
-		<p class="text-center text-xs text-muted-foreground">
-			&copy; {new Date().getFullYear()}
-			{APP_NAME}. All rights reserved.
-		</p>
 	</div>
 </div>

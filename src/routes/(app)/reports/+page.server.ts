@@ -277,7 +277,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				)
 				.groupBy(orderItems.productName, products.id)
 				.orderBy(desc(sql`"totalQty"`))
-				.limit(10);
+				.limit(5);
 			return res;
 		})(),
 
@@ -313,57 +313,30 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		paymentBreakdown: (async () => {
 			if (!db) return [];
 
-			// To handle both legacy orders (where cashAmount etc are NULL) and new split orders:
-			// 1. For Cash: Sum cashAmount, or if NULL and method is 'cash', use totalAmount
-			const cashData = await db
+			const result = await db
 				.select({
-					method: sql<string>`'cash'`,
-					count: sql<number>`count(*)`,
-					total: sql<number>`coalesce(sum(coalesce(${orders.cashAmount}, CASE WHEN ${orders.paymentMethod} = 'cash' THEN ${orders.totalAmount} ELSE 0 END)), 0)`
+					cashTotal: sql<number>`coalesce(sum(coalesce(${orders.cashAmount}, CASE WHEN ${orders.paymentMethod} = 'cash' THEN ${orders.totalAmount} ELSE 0 END)), 0)`,
+					cashCount: sql<number>`count(*) FILTER (WHERE coalesce(${orders.cashAmount}, 0) > 0 OR ${orders.paymentMethod} = 'cash')`,
+					cardTotal: sql<number>`coalesce(sum(coalesce(${orders.cardAmount}, CASE WHEN ${orders.paymentMethod} = 'card' THEN ${orders.totalAmount} ELSE 0 END)), 0)`,
+					cardCount: sql<number>`count(*) FILTER (WHERE coalesce(${orders.cardAmount}, 0) > 0 OR ${orders.paymentMethod} = 'card')`,
+					mobileTotal: sql<number>`coalesce(sum(coalesce(${orders.mobileAmount}, CASE WHEN ${orders.paymentMethod} = 'mobile' THEN ${orders.totalAmount} ELSE 0 END)), 0)`,
+					mobileCount: sql<number>`count(*) FILTER (WHERE coalesce(${orders.mobileAmount}, 0) > 0 OR ${orders.paymentMethod} = 'mobile')`
 				})
 				.from(orders)
 				.where(
 					and(
 						eq(orders.status, 'completed'),
 						gte(orders.createdAt, startDate),
-						lt(orders.createdAt, endDate),
-						sql`(coalesce(${orders.cashAmount}, 0) > 0 OR ${orders.paymentMethod} = 'cash')`
+						lt(orders.createdAt, endDate)
 					)
 				);
 
-			const cardData = await db
-				.select({
-					method: sql<string>`'card'`,
-					count: sql<number>`count(*)`,
-					total: sql<number>`coalesce(sum(coalesce(${orders.cardAmount}, CASE WHEN ${orders.paymentMethod} = 'card' THEN ${orders.totalAmount} ELSE 0 END)), 0)`
-				})
-				.from(orders)
-				.where(
-					and(
-						eq(orders.status, 'completed'),
-						gte(orders.createdAt, startDate),
-						lt(orders.createdAt, endDate),
-						sql`(coalesce(${orders.cardAmount}, 0) > 0 OR ${orders.paymentMethod} = 'card')`
-					)
-				);
-
-			const mobileData = await db
-				.select({
-					method: sql<string>`'mobile'`,
-					count: sql<number>`count(*)`,
-					total: sql<number>`coalesce(sum(coalesce(${orders.mobileAmount}, CASE WHEN ${orders.paymentMethod} = 'mobile' THEN ${orders.totalAmount} ELSE 0 END)), 0)`
-				})
-				.from(orders)
-				.where(
-					and(
-						eq(orders.status, 'completed'),
-						gte(orders.createdAt, startDate),
-						lt(orders.createdAt, endDate),
-						sql`(coalesce(${orders.mobileAmount}, 0) > 0 OR ${orders.paymentMethod} = 'mobile')`
-					)
-				);
-
-			return [...cashData, ...cardData, ...mobileData];
+			const r = result[0];
+			return [
+				{ method: 'cash', count: r?.cashCount ?? 0, total: r?.cashTotal ?? 0 },
+				{ method: 'card', count: r?.cardCount ?? 0, total: r?.cardTotal ?? 0 },
+				{ method: 'mobile', count: r?.mobileCount ?? 0, total: r?.mobileTotal ?? 0 }
+			];
 		})(),
 
 		refundSummary: (async () => {
@@ -403,7 +376,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				)
 				.groupBy(cashbook.description)
 				.orderBy(desc(sql`total`))
-				.limit(10);
+				.limit(5);
 		})(),
 
 		stockUpdates: (async () => {
@@ -479,7 +452,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				)
 				.groupBy(customers.id)
 				.orderBy(desc(sql`"totalSpent"`))
-				.limit(10);
+				.limit(5);
 		})(),
 
 		chartData: (async () => {

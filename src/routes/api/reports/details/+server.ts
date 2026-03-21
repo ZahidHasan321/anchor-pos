@@ -61,7 +61,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				)
 			)
 			.groupBy(orderItems.productName, products.id)
-			.orderBy(desc(sql`totalQty`))
+			.orderBy(desc(sql`"totalQty"`))
 			.limit(limit)
 			.offset(offset);
 		return json(data);
@@ -86,7 +86,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				)
 			)
 			.groupBy(users.id)
-			.orderBy(desc(sql`totalSales`))
+			.orderBy(desc(sql`"totalSales"`))
 			.limit(limit)
 			.offset(offset);
 		return json(data);
@@ -111,7 +111,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				)
 			)
 			.groupBy(customers.id)
-			.orderBy(desc(sql`totalSpent`))
+			.orderBy(desc(sql`"totalSpent"`))
 			.limit(limit)
 			.offset(offset);
 		return json(data);
@@ -149,7 +149,6 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	if (type === 'expenses') {
 		const data = await db
 			.select({
-				id: cashbook.id,
 				description: cashbook.description,
 				total: sql<number>`sum(${cashbook.amount})`.as('total'),
 				count: sql<number>`count(*)`.as('count')

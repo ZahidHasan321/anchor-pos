@@ -32,17 +32,17 @@
 	import { printerState } from '$lib/stores/printer.svelte';
 	import { Bluetooth } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
-	import { browser } from '$app/environment';
+	import { isNative } from '$lib/electron-data.svelte';
 	import { confirmState } from '$lib/confirm.svelte';
 	import { fade } from 'svelte/transition';
 	import { untrack } from 'svelte';
 	import { APP_NAME } from '$lib/constants';
+	import { generateId } from '$lib/utils';
 
 	import { productsStore, categoriesStore } from '$lib/powersync-queries';
 	import { powersync } from '$lib/powersync.svelte';
 
 	let { data, form } = $props();
-	const isNative = $derived(browser && (!!(window as any).electron || !!(window as any).Capacitor));
 
 	let searchQuery = $state('');
 	let selectedCategory = $state('All');
@@ -160,7 +160,7 @@
 		loading = true;
 		console.log('[POS] Starting local checkout...');
 		try {
-			const orderId = crypto.randomUUID();
+			const orderId = generateId();
 			const now = new Date().toISOString(); // Match synced format: "2026-03-09T02:17:33.000Z"
 
 			console.log(`[POS] Inserting order: ${orderId}, Time: ${now}`);
@@ -216,7 +216,7 @@
 			console.log('[POS] Order inserted successfully:', orderResult);
 
 			for (const item of cart.items) {
-				const orderItemId = crypto.randomUUID();
+				const orderItemId = generateId();
 				console.log(`[POS] Inserting order item: ${orderItemId} for variant ${item.variantId}`);
 				await powersync.db.execute(
 					`
@@ -250,12 +250,12 @@
 					INSERT INTO stock_logs (id, variant_id, change_amount, reason, user_id, created_at)
 					VALUES (?, ?, ?, ?, ?, ?)
 				`,
-					[crypto.randomUUID(), item.variantId, -item.quantity, 'sale', data.user?.id, now]
+					[generateId(), item.variantId, -item.quantity, 'sale', data.user?.id, now]
 				);
 			}
 
 			// Add to cashbook locally
-			const cashbookId = crypto.randomUUID();
+			const cashbookId = generateId();
 			console.log(`[POS] Inserting cashbook entry: ${cashbookId}`);
 			await powersync.db.execute(
 				`
@@ -296,7 +296,7 @@
 	async function handleLocalAddCustomer() {
 		loading = true;
 		try {
-			const id = crypto.randomUUID();
+			const id = generateId();
 			const nameInput = document.getElementById('new-customer-name') as HTMLInputElement;
 			const phoneInput = document.getElementById('new-customer-phone') as HTMLInputElement;
 			const name = nameInput?.value;
@@ -418,7 +418,8 @@
 				<div class="relative">
 					<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
 					<Input
-						placeholder="Search..."
+						placeholder="Search products…"
+						aria-label="Search products"
 						class="h-12 pl-11 text-base"
 						value={searchQuery}
 						oninput={(e) => handleSearch(e.currentTarget.value)}
@@ -506,8 +507,19 @@
 					<ShoppingCart class="h-4 w-4" /><span class="font-bold">Cart</span>
 				</div>
 				{#if cart.items.length > 0}<button
-						onclick={() => cart.clear()}
-						class="text-xs text-muted-foreground hover:text-destructive">Clear All</button
+						onclick={async () => {
+							if (
+								await confirmState.confirm({
+									title: 'Clear Cart',
+									message: `Remove all ${cart.totalItems} item(s) from cart?`,
+									confirmText: 'Clear',
+									variant: 'destructive'
+								})
+							)
+								cart.clear();
+						}}
+						class="text-xs text-muted-foreground hover:text-destructive"
+						aria-label="Clear all items from cart">Clear All</button
 					>{/if}
 			</div>
 
@@ -525,13 +537,16 @@
 								<button
 									onclick={() => cart.removeItem(item.variantId)}
 									class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-									><X class="h-4 w-4" /></button
+									aria-label="Remove {item.productName} from cart"><X class="h-4 w-4" /></button
 								>
 							</div>
 							<div class="flex items-center justify-between">
 								<div class="flex items-center gap-1 rounded border px-1.5 py-0.5">
-									<span class="text-[9px] text-muted-foreground">Disc</span>
+									<label for="disc-{item.variantId}" class="text-[9px] text-muted-foreground"
+										>Disc</label
+									>
 									<input
+										id="disc-{item.variantId}"
 										type="number"
 										placeholder="0"
 										class="w-10 [appearance:textfield] border-0 bg-transparent p-0 text-center text-xs focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none"
@@ -542,18 +557,20 @@
 												e.currentTarget.value === '' ? null : Number(e.currentTarget.value)
 											)}
 									/>
-									<span class="text-[9px] text-muted-foreground">%</span>
+									<span class="text-[9px] text-muted-foreground" aria-hidden="true">%</span>
 								</div>
 								<div class="flex items-center gap-2">
 									<button
 										onclick={() => cart.updateQuantity(item.variantId, item.quantity - 1)}
 										class="flex h-8 w-8 items-center justify-center rounded border hover:bg-muted"
-										>-</button
+										aria-label="Decrease quantity of {item.productName}">-</button
 									>
-									<span class="w-4 text-center text-xs font-bold">{item.quantity}</span>
+									<span class="w-4 text-center text-xs font-bold tabular-nums">{item.quantity}</span
+									>
 									<button
 										onclick={() => cart.updateQuantity(item.variantId, item.quantity + 1)}
 										class="flex h-8 w-8 items-center justify-center rounded border hover:bg-muted"
+										aria-label="Increase quantity of {item.productName}"
 										disabled={item.quantity >= item.maxStock}>+</button
 									>
 								</div>
@@ -582,13 +599,14 @@
 							<button
 								onclick={() => cart.setCustomer(null)}
 								class="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-								><X class="h-4 w-4" /></button
+								aria-label="Remove customer"><X class="h-4 w-4" /></button
 							>
 						</div>
 					{:else}
 						<div class="relative">
 							<Input
-								placeholder="Customer search (name or phone)..."
+								placeholder="Customer search (name or phone)…"
+								aria-label="Search customers"
 								class="h-9 text-xs"
 								value={customerSearch}
 								oninput={(e) => handleCustomerSearch(e.currentTarget.value)}
@@ -642,9 +660,10 @@
 				</div>
 
 				<div class="flex items-center justify-between text-sm">
-					<span class="text-muted-foreground">Order Discount</span>
+					<label for="order-discount" class="text-muted-foreground">Order Discount</label>
 					<div class="flex items-center gap-1 rounded border px-2 py-0.5">
 						<input
+							id="order-discount"
 							type="number"
 							placeholder="0"
 							class="w-12 [appearance:textfield] border-0 bg-transparent p-0 text-right text-xs focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none"
@@ -685,7 +704,7 @@
 <Dialog.Root
 	bind:open={checkoutOpen}
 	onOpenChange={(open) => {
-		if (open) cart.cashReceived = 0;
+		if (open) cart.resetPaymentFields();
 	}}
 >
 	<Dialog.Content class="max-w-md overflow-hidden p-0">
@@ -751,7 +770,7 @@
 								<Button
 									variant="outline"
 									size="sm"
-									class="h-8 text-xs font-bold"
+									class="text-xs font-bold"
 									onclick={() => (cart.cashReceived = (cart.cashReceived ?? 0) + a)}>+{a}</Button
 								>
 							{/each}
@@ -855,7 +874,7 @@
 											e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
 									onfocus={(e) => e.currentTarget.select()}
 									class="h-10 font-bold"
-									placeholder="Amount received..."
+									placeholder="Amount received…"
 								/>
 							</div>
 						{/if}
@@ -878,7 +897,7 @@
 						<div class="space-y-1.5">
 							<Label class="text-xs font-semibold">Transaction ID (Optional)</Label>
 							<Input
-								placeholder="Enter TrxID..."
+								placeholder="Enter TrxID…"
 								class="font-mono uppercase"
 								bind:value={() => cart.mobileTrxId, (v) => (cart.mobileTrxId = v)}
 							/>
@@ -929,12 +948,24 @@
 			{/if}
 
 			<!-- Complete Sale Button -->
+			<!-- Split payment mismatch warning -->
+			{#if cart.paymentMethod === 'split' && !cart.splitValid}
+				<div
+					class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-400"
+				>
+					Split amounts ({formatCurrency(cart.splitTotal)}) don't match total ({formatCurrency(
+						cart.subtotal
+					)})
+				</div>
+			{/if}
+
 			{#if isNative}
 				<Button
 					onclick={handleLocalCheckout}
 					class="h-12 w-full font-bold"
 					disabled={loading ||
 						(cart.paymentMethod === 'cash' && (cart.cashReceived ?? 0) < cart.subtotal) ||
+						(cart.paymentMethod === 'split' && !cart.splitValid) ||
 						(cart.paymentMethod === 'split' &&
 							(cart.cashAmount ?? 0) > 0 &&
 							(cart.cashReceived ?? 0) < (cart.cashAmount ?? 0))}
@@ -984,6 +1015,7 @@
 						class="h-12 w-full font-bold"
 						disabled={loading ||
 							(cart.paymentMethod === 'cash' && (cart.cashReceived ?? 0) < cart.subtotal) ||
+							(cart.paymentMethod === 'split' && !cart.splitValid) ||
 							(cart.paymentMethod === 'split' &&
 								(cart.cashAmount ?? 0) > 0 &&
 								(cart.cashReceived ?? 0) < (cart.cashAmount ?? 0))}
@@ -1052,7 +1084,7 @@
 				>
 					<div class="min-w-0">
 						<p class="text-sm font-medium text-amber-700 dark:text-amber-400">
-							{pStatus === 'connecting' ? 'Connecting...' : 'Printer disconnected'}
+							{pStatus === 'connecting' ? 'Connecting…' : 'Printer disconnected'}
 						</p>
 						<p class="truncate text-xs text-amber-600/70 dark:text-amber-500/70">
 							{printerState.name || 'Tap reconnect or go to Settings'}

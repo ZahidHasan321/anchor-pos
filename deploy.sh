@@ -22,31 +22,34 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
+# Source env vars for use in this script
+set -a
+source .env
+set +a
+
+# Ensure downloads directory exists before docker compose mounts it
+mkdir -p "$REPO_DIR/downloads"
+
 docker compose build
-docker builder prune --keep-storage 3gb -f
 docker compose up -d --remove-orphans
+
+# Clean up Docker resources to prevent disk fill
+docker builder prune --keep-storage 2gb -f
+docker image prune -f
+docker container prune -f
 
 echo "Waiting for database..."
 MAX_RETRIES=30
 COUNT=0
-until docker compose exec pos_db pg_isready -U pos_user -d clothing_pos &> /dev/null; do
+DB_USER="${POSTGRES_USER:-pos_user}"
+DB_NAME="${POSTGRES_DB:-clothing_pos}"
+until docker compose exec pos_db pg_isready -U "$DB_USER" -d "$DB_NAME" &> /dev/null; do
     COUNT=$((COUNT + 1))
     [ "$COUNT" -ge "$MAX_RETRIES" ] && { echo "Error: DB timed out."; exit 1; }
     sleep 2
 done
 
-# Only check if the db is connecting properly to the postgres db using our script or pnpm db:push
 echo "Checking database connection and applying schema..."
 docker compose exec pos_app pnpm db:push
-
-docker compose restart pos_nginx
-
-# Ensure downloads directory exists for Electron/APK artifacts
-DOWNLOADS_DIR="/root/anchor-pos/downloads"
-mkdir -p "$DOWNLOADS_DIR"
-echo "Downloads directory ready at $DOWNLOADS_DIR"
-echo "  - Windows installers: *.exe, latest.yml"
-echo "  - Android APK: *.apk"
-echo "  (Artifacts are uploaded by the GitHub Actions build workflow)"
 
 echo "--- Deployment Complete ---"

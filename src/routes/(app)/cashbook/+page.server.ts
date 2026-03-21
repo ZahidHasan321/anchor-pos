@@ -16,7 +16,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 	const storeTimezone = 'Asia/Dhaka';
 	const view = url.searchParams.get('view') || 'daily';
 	const dateStr = url.searchParams.get('date');
-	const isElectron = env.IS_ELECTRON;
+	const isNative = env.IS_NATIVE;
 
 	let date: Date;
 	const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: storeTimezone }).format(new Date());
@@ -24,13 +24,17 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 
 	// Parse date in the store's timezone
 	date = new Date(`${targetDateStr}T00:00:00`);
-	
+
 	const getZonedDateRange = (dateStr: string, timeZone: string) => {
 		const targetMidnight = new Date(`${dateStr}T00:00:00Z`);
 		const formatter = new Intl.DateTimeFormat('en-CA', {
 			timeZone,
-			year: 'numeric', month: '2-digit', day: '2-digit',
-			hour: '2-digit', minute: '2-digit', second: '2-digit',
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
 			hour12: false
 		});
 		const zonedStr = formatter.format(targetMidnight).replace(',', '');
@@ -41,21 +45,31 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 		return { startUtc, endUtc };
 	};
 
-	const { startUtc: dateRangeStart, endUtc: dateRangeEnd } = getZonedDateRange(targetDateStr, storeTimezone);
+	const { startUtc: dateRangeStart, endUtc: dateRangeEnd } = getZonedDateRange(
+		targetDateStr,
+		storeTimezone
+	);
 
 	return {
 		view,
 		date: targetDateStr,
-		isElectron,
+		isNative,
 		dateRangeStart: dateRangeStart.toISOString(),
 		dateRangeEnd: dateRangeEnd.toISOString(),
 
 		dailyData: (async () => {
-			if (isElectron) {
-				return { entries: [], summary: { totalIn: 0, totalOut: 0, net: 0, grossProfit: 0, netProfit: 0 } };
+			if (isNative) {
+				return {
+					entries: [],
+					summary: { totalIn: 0, totalOut: 0, net: 0, grossProfit: 0, netProfit: 0 }
+				};
 			}
 
-			if (!db) return { entries: [], summary: { totalIn: 0, totalOut: 0, net: 0, grossProfit: 0, netProfit: 0 } };
+			if (!db)
+				return {
+					entries: [],
+					summary: { totalIn: 0, totalOut: 0, net: 0, grossProfit: 0, netProfit: 0 }
+				};
 			const [entries, totals, cogs] = await Promise.all([
 				db
 					.select({
@@ -76,14 +90,24 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 					.where(and(gte(cashbook.createdAt, dateRangeStart), lt(cashbook.createdAt, dateRangeEnd)))
 					.groupBy(cashbook.type),
 				db
-					.select({ total: sql<number>`coalesce(sum(${orderItems.costAtSale} * ${orderItems.quantity}), 0)` })
+					.select({
+						total: sql<number>`coalesce(sum(${orderItems.costAtSale} * ${orderItems.quantity}), 0)`
+					})
 					.from(orderItems)
 					.innerJoin(orders, eq(orderItems.orderId, orders.id))
-					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, dateRangeStart), lt(orders.createdAt, dateRangeEnd)))
+					.where(
+						and(
+							eq(orders.status, 'completed'),
+							gte(orders.createdAt, dateRangeStart),
+							lt(orders.createdAt, dateRangeEnd)
+						)
+					)
 			]);
 
-			const totalIn = totals.find((t: { type: string; total: number }) => t.type === 'in')?.total || 0;
-			const totalOut = totals.find((t: { type: string; total: number }) => t.type === 'out')?.total || 0;
+			const totalIn =
+				totals.find((t: { type: string; total: number }) => t.type === 'in')?.total || 0;
+			const totalOut =
+				totals.find((t: { type: string; total: number }) => t.type === 'out')?.total || 0;
 			const totalCogs = cogs[0]?.total || 0;
 			const grossProfit = totalIn - totalCogs;
 
@@ -100,7 +124,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 		})(),
 
 		expenseDescriptions: (async () => {
-			if (isElectron) return [];
+			if (isNative) return [];
 			if (!db) return [];
 			const rows = await db
 				.selectDistinct({ description: cashbook.description })
@@ -117,7 +141,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 			const txOffset = (txPage - 1) * txLimit;
 
 			if (view !== 'all') return null;
-			if (isElectron) return null;
+			if (isNative) return null;
 			if (!db) return null;
 
 			const txConditions: any[] = [];
@@ -165,6 +189,7 @@ export const load: PageServerLoad = async ({ url, locals, parent }) => {
 export const actions: Actions = {
 	addExpense: async ({ request, locals }) => {
 		if (!locals.user) return fail(401);
+		if (!(await hasPermission(locals.user.role, 'cashbook'))) return fail(403, { error: 'Unauthorized' });
 		const data = await request.formData();
 		const description = (data.get('description') as string)?.trim();
 		const amount = parseFloat(data.get('amount') as string);
@@ -173,14 +198,13 @@ export const actions: Actions = {
 			return fail(400, { error: 'Valid description and amount required' });
 
 		try {
-			const existingRows = await db
-				.selectDistinct({ description: cashbook.description })
+			// Find an existing description with matching casing (targeted query, not full scan)
+			const matchRow = await db
+				.select({ description: cashbook.description })
 				.from(cashbook)
-				.where(eq(cashbook.type, 'out'));
-			const normalizedDescription =
-				existingRows
-					.map((r: { description: string }) => r.description)
-					.find((d: string) => d.toLowerCase() === description.toLowerCase()) || description;
+				.where(and(eq(cashbook.type, 'out'), sql`LOWER(${cashbook.description}) = LOWER(${description})`))
+				.limit(1);
+			const normalizedDescription = matchRow[0]?.description || description;
 
 			const expenseId = generateId();
 			await db.insert(cashbook).values({

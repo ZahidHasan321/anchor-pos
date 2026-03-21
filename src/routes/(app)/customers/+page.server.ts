@@ -16,22 +16,26 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const currentPage = Math.max(1, pageParam);
 	const offset = (currentPage - 1) * perPage;
 	const search = url.searchParams.get('q') ?? '';
-	const isElectron = env.IS_ELECTRON;
+	const isNative = env.IS_NATIVE;
 
 	const conditions: any[] = [];
 	if (search) {
 		conditions.push(
-			sql`(${customers.name} ILIKE ${'%' + search + '%'} OR ${customers.phone} ILIKE ${'%' + search + '%'})`
+			sql`(
+				${customers.name} ILIKE ${'%' + search + '%'}
+				OR similarity(${customers.name}, ${search}) > 0.15
+				OR ${customers.phone} ILIKE ${'%' + search + '%'}
+			)`
 		);
 	}
 	const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
 	return {
 		search,
-		isElectron,
+		isNative,
 		// Stream the data
 		streamed: (async () => {
-			if (isElectron) {
+			if (isNative) {
 				return {
 					customers: [],
 					pagination: { currentPage: 1, totalPages: 1, total: 0, perPage }
@@ -55,20 +59,22 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 						phone: customers.phone,
 						email: customers.email,
 						order_count:
-							sql<number>`(SELECT COUNT(*) FROM ${orders} WHERE ${orders.customerId} = ${customers.id} AND ${orders.status} = 'completed')`.as(
+							sql<number>`COALESCE(COUNT(CASE WHEN ${orders.status} = 'completed' THEN 1 END), 0)`.as(
 								'order_count'
 							),
 						total_spent:
-							sql<number>`COALESCE((SELECT SUM(${orders.totalAmount}) FROM ${orders} WHERE ${orders.customerId} = ${customers.id} AND ${orders.status} = 'completed'), 0)`.as(
+							sql<number>`COALESCE(SUM(CASE WHEN ${orders.status} = 'completed' THEN ${orders.totalAmount} ELSE 0 END), 0)`.as(
 								'total_spent'
 							),
 						last_order_date:
-							sql<Date | null>`(SELECT MAX(${orders.createdAt}) FROM ${orders} WHERE ${orders.customerId} = ${customers.id} AND ${orders.status} = 'completed')`.as(
+							sql<Date | null>`MAX(CASE WHEN ${orders.status} = 'completed' THEN ${orders.createdAt} END)`.as(
 								'last_order_date'
 							)
 					})
 					.from(customers)
+					.leftJoin(orders, eq(orders.customerId, customers.id))
 					.where(whereClause)
+					.groupBy(customers.id)
 					.orderBy(desc(sql`total_spent`))
 					.limit(perPage)
 					.offset(offset)
@@ -122,9 +128,20 @@ export const actions: Actions = {
 	},
 	delete: async ({ request, locals }) => {
 		if (locals.user?.role !== 'admin') return fail(403);
+		if (!db) return fail(503, { error: 'Database connection unavailable' });
 		const data = await request.formData();
 		const id = data.get('id') as string;
 		try {
+			// Check if customer has any orders
+			const orderCount = await db
+				.select({ count: sql<number>`count(*)` })
+				.from(orders)
+				.where(eq(orders.customerId, id));
+			if ((orderCount[0]?.count ?? 0) > 0) {
+				return fail(400, {
+					error: `Cannot delete: customer has ${orderCount[0].count} order(s). Remove from orders first or deactivate instead.`
+				});
+			}
 			await db.delete(customers).where(eq(customers.id, id));
 		} catch (e) {
 			return fail(500, { error: 'Database error' });

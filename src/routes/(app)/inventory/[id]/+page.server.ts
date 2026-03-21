@@ -1,19 +1,34 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { products, productVariants, stockLogs } from '$lib/server/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { products, productVariants, stockLogs, users } from '$lib/server/db/schema';
+import { eq, sql, desc, inArray } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
+import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	if (!locals.user || !(await hasPermission(locals.user.role, 'inventory'))) {
 		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
 
-	if (!db) {
-		redirect(302, '/inventory');
+	if (env.IS_NATIVE || !db) {
+		return {
+			product: {
+				id: params.id,
+				name: '',
+				category: '',
+				templatePrice: 0,
+				costPrice: 0,
+				defaultDiscount: 0,
+				description: null
+			},
+			variants: [],
+			stockHistory: [],
+			user: locals.user,
+			productId: params.id
+		};
 	}
 
 	const productRows = await db.select().from(products).where(eq(products.id, params.id)).limit(1);
@@ -28,7 +43,29 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.from(productVariants)
 		.where(eq(productVariants.productId, params.id));
 
-	return { product, variants, user: locals.user };
+	const variantIds = variants.map((v: { id: string }) => v.id);
+
+	const stockHistory =
+		variantIds.length > 0
+			? await db
+					.select({
+						id: stockLogs.id,
+						variantId: stockLogs.variantId,
+						size: productVariants.size,
+						changeAmount: stockLogs.changeAmount,
+						reason: stockLogs.reason,
+						userName: users.name,
+						createdAt: stockLogs.createdAt
+					})
+					.from(stockLogs)
+					.innerJoin(productVariants, eq(stockLogs.variantId, productVariants.id))
+					.leftJoin(users, eq(stockLogs.userId, users.id))
+					.where(inArray(stockLogs.variantId, variantIds))
+					.orderBy(desc(stockLogs.createdAt))
+					.limit(50)
+			: [];
+
+	return { product, variants, stockHistory, user: locals.user, productId: params.id };
 };
 
 export const actions: Actions = {
@@ -131,6 +168,7 @@ export const actions: Actions = {
 		const catPrefix = product.category.substring(0, 3).toUpperCase();
 
 		try {
+			const skipped: string[] = [];
 			await db.transaction(async (tx: any) => {
 				for (const size of sizes) {
 					const variantId = generateId();
@@ -143,7 +181,10 @@ export const actions: Actions = {
 						.where(eq(productVariants.barcode, barcode))
 						.limit(1);
 
-					if (existingRows.length > 0) continue; // Skip duplicates silently
+					if (existingRows.length > 0) {
+						skipped.push(size);
+						continue;
+					}
 
 					await tx.insert(productVariants).values({
 						id: variantId,
@@ -169,14 +210,27 @@ export const actions: Actions = {
 				}
 			});
 
+			if (skipped.length === sizes.length) {
+				return fail(400, {
+					variantError: `All sizes already exist: ${skipped.join(', ')}`
+				});
+			}
+
 			await logAuditEvent({
 				userId: locals.user!.id,
 				userName: locals.user!.name,
 				action: 'ADD_VARIANT',
 				entity: 'product_variants',
 				entityId: params.id,
-				details: `Added ${sizes.length} variant(s): ${sizes.join(', ')} to product ${product.name}`
+				details: `Added ${sizes.length - skipped.length} variant(s): ${sizes.filter((s) => !skipped.includes(s)).join(', ')} to product ${product.name}${skipped.length > 0 ? ` (skipped existing: ${skipped.join(', ')})` : ''}`
 			});
+
+			if (skipped.length > 0) {
+				return {
+					variantSuccess: true,
+					variantWarning: `Created ${sizes.length - skipped.length} variant(s). Skipped ${skipped.length} already existing: ${skipped.join(', ')}`
+				};
+			}
 		} catch (e) {
 			console.error('Failed to add variants:', e);
 			return fail(500, { variantError: 'Database error' });
@@ -255,6 +309,78 @@ export const actions: Actions = {
 		}
 
 		return { deleteVariantSuccess: true };
+	},
+
+	batchAdjustStock: async ({ request, params, locals }) => {
+		if (!locals.user || locals.user.role === 'sales') {
+			return fail(403, { batchStockError: 'Unauthorized' });
+		}
+		if (!db) return fail(503, { batchStockError: 'Database connection unavailable' });
+
+		const data = await request.formData();
+		const variantIds = data.getAll('variantIds') as string[];
+		const quantities = (data.getAll('quantities') as string[]).map((q) => parseInt(q));
+		const reason = (data.get('reason') as string)?.trim();
+
+		if (!reason) {
+			return fail(400, { batchStockError: 'Reason is required' });
+		}
+		if (variantIds.length === 0) {
+			return fail(400, { batchStockError: 'No variants to update' });
+		}
+
+		try {
+			let updatedCount = 0;
+			await db.transaction(async (tx: any) => {
+				for (let i = 0; i < variantIds.length; i++) {
+					const variantId = variantIds[i];
+					const newQuantity = quantities[i];
+					if (isNaN(newQuantity) || newQuantity < 0) continue;
+
+					const variantRows = await tx
+						.select()
+						.from(productVariants)
+						.where(eq(productVariants.id, variantId))
+						.limit(1);
+					const variant = variantRows[0];
+					if (!variant) continue;
+
+					const amount = newQuantity - variant.stockQuantity;
+					if (amount === 0) continue;
+
+					await tx
+						.update(productVariants)
+						.set({ stockQuantity: newQuantity })
+						.where(eq(productVariants.id, variantId));
+
+					await tx.insert(stockLogs).values({
+						id: generateId(),
+						variantId,
+						changeAmount: amount,
+						reason,
+						userId: locals.user!.id,
+						createdAt: new Date()
+					});
+					updatedCount++;
+				}
+			});
+
+			if (updatedCount > 0) {
+				await logAuditEvent({
+					userId: locals.user!.id,
+					userName: locals.user!.name,
+					action: 'BATCH_ADJUST_STOCK',
+					entity: 'products',
+					entityId: params.id,
+					details: `Batch stock adjustment for ${updatedCount} variant(s). Reason: ${reason}`
+				});
+			}
+		} catch (e) {
+			console.error('Failed to batch adjust stock:', e);
+			return fail(500, { batchStockError: 'Database error' });
+		}
+
+		return { batchStockSuccess: true };
 	},
 
 	deleteProduct: async ({ params, locals }) => {
