@@ -1,5 +1,6 @@
 FROM node:22-slim AS builder
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends bzip2 && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9 --activate
 COPY pnpm-lock.yaml package.json ./
 RUN pnpm install --frozen-lockfile
