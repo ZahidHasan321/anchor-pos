@@ -8,17 +8,10 @@
 	"private": true,
 	"version": "0.0.0",
 	"type": "module",
-	"main": "electron-main.cjs",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
-		"dev:electron": "cross-env BUILD_TARGET=electron electron .",
-		"build:electron": "cross-env BUILD_TARGET=electron vite build && node -e \"require('fs').writeFileSync('build/package.json','{\\\"type\\\":\\\"module\\\"}')\"",
-		"start:electron": "pnpm run build:electron && cross-env NODE_ENV=production electron .",
-		"package:linux": "pnpm run build:electron && electron-builder build --linux",
-		"package:win": "pnpm run build:electron && electron-builder build --win -p always",
-		"package:win:ci": "pnpm run build:electron && electron-builder build --win -p never",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
@@ -30,66 +23,6 @@
 		"db:studio": "drizzle-kit studio",
 		"db:reset-data": "pnpm tsx src/lib/server/db/reset-data.ts",
 		"db:bootstrap": "pnpm tsx scripts/bootstrap-admin.ts"
-	},
-	"build": {
-		"npmRebuild": true,
-		"nativeRebuilder": "sequential",
-		"compression": "maximum",
-		"appId": "com.auto.pos",
-		"productName": "Auto POS",
-		"artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
-		"directories": {
-			"output": "dist-electron",
-			"buildResources": "resources"
-		},
-		"publish": {
-			"provider": "generic",
-			"url": "https://anchorshop.cloud/downloads/"
-		},
-		"files": [
-			"build/**/*",
-			"static/**/*",
-			"resources/icon.png",
-			"drizzle/**/*",
-			"electron-main.cjs",
-			"preload.cjs",
-			"package.json",
-			"node_modules/**/*",
-			"!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme,test,__tests__,tests,example,examples,out-tsc}",
-			"!**/node_modules/.bin",
-			"!**/*.{o,obj,d,map,ts}"
-		],
-		"asarUnpack": [
-			"node_modules/**/*",
-			"build/**/*"
-		],
-		"extraResources": [
-			{
-				"from": ".env",
-				"to": ".env"
-			}
-		],
-		"linux": {
-			"target": [
-				"AppImage"
-			],
-			"category": "Office",
-			"executableName": "clothing-pos",
-			"synopsis": "A modern Point of Sale system for clothing stores",
-			"description": "A robust POS system built with SvelteKit and Electron for modern retail management.",
-			"maintainer": "Auto POS <support@autopos.com>",
-			"icon": "resources/icons"
-		},
-		"win": {
-			"target": "nsis",
-			"icon": "resources/icon.ico"
-		},
-		"nsis": {
-			"installerIcon": "resources/icon.ico",
-			"uninstallerIcon": "resources/icon.ico",
-			"oneClick": false,
-			"allowToChangeInstallationDirectory": true
-		}
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.2",
@@ -108,11 +41,7 @@
 		"@types/node": "^24",
 		"bits-ui": "^2.15.5",
 		"clsx": "^2.1.1",
-		"cross-env": "^10.1.0",
 		"drizzle-kit": "^0.31.9",
-		"electron": "^30.0.0",
-		"electron-builder": "^26.8.1",
-		"electron-icon-builder": "^2.0.1",
 		"eslint": "^9.39.2",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.14.0",
@@ -145,8 +74,6 @@
 		"crypto-js": "^4.2.0",
 		"dotenv": "^17.3.1",
 		"drizzle-orm": "^0.45.1",
-		"electron-log": "^5.4.3",
-		"electron-updater": "^6.8.3",
 		"event-iterator": "^2.0.0",
 		"jose": "^6.1.3",
 		"jsbarcode": "^3.12.3",
@@ -154,8 +81,6 @@
 		"jspdf": "^4.2.0",
 		"jspdf-autotable": "^5.0.7",
 		"kysely": "^0.28.11",
-		"node-thermal-printer": "^4.6.0",
-		"portfinder": "^1.0.38",
 		"postgres": "^3.4.8"
 	}
 }

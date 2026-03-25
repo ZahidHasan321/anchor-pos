@@ -1,6 +1,5 @@
 FROM node:22-slim AS builder
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends bzip2 && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9 --activate
 COPY pnpm-lock.yaml package.json ./
 RUN pnpm install --frozen-lockfile
@@ -15,7 +14,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable && corepack prepare pnpm@9 --activate && \
     addgroup --system appgroup && \
-    adduser --system --ingroup appgroup appuser
+    adduser --system --home /home/appuser --ingroup appgroup appuser
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-lock.yaml ./
 # drizzle-kit and typescript are needed for db:push at deploy time
