@@ -241,7 +241,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			'; ' +
 			"worker-src 'self' blob:; " +
 			"frame-ancestors 'none';" +
-			(env.IS_ELECTRON ? '' : ' upgrade-insecure-requests;')
+			(env.IS_ELECTRON || import.meta.env.DEV ? '' : ' upgrade-insecure-requests;')
 	);
 
 	response.headers.set('X-Frame-Options', 'DENY');

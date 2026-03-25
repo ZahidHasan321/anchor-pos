@@ -141,7 +141,7 @@ export function setSessionTokenCookie(event: RequestEvent, token: string, expire
 	event.cookies.set('session', token, {
 		httpOnly: true,
 		sameSite: sameSite,
-		secure: true, // Required for both SameSite: None and for security over HTTPS
+		secure: !dev,
 		expires: expiresAt,
 		path: '/'
 	});
