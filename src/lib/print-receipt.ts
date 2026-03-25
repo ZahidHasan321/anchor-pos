@@ -130,7 +130,6 @@ export async function printReceipt(
 <html><head><title>Receipt ${data.orderId}</title>
 <style>
 	@page {
-		size: 72mm auto;
 		margin: 0;
 	}
 	@media print {
@@ -141,19 +140,22 @@ export async function printReceipt(
 		-webkit-print-color-adjust: exact;
 		print-color-adjust: exact;
 	}
-	html, body {
+	html {
 		margin: 0;
 		padding: 0;
-		width: 72mm;
-		max-width: 72mm;
+		width: 100%;
 		background: #fff;
 	}
 	body {
+		margin: 0 auto;
+		padding: 2mm;
+		width: 100%;
+		max-width: 72mm;
 		font-family: 'Courier New', Courier, monospace;
 		font-size: 12px;
 		line-height: 1.2;
 		color: #000;
-		padding: 2mm;
+		background: #fff;
 	}
 	#receipt {
 		width: 100%;

@@ -50,12 +50,30 @@
 		printWindow.onload = () => printWindow.print();
 	}
 
+	function svgsToImages(el: HTMLElement): HTMLElement {
+		const clone = el.cloneNode(true) as HTMLElement;
+		clone.querySelectorAll('svg').forEach((svg) => {
+			const serializer = new XMLSerializer();
+			const svgStr = serializer.serializeToString(svg);
+			const dataUrl =
+				'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+			const img = document.createElement('img');
+			img.src = dataUrl;
+			img.style.maxWidth = '44mm';
+			img.style.width = '100%';
+			img.style.height = 'auto';
+			svg.parentNode?.replaceChild(img, svg);
+		});
+		return clone;
+	}
+
 	function printLabels() {
 		if (!labelContainer) return;
+		const printContent = svgsToImages(labelContainer);
 		const html = `<!DOCTYPE html><html><head>
 <style>
   @page { size: 50.8mm 25.4mm; margin: 0; }
-  body { margin: 0; padding: 0; }
+  body { margin: 0 auto; padding: 0; display: flex; flex-direction: column; align-items: center; }
   .label {
     width: 50.8mm; height: 25.4mm;
     padding: 1.5mm; box-sizing: border-box;
@@ -68,18 +86,19 @@
   .product-name { font-size: 8px; font-weight: bold; text-align: center; margin-bottom: 1mm; }
   .variant-info { font-size: 7px; text-align: center; }
   .price { font-size: 11px; font-weight: bold; margin-top: 1mm; }
-  svg { max-width: 44mm; }
+  img { max-width: 44mm; }
   @media print { body { -webkit-print-color-adjust: exact; } }
-</style></head><body>${labelContainer.innerHTML}</body></html>`;
+</style></head><body>${printContent.innerHTML}</body></html>`;
 
 		printWithElectronOrFallback(html);
 	}
 
 	function printSingleLabel(element: HTMLElement) {
+		const printContent = svgsToImages(element);
 		const html = `<!DOCTYPE html><html><head>
 <style>
   @page { size: 50.8mm 25.4mm; margin: 0; }
-  body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; height: 100vh; }
+  body { margin: 0 auto; padding: 0; display: flex; align-items: center; justify-content: center; height: 100vh; }
   .label {
     width: 50.8mm; height: 25.4mm;
     padding: 1.5mm; box-sizing: border-box;
@@ -90,9 +109,9 @@
   .product-name { font-size: 8px; font-weight: bold; text-align: center; margin-bottom: 1mm; }
   .variant-info { font-size: 7px; text-align: center; }
   .price { font-size: 11px; font-weight: bold; margin-top: 1mm; }
-  svg { max-width: 44mm; }
+  img { max-width: 44mm; }
   @media print { body { -webkit-print-color-adjust: exact; } }
-</style></head><body>${element.outerHTML}</body></html>`;
+</style></head><body>${printContent.outerHTML}</body></html>`;
 
 		printWithElectronOrFallback(html);
 	}

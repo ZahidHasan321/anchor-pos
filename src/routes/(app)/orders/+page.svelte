@@ -146,6 +146,7 @@
 	let searchTimeout: NodeJS.Timeout;
 
 	$effect(() => {
+		if (!data.filters) return;
 		dateFrom = data.filters.from;
 		dateTo = data.filters.to;
 		statusFilter = data.filters.status;
