@@ -5,7 +5,7 @@
 services:
   dev_db:
     image: postgres:17-alpine
-    container_name: dev_db
+    container_name: pos_clothing_dev_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: pos
@@ -14,7 +14,7 @@ services:
     volumes:
       - dev_postgres_data:/var/lib/postgresql/data
     ports:
-      - "127.0.0.1:5433:5432"
+      - "127.0.0.1:5434:5432"
     command: >
       postgres
         -c wal_level=logical
@@ -29,7 +29,7 @@ services:
 
   dev_db_init:
     image: postgres:17-alpine
-    container_name: dev_db_init
+    container_name: pos_clothing_dev_db_init
     environment:
       PGPASSWORD: pos
     command: >
@@ -62,7 +62,7 @@ services:
 
   dev_powersync:
     image: journeyapps/powersync-service:latest
-    container_name: dev_powersync
+    container_name: pos_clothing_dev_powersync
     restart: unless-stopped
     environment:
       PS_REPLICATION_URL: postgresql://pos:pos@dev_db:5432/clothing_pos

@@ -370,6 +370,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				.where(
 					and(
 						eq(cashbook.type, 'out'),
+						eq(cashbook.category, 'expense'),
 						gte(cashbook.createdAt, startDate),
 						lt(cashbook.createdAt, endDate)
 					)

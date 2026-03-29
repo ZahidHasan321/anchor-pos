@@ -130,6 +130,7 @@ export async function printReceipt(
 <html><head><title>Receipt ${data.orderId}</title>
 <style>
 	@page {
+		size: 80mm auto;
 		margin: 0;
 	}
 	@media print {
@@ -350,6 +351,29 @@ export async function printReceipt(
 		}
 	}
 
+	// --- Android Thermal Bridge (Intent) ---
+	if (typeof window !== 'undefined' && !preview && /android/i.test(navigator.userAgent)) {
+		const bridgeData = {
+			storeSettings: s,
+			orderId: data.orderId,
+			date: data.date,
+			cashier: data.cashier,
+			paymentMethod: data.paymentMethod,
+			items: data.items,
+			total: data.total,
+			originalTotal: data.originalTotal,
+			cashReceived: data.cashReceived,
+			changeGiven: data.changeGiven,
+			isReprint: data.isReprint,
+			status: data.status,
+			currencySymbol: symbol
+		};
+		const json = encodeURIComponent(JSON.stringify(bridgeData));
+		const fallback = encodeURIComponent(window.location.href);
+		window.location.href = `intent://print-receipt?data=${json}#Intent;scheme=thermal-bridge;package=com.autolinium.thermal_bridge;S.browser_fallback_url=${fallback};end`;
+		return { success: true };
+	}
+
 	// --- Bluetooth Thermal Printing (Mobile/Web) ---
 	if (typeof window !== 'undefined' && !preview) {
 		const useBt = localStorage.getItem('pos-use-bt-printer') === 'true';
@@ -381,21 +405,12 @@ export async function printReceipt(
 	// Use a hidden iframe — avoids popup blockers and works across Chrome, Firefox, Safari
 	const iframe = document.createElement('iframe');
 	iframe.style.position = 'fixed';
-	iframe.style.width = '0';
-	iframe.style.height = '0';
-	iframe.style.border = 'none';
 	iframe.style.left = '-9999px';
+	iframe.style.top = '0';
+	iframe.style.width = '210mm';
+	iframe.style.height = '297mm';
+	iframe.style.border = 'none';
 	document.body.appendChild(iframe);
-
-	const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-	if (!iframeDoc) {
-		document.body.removeChild(iframe);
-		return;
-	}
-
-	iframeDoc.open();
-	iframeDoc.write(html);
-	iframeDoc.close();
 
 	const cleanup = () => {
 		if (iframe.parentNode) {
@@ -403,26 +418,26 @@ export async function printReceipt(
 		}
 	};
 
-	iframe.onload = () => {
-		try {
-			iframe.contentWindow?.focus();
-			iframe.contentWindow?.print();
-		} catch {
-			// Safari may block cross-origin iframe print, fall back to popup
-			cleanup();
-			const pw = window.open('', '_blank');
-			if (!pw) return;
-			pw.document.open();
-			pw.document.write(html);
-			pw.document.close();
-			pw.addEventListener('afterprint', () => pw.close());
-			setTimeout(() => pw.close(), 5000);
-			return;
-		}
+	iframe.srcdoc = html;
 
-		// Chrome/Firefox support afterprint on the iframe's window
-		iframe.contentWindow?.addEventListener('afterprint', cleanup);
-		// Fallback cleanup for Safari / browsers without afterprint
-		setTimeout(cleanup, 5000);
+	iframe.onload = () => {
+		setTimeout(() => {
+			try {
+				iframe.contentWindow?.focus();
+				iframe.contentWindow?.print();
+			} catch {
+				cleanup();
+				const pw = window.open('', '_blank');
+				if (!pw) return;
+				pw.document.open();
+				pw.document.write(html);
+				pw.document.close();
+				pw.addEventListener('afterprint', () => pw.close());
+				setTimeout(() => pw.close(), 5000);
+				return;
+			}
+			iframe.contentWindow?.addEventListener('afterprint', cleanup);
+			setTimeout(cleanup, 5000);
+		}, 100);
 	};
 }

@@ -59,7 +59,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 					.selectDistinct({ category: products.category })
 					.from(products)
 					.innerJoin(productVariants, eq(products.id, productVariants.productId))
-					.where(gt(productVariants.stockQuantity, 0)),
+					.where(and(gt(productVariants.stockQuantity, 0), eq(products.isActive, true), eq(productVariants.isActive, true))),
 				db.select().from(storeSettings)
 			]);
 

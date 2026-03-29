@@ -92,7 +92,7 @@
 	<title>Edit {currentProduct.name} — Clothing POS</title>
 </svelte:head>
 
-<div class="p-6">
+<div class="p-4 sm:p-6">
 	<div class="mb-6 flex items-center gap-4">
 		<Button
 			variant="outline"
@@ -103,7 +103,7 @@
 		>
 			<ArrowLeft class="h-4 w-4" />
 		</Button>
-		<h1 class="text-3xl font-bold tracking-tight">Edit Product</h1>
+		<h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Edit Product</h1>
 	</div>
 
 	<Card.Root class="mx-auto max-w-2xl">

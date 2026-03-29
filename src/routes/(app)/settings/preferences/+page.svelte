@@ -266,10 +266,10 @@
 
 	let prefData = $state({
 		tax_enabled: 'false',
-		tax_rate: '0',
+		tax_rate: '',
 		sd_enabled: 'false',
-		sd_rate: '0',
-		low_stock_threshold: '5'
+		sd_rate: '',
+		low_stock_threshold: ''
 	});
 
 	$effect(() => {
@@ -277,10 +277,10 @@
 		untrack(() => {
 			prefData = {
 				tax_enabled: settings.tax_enabled || 'false',
-				tax_rate: settings.tax_rate || '0',
+				tax_rate: settings.tax_rate || '',
 				sd_enabled: settings.sd_enabled || 'false',
-				sd_rate: settings.sd_rate || '0',
-				low_stock_threshold: settings.low_stock_threshold || '5'
+				sd_rate: settings.sd_rate || '',
+				low_stock_threshold: settings.low_stock_threshold || ''
 			};
 		});
 	});
@@ -359,6 +359,7 @@
 						type="number"
 						min="1"
 						class="pl-10"
+						placeholder="5"
 						bind:value={prefData.low_stock_threshold}
 					/>
 				</div>

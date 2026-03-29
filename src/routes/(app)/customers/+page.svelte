@@ -9,6 +9,8 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Sheet from '$lib/components/ui/sheet';
+	import { MediaQuery } from 'svelte/reactivity';
 	import {
 		Search,
 		Plus,
@@ -27,6 +29,8 @@
 	import { page } from '$app/state';
 	import { createDebounced } from '$lib/debounce.svelte';
 	import { confirmState } from '$lib/confirm.svelte';
+
+	const isDesktop = new MediaQuery('(min-width: 768px)');
 
 	let { data, form } = $props();
 
@@ -326,34 +330,47 @@
 	</div>
 </div>
 
-<Dialog.Root bind:open={createDialogOpen}>
-	<Dialog.Content>
-		<Dialog.Header><Dialog.Title>Add New Customer</Dialog.Title></Dialog.Header>
-		<form
-			method="POST"
-			action="?/create"
-			use:enhance={() => {
-				loading = true;
-				return async ({ update }) => {
-					loading = false;
-					await update();
-				};
-			}}
-			class="space-y-4"
+{#snippet createCustomerForm()}
+	<form
+		method="POST"
+		action="?/create"
+		use:enhance={() => {
+			loading = true;
+			return async ({ update }) => {
+				loading = false;
+				await update();
+			};
+		}}
+		class="space-y-4"
+	>
+		<div class="space-y-2">
+			<Label for="name">Name</Label><Input id="name" name="name" required />
+		</div>
+		<div class="space-y-2"><Label for="phone">Phone</Label><Input id="phone" name="phone" /></div>
+		<div class="space-y-2">
+			<Label for="email">Email</Label><Input id="email" name="email" type="email" />
+		</div>
+		<Button type="submit" class="w-full" disabled={loading}
+			>{#if loading}<Loader2 class="mr-2 h-4 w-4 animate-spin" />{/if}Create</Button
 		>
-			<div class="space-y-2">
-				<Label for="name">Name</Label><Input id="name" name="name" required />
-			</div>
-			<div class="space-y-2"><Label for="phone">Phone</Label><Input id="phone" name="phone" /></div>
-			<div class="space-y-2">
-				<Label for="email">Email</Label><Input id="email" name="email" type="email" />
-			</div>
-			<Button type="submit" class="w-full" disabled={loading}
-				>{#if loading}<Loader2 class="mr-2 h-4 w-4 animate-spin" />{/if}Create</Button
-			>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
+	</form>
+{/snippet}
+
+{#if isDesktop.current}
+	<Dialog.Root bind:open={createDialogOpen}>
+		<Dialog.Content>
+			<Dialog.Header><Dialog.Title>Add New Customer</Dialog.Title></Dialog.Header>
+			{@render createCustomerForm()}
+		</Dialog.Content>
+	</Dialog.Root>
+{:else}
+	<Sheet.Root bind:open={createDialogOpen}>
+		<Sheet.Content side="bottom" class="max-h-[85vh] rounded-t-2xl">
+			<Sheet.Header><Sheet.Title>Add New Customer</Sheet.Title></Sheet.Header>
+			{@render createCustomerForm()}
+		</Sheet.Content>
+	</Sheet.Root>
+{/if}
 
 <div class="fixed right-4 bottom-20 z-40 md:hidden">
 	<Button

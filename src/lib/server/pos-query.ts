@@ -20,7 +20,11 @@ const variantSelect = {
 export async function queryVariants(search: string, category: string, limit = 50, offset = 0) {
 	if (!db) return { items: [], hasMore: false };
 
-	const baseConditions = [gt(productVariants.stockQuantity, 0)];
+	const baseConditions = [
+		gt(productVariants.stockQuantity, 0),
+		eq(products.isActive, true),
+		eq(productVariants.isActive, true)
+	];
 	if (category && category !== 'All') {
 		baseConditions.push(eq(products.category, category));
 	}

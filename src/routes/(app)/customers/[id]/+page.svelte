@@ -7,7 +7,9 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Sheet from '$lib/components/ui/sheet';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { MediaQuery } from 'svelte/reactivity';
 	import { ArrowLeft, Phone, Mail, ChevronLeft, ChevronRight, Pencil } from '@lucide/svelte';
 	import { formatCurrency, formatDateTime } from '$lib/format';
 	import { goto } from '$app/navigation';
@@ -15,6 +17,8 @@
 	import { confirmState } from '$lib/confirm.svelte';
 	import { powersync } from '$lib/powersync.svelte';
 	import { isNative } from '$lib/electron-data.svelte';
+
+	const isDesktop = new MediaQuery('(min-width: 768px)');
 
 	let { data, form } = $props();
 
@@ -128,9 +132,9 @@
 	<title>{customer?.name ?? 'Customer'} — Customers — Clothing POS</title>
 </svelte:head>
 
-<div class="space-y-6 p-6">
+<div class="space-y-6 p-4 sm:p-6">
 	{#if customer}
-		<div class="flex items-center justify-between">
+		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex items-center gap-4">
 				<Button
 					variant="outline"
@@ -142,7 +146,7 @@
 					<ArrowLeft class="h-4 w-4" />
 				</Button>
 				<div>
-					<h1 class="text-3xl font-bold tracking-tight">{customer.name}</h1>
+					<h1 class="text-xl font-bold tracking-tight sm:text-3xl">{customer.name}</h1>
 					<p class="text-muted-foreground">Customer Profile & Purchase History</p>
 				</div>
 			</div>
@@ -200,6 +204,7 @@
 					</Card.Description>
 				</Card.Header>
 				<Card.Content class="p-0">
+					<div class="overflow-x-auto">
 					<Table.Root>
 						<Table.Header>
 							<Table.Row>
@@ -238,6 +243,7 @@
 							{/if}
 						</Table.Body>
 					</Table.Root>
+					</div>
 				</Card.Content>
 				<!-- Pagination -->
 				{#if pagination.totalPages > 1}
@@ -279,86 +285,101 @@
 </div>
 
 <!-- Edit Customer Dialog -->
-<Dialog.Root bind:open={editDialogOpen}>
-	<Dialog.Content>
-		<Dialog.Header>
-			<Dialog.Title>Edit Customer</Dialog.Title>
-		</Dialog.Header>
-		{#if isNative}
-			<form
-				class="space-y-4"
-				onsubmit={(e) => {
-					e.preventDefault();
-					nativeEditCustomer(new FormData(e.currentTarget as HTMLFormElement));
+{#snippet editCustomerForm()}
+	{#if isNative}
+		<form
+			class="space-y-4"
+			onsubmit={(e) => {
+				e.preventDefault();
+				nativeEditCustomer(new FormData(e.currentTarget as HTMLFormElement));
+			}}
+		>
+			<div class="space-y-2">
+				<Label for="edit-name">Full Name</Label>
+				<Input id="edit-name" name="name" value={customer?.name ?? ''} required />
+			</div>
+			<div class="space-y-2">
+				<Label for="edit-phone">Phone</Label>
+				<Input id="edit-phone" name="phone" value={customer?.phone ?? ''} />
+			</div>
+			<div class="space-y-2">
+				<Label for="edit-email">Email</Label>
+				<Input id="edit-email" name="email" type="email" value={customer?.email ?? ''} />
+			</div>
+			<Button
+				type="button"
+				class="w-full cursor-pointer"
+				disabled={editLoading}
+				onclick={async (e) => {
+					const formElement = e.currentTarget.closest('form');
+					if (
+						await confirmState.confirm({
+							title: 'Update Customer',
+							message: 'Are you sure you want to save these changes to the customer profile?',
+							confirmText: 'Save Changes',
+							variant: 'default'
+						})
+					) {
+						formElement?.requestSubmit();
+					}
 				}}
 			>
-				<div class="space-y-2">
-					<Label for="edit-name">Full Name</Label>
-					<Input id="edit-name" name="name" value={customer?.name ?? ''} required />
-				</div>
-				<div class="space-y-2">
-					<Label for="edit-phone">Phone</Label>
-					<Input id="edit-phone" name="phone" value={customer?.phone ?? ''} />
-				</div>
-				<div class="space-y-2">
-					<Label for="edit-email">Email</Label>
-					<Input id="edit-email" name="email" type="email" value={customer?.email ?? ''} />
-				</div>
-				<Button
-					type="button"
-					class="w-full cursor-pointer"
-					disabled={editLoading}
-					onclick={async (e) => {
-						const formElement = e.currentTarget.closest('form');
-						if (
-							await confirmState.confirm({
-								title: 'Update Customer',
-								message: 'Are you sure you want to save these changes to the customer profile?',
-								confirmText: 'Save Changes',
-								variant: 'default'
-							})
-						) {
-							formElement?.requestSubmit();
-						}
-					}}
-				>
-					Save Changes
-				</Button>
-			</form>
-		{:else}
-			<form method="POST" action="?/edit" use:enhance class="space-y-4">
-				<div class="space-y-2">
-					<Label for="edit-name">Full Name</Label>
-					<Input id="edit-name" name="name" value={customer?.name ?? ''} required />
-				</div>
-				<div class="space-y-2">
-					<Label for="edit-phone">Phone</Label>
-					<Input id="edit-phone" name="phone" value={customer?.phone ?? ''} />
-				</div>
-				<div class="space-y-2">
-					<Label for="edit-email">Email</Label>
-					<Input id="edit-email" name="email" type="email" value={customer?.email ?? ''} />
-				</div>
-				<Button
-					type="button"
-					class="w-full cursor-pointer"
-					onclick={async (e) => {
-						const formElement = e.currentTarget.closest('form');
-						if (
-							await confirmState.confirm({
-								title: 'Update Customer',
-								message: 'Are you sure you want to save these changes to the customer profile?',
-								confirmText: 'Save Changes',
-								variant: 'default'
-							})
-						) {
-							formElement?.requestSubmit();
-						}
-					}}
-				>
-					Save Changes
-				</Button>
-			</form>
-		{/if}
-	</Dialog.Content>
-</Dialog.Root>
+				Save Changes
+			</Button>
+		</form>
+	{:else}
+		<form method="POST" action="?/edit" use:enhance class="space-y-4">
+			<div class="space-y-2">
+				<Label for="edit-name">Full Name</Label>
+				<Input id="edit-name" name="name" value={customer?.name ?? ''} required />
+			</div>
+			<div class="space-y-2">
+				<Label for="edit-phone">Phone</Label>
+				<Input id="edit-phone" name="phone" value={customer?.phone ?? ''} />
+			</div>
+			<div class="space-y-2">
+				<Label for="edit-email">Email</Label>
+				<Input id="edit-email" name="email" type="email" value={customer?.email ?? ''} />
+			</div>
+			<Button
+				type="button"
+				class="w-full cursor-pointer"
+				onclick={async (e) => {
+					const formElement = e.currentTarget.closest('form');
+					if (
+						await confirmState.confirm({
+							title: 'Update Customer',
+							message: 'Are you sure you want to save these changes to the customer profile?',
+							confirmText: 'Save Changes',
+							variant: 'default'
+						})
+					) {
+						formElement?.requestSubmit();
+					}
+				}}
+			>
+				Save Changes
+			</Button>
+		</form>
+	{/if}
+{/snippet}
+
+{#if isDesktop.current}
+	<Dialog.Root bind:open={editDialogOpen}>
+		<Dialog.Content>
+			<Dialog.Header>
+				<Dialog.Title>Edit Customer</Dialog.Title>
+			</Dialog.Header>
+			{@render editCustomerForm()}
+		</Dialog.Content>
+	</Dialog.Root>
+{:else}
+	<Sheet.Root bind:open={editDialogOpen}>
+		<Sheet.Content side="bottom" class="max-h-[85vh] rounded-t-2xl">
+			<Sheet.Header>
+				<Sheet.Title>Edit Customer</Sheet.Title>
+			</Sheet.Header>
+			{@render editCustomerForm()}
+		</Sheet.Content>
+	</Sheet.Root>
+{/if}

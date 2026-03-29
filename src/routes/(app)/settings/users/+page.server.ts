@@ -51,7 +51,11 @@ export const actions: Actions = {
 			if (imageFile.size > 2 * 1024 * 1024) {
 				return fail(400, { message: 'Image size exceeds 2MB limit' });
 			}
-			const ext = imageFile.name.split('.').pop();
+			const ext = imageFile.name.split('.').pop()?.toLowerCase();
+			const allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+			if (!ext || !allowedExts.includes(ext)) {
+				return fail(400, { message: 'Invalid image format. Allowed: JPG, PNG, WebP, GIF' });
+			}
 			const fileName = `${generateId()}.${ext}`;
 			const filePath = join(process.cwd(), 'static', 'uploads', fileName);
 			const buffer = Buffer.from(await imageFile.arrayBuffer());

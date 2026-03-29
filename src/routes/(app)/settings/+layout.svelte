@@ -32,12 +32,12 @@
 	</div>
 
 	<!-- Settings Navigation Tabs -->
-	<div class="flex flex-wrap gap-2 border-b pb-4">
+	<div class="flex gap-2 overflow-x-auto border-b pb-4">
 		{#each navItems as item}
 			<Button
 				variant={page.url.pathname === item.href ? 'default' : 'ghost'}
 				href={item.href}
-				class="h-9 flex-1 cursor-pointer px-3 text-xs sm:flex-none sm:text-sm"
+				class="h-9 shrink-0 cursor-pointer px-3 text-xs sm:text-sm"
 			>
 				<item.icon class="mr-2 h-4 w-4" />
 				{item.label}

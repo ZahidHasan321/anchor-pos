@@ -14,7 +14,6 @@
 		PackageX,
 		TrendingUp,
 		X,
-		Printer,
 		Trash
 	} from '@lucide/svelte';
 	import { formatCurrency } from '$lib/format';
@@ -359,12 +358,10 @@
 				0
 			) ?? 0}
 		{@const health = getStockHealth(product.variants)}
-		<div
-			role="button"
-			tabindex="0"
-			class="group relative cursor-pointer rounded-lg border bg-card text-card-foreground shadow-sm transition-colors hover:bg-muted/50"
-			onclick={() => goto(`/inventory/${product.id}`)}
-			onkeydown={(e) => e.key === 'Enter' && goto(`/inventory/${product.id}`)}
+		<a
+			href="/inventory/{product.id}"
+			class="group relative block cursor-pointer rounded-lg border bg-card text-card-foreground shadow-sm transition-colors hover:bg-muted/50 no-underline"
+			data-sveltekit-preload-data="hover"
 		>
 			<div class="p-4">
 				<div class="mb-3 flex items-start justify-between gap-2">
@@ -424,18 +421,8 @@
 			</div>
 
 			<!-- Card action bar -->
-			<div class="flex items-center justify-end gap-1 border-t px-3 py-1.5">
-				<Button
-					variant="ghost"
-					size="sm"
-					href="/inventory/{product.id}/labels"
-					onclick={(e: MouseEvent) => e.stopPropagation()}
-					class="h-7 px-2 text-[10px]"
-					aria-label="Print labels"
-				>
-					<Printer class="mr-1 h-3 w-3" /> Labels
-				</Button>
-				{#if isAdmin}
+			{#if isAdmin}
+				<div class="flex items-center justify-end gap-1 border-t px-3 py-1.5">
 					<form
 						method="POST"
 						action="?/deleteProduct"
@@ -455,6 +442,7 @@
 							aria-label="Delete product"
 							onclick={async (e: MouseEvent) => {
 								e.stopPropagation();
+								e.preventDefault();
 								const formEl = (e.currentTarget as HTMLElement).closest('form');
 								if (
 									await confirmState.confirm({
@@ -471,9 +459,9 @@
 							<Trash class="mr-1 h-3 w-3" /> Delete
 						</Button>
 					</form>
-				{/if}
-			</div>
-		</div>
+				</div>
+			{/if}
+		</a>
 	{/snippet}
 
 	<!-- Desktop table row stock cell -->
@@ -586,13 +574,6 @@
 								</Table.Cell>
 								<Table.Cell class="text-right">
 									<div class="flex justify-end gap-1">
-										<Button
-											variant="ghost"
-											size="icon"
-											href="/inventory/{product.id}/labels"
-											onclick={(e: MouseEvent) => e.stopPropagation()}
-											aria-label="Print labels"><Printer class="h-4 w-4" /></Button
-										>
 										{#if isAdmin}
 											<form
 												method="POST"
@@ -603,7 +584,7 @@
 														if (isNative) loadNativeInventory();
 													};
 												}}
-											>
+												>
 												<input type="hidden" name="productId" value={product.id} />
 												<Button
 													variant="ghost"
@@ -613,6 +594,7 @@
 													aria-label="Delete product"
 													onclick={async (e: MouseEvent) => {
 														e.stopPropagation();
+														e.preventDefault();
 														const formEl = (e.currentTarget as HTMLElement).closest('form');
 														if (
 															await confirmState.confirm({

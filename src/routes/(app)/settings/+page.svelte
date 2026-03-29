@@ -8,6 +8,8 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Sheet from '$lib/components/ui/sheet';
+	import { MediaQuery } from 'svelte/reactivity';
 	import {
 		Store,
 		MapPin,
@@ -39,6 +41,8 @@
 	import { browser } from '$app/environment';
 	import { untrack } from 'svelte';
 
+	const isDesktop = new MediaQuery('(min-width: 768px)');
+
 	let { data, form } = $props();
 	let loading = $state(false);
 	let isEditing = $state(false);
@@ -54,7 +58,9 @@
 		if (!browser || !isElectron) return;
 		const electron = (window as any).electron;
 		if (electron?.getAppVersion) {
-			electron.getAppVersion().then((v: string) => { electronVersion = v; });
+			electron.getAppVersion().then((v: string) => {
+				electronVersion = v;
+			});
 		}
 	});
 
@@ -583,103 +589,126 @@
 	</form>
 </div>
 
-<!-- Receipt Preview Dialog -->
-<Dialog.Root bind:open={showReceiptPreview}>
-	<Dialog.Content class="max-w-sm p-0">
-		<Dialog.Header class="px-5 pt-5 pb-0">
-			<div class="flex items-center justify-between">
-				<Dialog.Title class="text-sm">Receipt Preview</Dialog.Title>
-				<Badge variant="outline">80mm Thermal</Badge>
-			</div>
-			<Dialog.Description class="text-xs text-muted-foreground">
-				Visual representation of your printed receipt.
-			</Dialog.Description>
-		</Dialog.Header>
-		<div class="max-h-[70vh] overflow-y-auto px-5 pb-5">
-			<div
-				class="rounded-lg bg-white p-4 text-[#1a1a1a] shadow-inner dark:bg-zinc-100 dark:text-zinc-900"
-			>
-				<div class="font-mono text-[11px] leading-tight">
-					<div class="text-center">
-						<div class="text-[14px] font-bold uppercase">
-							{previewData.store_name || 'STORE NAME'}
-						</div>
-						<div class="mt-1">{previewData.store_address || '123 Store Address, City'}</div>
-						<div>Phone: {previewData.store_phone || '01XXXXXXXXX'}</div>
-						{#if previewData.store_email}<div>{previewData.store_email}</div>{/if}
-						{#if previewData.store_website}<div>{previewData.store_website}</div>{/if}
-						{#if previewData.store_tax_id}<div class="mt-1">
-								VAT: {previewData.store_tax_id}
+{#snippet receiptPreviewContent()}
+	<div class="max-h-[70vh] overflow-y-auto px-5 pb-5">
+		<div
+			class="rounded-lg bg-white p-4 text-[#1a1a1a] shadow-inner dark:bg-zinc-100 dark:text-zinc-900"
+		>
+			<div class="font-mono text-[11px] leading-tight">
+				<div class="text-center">
+					<div class="text-[14px] font-bold uppercase">
+						{previewData.store_name || 'STORE NAME'}
+					</div>
+					<div class="mt-1">{previewData.store_address || '123 Store Address, City'}</div>
+					<div>Phone: {previewData.store_phone || '01XXXXXXXXX'}</div>
+					{#if previewData.store_email}<div>{previewData.store_email}</div>{/if}
+					{#if previewData.store_website}<div>{previewData.store_website}</div>{/if}
+					{#if previewData.store_tax_id}<div class="mt-1">
+							VAT: {previewData.store_tax_id}
+						</div>{/if}
+					{#if previewData.store_bin}<div class="mt-1">BIN: {previewData.store_bin}</div>{/if}
+				</div>
+
+				<div class="my-2 border-t border-dashed border-black"></div>
+				<div>Order: #PREVIEW</div>
+				<div>Date: {new Date().toLocaleDateString()}</div>
+
+				<div class="my-2 border-t border-dashed border-black"></div>
+				<table class="w-full text-left">
+					<tbody>
+						<tr class="font-bold">
+							<td class="py-1">Item</td>
+							<td class="py-1 text-center">Qty</td>
+							<td class="py-1 text-right">Price</td>
+						</tr>
+						<tr>
+							<td class="py-1">SAMPLE PRODUCT<br /><span class="text-[9px]">Size: XL</span></td>
+							<td class="py-1 text-center">1</td>
+							<td class="py-1 text-right">1,200</td>
+						</tr>
+					</tbody>
+				</table>
+
+				<div class="my-2 border-t border-dashed border-black"></div>
+				<div class="flex justify-between text-[13px] font-bold">
+					<span>TOTAL</span>
+					<span>{formatCurrency(1200)}</span>
+				</div>
+
+				{#if previewData.store_facebook || previewData.store_instagram}
+					<div class="mt-2 text-center text-[9px]">
+						{#if previewData.store_facebook}<div>FB: {previewData.store_facebook}</div>{/if}
+						{#if previewData.store_instagram}<div>IG: {previewData.store_instagram}</div>{/if}
+					</div>
+				{/if}
+
+				{#if previewData.return_policy || previewData.exchange_policy || previewData.terms_conditions}
+					<div class="my-2 border-t border-dashed border-black"></div>
+					<div class="space-y-1 text-[9px]">
+						{#if previewData.return_policy}<div>
+								<strong>Return:</strong>
+								{previewData.return_policy}
 							</div>{/if}
-						{#if previewData.store_bin}<div class="mt-1">BIN: {previewData.store_bin}</div>{/if}
+						{#if previewData.exchange_policy}<div>
+								<strong>Exchange:</strong>
+								{previewData.exchange_policy}
+							</div>{/if}
+						{#if previewData.terms_conditions}<div>
+								<strong>T&C:</strong>
+								{previewData.terms_conditions}
+							</div>{/if}
 					</div>
+				{/if}
 
-					<div class="my-2 border-t border-dashed border-black"></div>
-					<div>Order: #PREVIEW</div>
-					<div>Date: {new Date().toLocaleDateString()}</div>
-
-					<div class="my-2 border-t border-dashed border-black"></div>
-					<table class="w-full text-left">
-						<tbody>
-							<tr class="font-bold">
-								<td class="py-1">Item</td>
-								<td class="py-1 text-center">Qty</td>
-								<td class="py-1 text-right">Price</td>
-							</tr>
-							<tr>
-								<td class="py-1">SAMPLE PRODUCT<br /><span class="text-[9px]">Size: XL</span></td>
-								<td class="py-1 text-center">1</td>
-								<td class="py-1 text-right">1,200</td>
-							</tr>
-						</tbody>
-					</table>
-
-					<div class="my-2 border-t border-dashed border-black"></div>
-					<div class="flex justify-between text-[13px] font-bold">
-						<span>TOTAL</span>
-						<span>{formatCurrency(1200)}</span>
-					</div>
-
-					{#if previewData.store_facebook || previewData.store_instagram}
-						<div class="mt-2 text-center text-[9px]">
-							{#if previewData.store_facebook}<div>FB: {previewData.store_facebook}</div>{/if}
-							{#if previewData.store_instagram}<div>IG: {previewData.store_instagram}</div>{/if}
-						</div>
-					{/if}
-
-					{#if previewData.return_policy || previewData.exchange_policy || previewData.terms_conditions}
-						<div class="my-2 border-t border-dashed border-black"></div>
-						<div class="space-y-1 text-[9px]">
-							{#if previewData.return_policy}<div>
-									<strong>Return:</strong>
-									{previewData.return_policy}
-								</div>{/if}
-							{#if previewData.exchange_policy}<div>
-									<strong>Exchange:</strong>
-									{previewData.exchange_policy}
-								</div>{/if}
-							{#if previewData.terms_conditions}<div>
-									<strong>T&C:</strong>
-									{previewData.terms_conditions}
-								</div>{/if}
-						</div>
-					{/if}
-
-					<div class="mt-4 text-center">
-						<div class="text-[10px] italic">{previewData.receipt_footer || 'Thank you!'}</div>
-						<div class="mt-2 text-[9px]">*** End of Receipt ***</div>
-					</div>
+				<div class="mt-4 text-center">
+					<div class="text-[10px] italic">{previewData.receipt_footer || 'Thank you!'}</div>
+					<div class="mt-2 text-[9px]">*** End of Receipt ***</div>
 				</div>
 			</div>
 		</div>
-		<div class="flex items-center justify-between border-t px-5 py-3">
-			<p class="text-[11px] text-muted-foreground italic">
-				Use "Print Test" for actual thermal output.
-			</p>
-			<Button variant="outline" size="sm" class="cursor-pointer" onclick={printTestReceipt}>
-				<Printer class="mr-2 h-3.5 w-3.5" />
-				Print
-			</Button>
-		</div>
-	</Dialog.Content>
-</Dialog.Root>
+	</div>
+	<div class="flex items-center justify-between border-t px-5 py-3">
+		<p class="text-[11px] text-muted-foreground italic">
+			Use "Print Test" for actual thermal output.
+		</p>
+		<Button variant="outline" size="sm" class="cursor-pointer" onclick={printTestReceipt}>
+			<Printer class="mr-2 h-3.5 w-3.5" />
+			Print
+		</Button>
+	</div>
+{/snippet}
+
+<!-- Receipt Preview Dialog / Sheet -->
+{#if isDesktop.current}
+	<Dialog.Root bind:open={showReceiptPreview}>
+		<Dialog.Content class="max-w-sm p-0">
+			<Dialog.Header class="px-5 pt-5 pb-0">
+				<div class="flex items-center justify-between">
+					<Dialog.Title class="text-sm">Receipt Preview</Dialog.Title>
+					<Badge variant="outline">80mm Thermal</Badge>
+				</div>
+				<Dialog.Description class="text-xs text-muted-foreground">
+					Visual representation of your printed receipt.
+				</Dialog.Description>
+			</Dialog.Header>
+			{@render receiptPreviewContent()}
+		</Dialog.Content>
+	</Dialog.Root>
+{:else}
+	<Sheet.Root bind:open={showReceiptPreview}>
+		<Sheet.Content side="bottom" class="max-h-[85vh] rounded-t-2xl p-0">
+			<Sheet.Header class="px-5 pt-5 pb-0">
+				<div class="flex items-center justify-between">
+					<Sheet.Title class="text-sm">Receipt Preview</Sheet.Title>
+					<Badge variant="outline">80mm Thermal</Badge>
+				</div>
+				<Sheet.Description class="text-xs text-muted-foreground">
+					Visual representation of your printed receipt.
+				</Sheet.Description>
+			</Sheet.Header>
+			<div class="overflow-y-auto">
+				{@render receiptPreviewContent()}
+			</div>
+		</Sheet.Content>
+	</Sheet.Root>
+{/if}

@@ -12,7 +12,7 @@ import {
 	cashbook
 } from '$lib/server/db/schema';
 import { eq, sql, and } from 'drizzle-orm';
-import { generateId } from '$lib/utils';
+import { generateId, round2 } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import env from '$lib/server/env';
 
@@ -131,7 +131,26 @@ export const actions: Actions = {
 					throw new Error('ORDER_NOT_REFUNDABLE');
 				}
 
-				const total = item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100);
+				// Calculate proportional refund amount to account for global/order-level discount.
+				// The order's totalAmount reflects global discount, so each item's refund should be
+				// its proportional share of the current order total (not just its line total).
+				const allItems = await tx
+					.select()
+					.from(orderItems)
+					.where(eq(orderItems.orderId, params.id));
+				const activeSubtotal = allItems
+					.filter((i: any) => i.status !== 'refunded')
+					.reduce(
+						(sum: number, i: any) =>
+							sum + i.priceAtSale * i.quantity * (1 - (i.discount || 0) / 100),
+						0
+					);
+				const itemLineTotal =
+					item.priceAtSale * item.quantity * (1 - (item.discount || 0) / 100);
+				const total =
+					activeSubtotal > 0
+						? round2(order.totalAmount * (itemLineTotal / activeSubtotal))
+						: 0;
 
 				// 1. Update item status
 				await tx.update(orderItems).set({ status: 'refunded' }).where(eq(orderItems.id, itemId));

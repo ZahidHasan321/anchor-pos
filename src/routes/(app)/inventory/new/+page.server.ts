@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { products, productVariants, stockLogs } from '$lib/server/db/schema';
+import { eq } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
@@ -13,7 +14,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	if (!db) return { categories: [] };
 
-	const rows = await db.selectDistinct({ category: products.category }).from(products);
+	const rows = await db.selectDistinct({ category: products.category }).from(products).where(eq(products.isActive, true));
 	const categories = rows.map((r: { category: string }) => r.category);
 
 	return { categories: categories.sort() };

@@ -2,7 +2,9 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Sheet from '$lib/components/ui/sheet';
 	import { Button } from '$lib/components/ui/button';
+	import { MediaQuery } from 'svelte/reactivity';
 
 	import DatePicker from '$lib/components/ui/DatePicker.svelte';
 	import { Label } from '$lib/components/ui/label';
@@ -32,6 +34,8 @@
 	Chart.register(...registerables);
 
 	let { data } = $props();
+
+	const isDesktop = new MediaQuery('(min-width: 768px)');
 
 	// Native state for Electron (PowerSync SQLite)
 	let nativeSummaries = $state<any>(null);
@@ -1178,97 +1182,115 @@
 	</div>
 </div>
 
-<!-- Detail "View All" Dialog -->
-<Dialog.Root bind:open={detailDialog.open}>
-	<Dialog.Content class="max-h-[80vh] sm:max-w-lg">
-		<Dialog.Header>
-			<Dialog.Title>{detailDialog.title}</Dialog.Title>
-			<Dialog.Description class="text-xs text-muted-foreground">
-				{data.startDate} to {data.endDate}
-			</Dialog.Description>
-		</Dialog.Header>
-		<div class="max-h-[55vh] overflow-y-auto">
-			{#if detailDialog.loading}
-				<div class="space-y-3 p-2">
-					{#each Array(5) as _}<Skeleton class="h-6 w-full" />{/each}
-				</div>
-			{:else if detailDialog.items.length > 0}
-				{#if detailDialog.type === 'expenses'}
-					{@const maxVal = Math.max(...detailDialog.items.map((e) => Number(e.total)), 1)}
-					{@const totalVal = detailDialog.items.reduce((s: number, e: any) => s + Number(e.total), 0)}
-					<div class="space-y-3 p-1">
-						{#each detailDialog.items as item, i}
-							<div class="space-y-1">
-								<div class="flex items-center justify-between gap-3 text-sm">
-									<div class="flex items-center gap-2 min-w-0">
-										<span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">{i + 1}</span>
-										<span class="truncate font-medium">{item.description}</span>
-									</div>
-									<div class="flex items-center gap-2 shrink-0">
-										<span class="text-[10px] tabular-nums text-muted-foreground">{item.count}x</span>
-										<span class="font-bold tabular-nums">{formatCurrency(item.total)}</span>
-									</div>
+<!-- Detail "View All" Dialog / Sheet -->
+{#snippet detailDialogBody()}
+	<div class="max-h-[55vh] overflow-x-auto overflow-y-auto">
+		{#if detailDialog.loading}
+			<div class="space-y-3 p-2">
+				{#each Array(5) as _}<Skeleton class="h-6 w-full" />{/each}
+			</div>
+		{:else if detailDialog.items.length > 0}
+			{#if detailDialog.type === 'expenses'}
+				{@const maxVal = Math.max(...detailDialog.items.map((e) => Number(e.total)), 1)}
+				{@const totalVal = detailDialog.items.reduce((s: number, e: any) => s + Number(e.total), 0)}
+				<div class="space-y-3 p-1">
+					{#each detailDialog.items as item, i}
+						<div class="space-y-1">
+							<div class="flex items-center justify-between gap-3 text-sm">
+								<div class="flex items-center gap-2 min-w-0">
+									<span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">{i + 1}</span>
+									<span class="truncate font-medium">{item.description}</span>
 								</div>
-								<div class="ml-7 h-1.5 w-auto overflow-hidden rounded-full bg-muted">
-									<div class="h-full bg-orange-500/70" style="width: {(Number(item.total) / maxVal) * 100}%"></div>
+								<div class="flex items-center gap-2 shrink-0">
+									<span class="text-[10px] tabular-nums text-muted-foreground">{item.count}x</span>
+									<span class="font-bold tabular-nums">{formatCurrency(item.total)}</span>
 								</div>
 							</div>
-						{/each}
-						<Separator />
-						<div class="flex items-center justify-between px-1 text-sm font-bold">
-							<span>Total</span>
-							<span class="text-orange-600">{formatCurrency(totalVal)}</span>
+							<div class="ml-7 h-1.5 w-auto overflow-hidden rounded-full bg-muted">
+								<div class="h-full bg-orange-500/70" style="width: {(Number(item.total) / maxVal) * 100}%"></div>
+							</div>
 						</div>
+					{/each}
+					<Separator />
+					<div class="flex items-center justify-between px-1 text-sm font-bold">
+						<span>Total</span>
+						<span class="text-orange-600">{formatCurrency(totalVal)}</span>
 					</div>
-				{:else if detailDialog.type === 'products'}
-					<Table.Root>
-						<Table.Header>
+				</div>
+			{:else if detailDialog.type === 'products'}
+				<Table.Root>
+					<Table.Header>
+						<Table.Row>
+							<Table.Head class="pl-4">#</Table.Head>
+							<Table.Head>Product</Table.Head>
+							<Table.Head class="text-right">Qty</Table.Head>
+							<Table.Head class="pr-4 text-right">Revenue</Table.Head>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body>
+						{#each detailDialog.items as item, i}
 							<Table.Row>
-								<Table.Head class="pl-4">#</Table.Head>
-								<Table.Head>Product</Table.Head>
-								<Table.Head class="text-right">Qty</Table.Head>
-								<Table.Head class="pr-4 text-right">Revenue</Table.Head>
+								<Table.Cell class="pl-4 text-muted-foreground">{i + 1}</Table.Cell>
+								<Table.Cell class="font-medium">{item.productName}</Table.Cell>
+								<Table.Cell class="text-right tabular-nums">{Number(item.totalQty)}</Table.Cell>
+								<Table.Cell class="pr-4 text-right font-bold tabular-nums">{formatCurrency(item.totalRevenue)}</Table.Cell>
 							</Table.Row>
-						</Table.Header>
-						<Table.Body>
-							{#each detailDialog.items as item, i}
-								<Table.Row>
-									<Table.Cell class="pl-4 text-muted-foreground">{i + 1}</Table.Cell>
-									<Table.Cell class="font-medium">{item.productName}</Table.Cell>
-									<Table.Cell class="text-right tabular-nums">{Number(item.totalQty)}</Table.Cell>
-									<Table.Cell class="pr-4 text-right font-bold tabular-nums">{formatCurrency(item.totalRevenue)}</Table.Cell>
-								</Table.Row>
-							{/each}
-						</Table.Body>
-					</Table.Root>
-				{:else if detailDialog.type === 'customers'}
-					<Table.Root>
-						<Table.Header>
+						{/each}
+					</Table.Body>
+				</Table.Root>
+			{:else if detailDialog.type === 'customers'}
+				<Table.Root>
+					<Table.Header>
+						<Table.Row>
+							<Table.Head class="pl-4">Customer</Table.Head>
+							<Table.Head class="text-right">Orders</Table.Head>
+							<Table.Head class="pr-4 text-right">Spent</Table.Head>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body>
+						{#each detailDialog.items as item}
 							<Table.Row>
-								<Table.Head class="pl-4">Customer</Table.Head>
-								<Table.Head class="text-right">Orders</Table.Head>
-								<Table.Head class="pr-4 text-right">Spent</Table.Head>
+								<Table.Cell class="pl-4">
+									<div class="font-medium">{item.customerName}</div>
+									{#if item.customerPhone}
+										<div class="text-[10px] text-muted-foreground">{item.customerPhone}</div>
+									{/if}
+								</Table.Cell>
+								<Table.Cell class="text-right tabular-nums">{Number(item.orderCount)}</Table.Cell>
+								<Table.Cell class="pr-4 text-right font-bold tabular-nums">{formatCurrency(item.totalSpent)}</Table.Cell>
 							</Table.Row>
-						</Table.Header>
-						<Table.Body>
-							{#each detailDialog.items as item}
-								<Table.Row>
-									<Table.Cell class="pl-4">
-										<div class="font-medium">{item.customerName}</div>
-										{#if item.customerPhone}
-											<div class="text-[10px] text-muted-foreground">{item.customerPhone}</div>
-										{/if}
-									</Table.Cell>
-									<Table.Cell class="text-right tabular-nums">{Number(item.orderCount)}</Table.Cell>
-									<Table.Cell class="pr-4 text-right font-bold tabular-nums">{formatCurrency(item.totalSpent)}</Table.Cell>
-								</Table.Row>
-							{/each}
-						</Table.Body>
-					</Table.Root>
-				{/if}
-			{:else}
-				<p class="py-8 text-center text-sm text-muted-foreground">No data found</p>
+						{/each}
+					</Table.Body>
+				</Table.Root>
 			{/if}
-		</div>
-	</Dialog.Content>
-</Dialog.Root>
+		{:else}
+			<p class="py-8 text-center text-sm text-muted-foreground">No data found</p>
+		{/if}
+	</div>
+{/snippet}
+
+{#if isDesktop.current}
+	<Dialog.Root bind:open={detailDialog.open}>
+		<Dialog.Content class="max-h-[80vh] sm:max-w-lg">
+			<Dialog.Header>
+				<Dialog.Title>{detailDialog.title}</Dialog.Title>
+				<Dialog.Description class="text-xs text-muted-foreground">
+					{data.startDate} to {data.endDate}
+				</Dialog.Description>
+			</Dialog.Header>
+			{@render detailDialogBody()}
+		</Dialog.Content>
+	</Dialog.Root>
+{:else}
+	<Sheet.Root bind:open={detailDialog.open}>
+		<Sheet.Content side="bottom" class="max-h-[85vh] rounded-t-2xl">
+			<Sheet.Header>
+				<Sheet.Title>{detailDialog.title}</Sheet.Title>
+				<Sheet.Description class="text-xs text-muted-foreground">
+					{data.startDate} to {data.endDate}
+				</Sheet.Description>
+			</Sheet.Header>
+			{@render detailDialogBody()}
+		</Sheet.Content>
+	</Sheet.Root>
+{/if}

@@ -48,6 +48,14 @@ async function bootstrapAdmin() {
 				name: 'System Admin',
 				isActive: true
 			});
+		} else if (import.meta.env.DEV) {
+			// In dev mode, always sync password with env var
+			const newHash = await hashPassword(password);
+			await db
+				.update(users)
+				.set({ passwordHash: newHash })
+				.where(eq(users.username, username));
+			console.log(`[Bootstrap] Dev mode: reset password for ${username}`);
 		}
 
 		isBootstrapped = true;
@@ -240,6 +248,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			(env.IS_ELECTRON ? ' http://127.0.0.1:* ws://127.0.0.1:*' : '') +
 			'; ' +
 			"worker-src 'self' blob:; " +
+			"frame-src 'self' about: blob:; " +
 			"frame-ancestors 'none';" +
 			(env.IS_ELECTRON || import.meta.env.DEV ? '' : ' upgrade-insecure-requests;')
 	);

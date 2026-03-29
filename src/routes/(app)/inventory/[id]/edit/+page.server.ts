@@ -34,7 +34,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		redirect(302, '/inventory');
 	}
 
-	const categoryRows = await db.selectDistinct({ category: products.category }).from(products);
+	const categoryRows = await db.selectDistinct({ category: products.category }).from(products).where(eq(products.isActive, true));
 	const categories = categoryRows.map((r: { category: string }) => r.category);
 
 	return { product, categories: categories.sort(), productId: params.id };

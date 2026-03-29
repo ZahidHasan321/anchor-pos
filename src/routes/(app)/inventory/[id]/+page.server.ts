@@ -1,8 +1,8 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { products, productVariants, stockLogs, users } from '$lib/server/db/schema';
-import { eq, sql, desc, inArray } from 'drizzle-orm';
+import { products, productVariants, stockLogs, users, orderItems } from '$lib/server/db/schema';
+import { eq, sql, desc, inArray, and } from 'drizzle-orm';
 import { generateId } from '$lib/utils';
 import { logAuditEvent } from '$lib/server/audit';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
@@ -41,7 +41,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	const variants = await db
 		.select()
 		.from(productVariants)
-		.where(eq(productVariants.productId, params.id));
+		.where(and(eq(productVariants.productId, params.id), eq(productVariants.isActive, true)));
 
 	const variantIds = variants.map((v: { id: string }) => v.id);
 
@@ -292,19 +292,33 @@ export const actions: Actions = {
 			return fail(404, { error: 'Variant not found' });
 		}
 
+		// Prevent deletion if variant has order history
+		const salesCount = await db
+			.select({ count: sql<number>`count(*)` })
+			.from(orderItems)
+			.where(eq(orderItems.variantId, variantId));
+		if ((salesCount[0]?.count ?? 0) > 0) {
+			return fail(400, {
+				error: `Cannot delete: variant has ${salesCount[0].count} order(s) in history`
+			});
+		}
+
 		try {
-			await db.delete(productVariants).where(eq(productVariants.id, variantId));
+			await db
+				.update(productVariants)
+				.set({ isActive: false })
+				.where(eq(productVariants.id, variantId));
 
 			await logAuditEvent({
 				userId: locals.user!.id,
 				userName: locals.user!.name,
-				action: 'DELETE_VARIANT',
+				action: 'DEACTIVATE_VARIANT',
 				entity: 'product_variants',
 				entityId: variantId,
-				details: `Deleted variant ${variant.size}`
+				details: `Deactivated variant ${variant.size}`
 			});
 		} catch (e) {
-			console.error('Failed to delete variant:', e);
+			console.error('Failed to deactivate variant:', e);
 			return fail(500, { error: 'Database error' });
 		}
 
@@ -390,18 +404,21 @@ export const actions: Actions = {
 		if (!db) return fail(503, { deleteError: 'Database connection unavailable' });
 
 		try {
-			await db.delete(products).where(eq(products.id, params.id));
+			await db
+				.update(products)
+				.set({ isActive: false })
+				.where(eq(products.id, params.id));
 
 			await logAuditEvent({
 				userId: locals.user!.id,
 				userName: locals.user!.name,
-				action: 'DELETE_PRODUCT',
+				action: 'DEACTIVATE_PRODUCT',
 				entity: 'products',
 				entityId: params.id,
-				details: `Deleted product ID: ${params.id}`
+				details: `Deactivated product ID: ${params.id}`
 			});
 		} catch (e) {
-			console.error('Failed to delete product:', e);
+			console.error('Failed to deactivate product:', e);
 			return fail(500, { deleteError: 'Database error' });
 		}
 

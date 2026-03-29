@@ -75,6 +75,7 @@ export const products = pgTable(
 		costPrice: money('cost_price').default(0),
 		defaultDiscount: money('default_discount').default(0),
 		imageUrl: text('image_url'),
+		isActive: boolean('is_active').notNull().default(true),
 		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow()
 	},
 	(table) => ({
@@ -96,7 +97,8 @@ export const productVariants = pgTable(
 		stockQuantity: integer('stock_quantity').notNull().default(0),
 		price: money('price').notNull().default(0),
 		costPrice: money('cost_price').default(0),
-		discount: money('discount').default(0)
+		discount: money('discount').default(0),
+		isActive: boolean('is_active').notNull().default(true)
 	},
 	(table) => ({
 		productIdIdx: index('product_variant_product_id_idx').on(table.productId),

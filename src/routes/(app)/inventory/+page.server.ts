@@ -2,7 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { products, productVariants, storeSettings } from '$lib/server/db/schema';
-import { eq, sql, desc } from 'drizzle-orm';
+import { eq, sql, desc, and } from 'drizzle-orm';
 import { hasPermission, getDefaultRedirect } from '$lib/server/permissions';
 import { logAuditEvent } from '$lib/server/audit';
 import env from '$lib/server/env';
@@ -48,8 +48,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 						totalRetailValue: sql<number>`COALESCE(SUM(${productVariants.price} * ${productVariants.stockQuantity}), 0)`
 					})
 					.from(productVariants)
-					.innerJoin(products, eq(productVariants.productId, products.id)),
-				db.selectDistinct({ category: products.category }).from(products),
+					.innerJoin(products, eq(productVariants.productId, products.id))
+					.where(and(eq(products.isActive, true), eq(productVariants.isActive, true))),
+				db.selectDistinct({ category: products.category }).from(products).where(eq(products.isActive, true)),
 				db
 					.select({
 						id: products.id,
@@ -57,10 +58,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 						category: products.category,
 						templatePrice: products.templatePrice,
 						defaultDiscount: products.defaultDiscount,
-						totalStock: sql<number>`COALESCE(SUM(${productVariants.stockQuantity}), 0)`
+						totalStock: sql<number>`COALESCE(SUM(CASE WHEN ${productVariants.isActive} THEN ${productVariants.stockQuantity} ELSE 0 END), 0)`
 					})
 					.from(products)
 					.leftJoin(productVariants, eq(productVariants.productId, products.id))
+					.where(eq(products.isActive, true))
 					.groupBy(products.id)
 					.orderBy(desc(products.id))
 			]);
@@ -75,7 +77,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			const threshold = parseInt(settings.low_stock_threshold || '5');
 
 			// Fetch all variants in one query
-			const allVariants = await db.select().from(productVariants);
+			const allVariants = await db.select().from(productVariants).where(eq(productVariants.isActive, true));
 
 			const variantsByProduct = new Map<string, any[]>();
 			for (const v of allVariants) {
@@ -112,18 +114,21 @@ export const actions: Actions = {
 		}
 
 		try {
-			await db.delete(products).where(eq(products.id, productId));
+			await db
+				.update(products)
+				.set({ isActive: false })
+				.where(eq(products.id, productId));
 
 			await logAuditEvent({
 				userId: locals.user.id,
 				userName: locals.user.name,
-				action: 'DELETE_PRODUCT',
+				action: 'DEACTIVATE_PRODUCT',
 				entity: 'products',
 				entityId: productId,
-				details: `Deleted product from inventory list`
+				details: `Deactivated product from inventory list`
 			});
 		} catch (e) {
-			console.error('Failed to delete product:', e);
+			console.error('Failed to deactivate product:', e);
 			return fail(500, { error: 'Database error' });
 		}
 

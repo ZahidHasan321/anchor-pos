@@ -574,7 +574,7 @@
 								<Card.Header>
 									<Card.Title>Today's Entries</Card.Title>
 								</Card.Header>
-								<Card.Content class="p-0">
+								<Card.Content class="overflow-x-auto p-0">
 									{#if isNative}
 										{#if nativeDailyData === null}
 											<div class="space-y-3 p-4">
@@ -694,7 +694,7 @@
 						<Card.Header>
 							<Card.Title>All Transactions</Card.Title>
 						</Card.Header>
-						<Card.Content class="p-0">
+						<Card.Content class="overflow-x-auto p-0">
 							<div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
 								<div class="relative w-full sm:max-w-sm">
 									<Search

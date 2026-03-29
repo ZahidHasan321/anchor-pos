@@ -132,18 +132,22 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const id = data.get('id') as string;
 		try {
-			// Check if customer has any orders
-			const orderCount = await db
-				.select({ count: sql<number>`count(*)` })
-				.from(orders)
-				.where(eq(orders.customerId, id));
-			if ((orderCount[0]?.count ?? 0) > 0) {
-				return fail(400, {
-					error: `Cannot delete: customer has ${orderCount[0].count} order(s). Remove from orders first or deactivate instead.`
-				});
+			await db.transaction(async (tx: any) => {
+				const orderCount = await tx
+					.select({ count: sql<number>`count(*)` })
+					.from(orders)
+					.where(eq(orders.customerId, id));
+				if ((orderCount[0]?.count ?? 0) > 0) {
+					throw new Error(
+						`Cannot delete: customer has ${orderCount[0].count} order(s). Remove from orders first or deactivate instead.`
+					);
+				}
+				await tx.delete(customers).where(eq(customers.id, id));
+			});
+		} catch (e: any) {
+			if (e?.message?.startsWith('Cannot delete:')) {
+				return fail(400, { error: e.message });
 			}
-			await db.delete(customers).where(eq(customers.id, id));
-		} catch (e) {
 			return fail(500, { error: 'Database error' });
 		}
 		return { success: true };

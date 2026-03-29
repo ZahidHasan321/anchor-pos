@@ -18,7 +18,33 @@ export const load: PageServerLoad = async ({ locals }) => {
 		redirect(302, locals.user ? await getDefaultRedirect(locals.user.role) : '/login');
 	}
 
-	const today = new Date();
+	const storeTimezone = 'Asia/Dhaka';
+	const getStoreDate = (d: Date = new Date()) => {
+		const parts = new Intl.DateTimeFormat('en-US', {
+			timeZone: storeTimezone,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+			hour12: false
+		})
+			.formatToParts(d)
+			.reduce((acc, p) => ({ ...acc, [p.type]: p.value }), {} as Record<string, string>);
+		const h = parseInt(parts.hour);
+		return new Date(
+			parseInt(parts.year),
+			parseInt(parts.month) - 1,
+			parseInt(parts.day),
+			h === 24 ? 0 : h,
+			parseInt(parts.minute),
+			parseInt(parts.second)
+		);
+	};
+
+	const nowInStore = getStoreDate();
+	const today = new Date(nowInStore);
 	today.setHours(0, 0, 0, 0);
 
 	const yesterday = new Date(today);
@@ -228,7 +254,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 					name: orderItems.productName,
 					variantLabel: orderItems.variantLabel,
 					total_qty: sql<number>`sum(${orderItems.quantity})`.as('total_qty'),
-					total_revenue: sql<number>`sum(${orderItems.quantity} * ${orderItems.priceAtSale})`.as(
+					total_revenue: sql<number>`sum(${orderItems.quantity} * ${orderItems.priceAtSale} * (1 - ${orderItems.discount} / 100))`.as(
 						'total_revenue'
 					)
 				})

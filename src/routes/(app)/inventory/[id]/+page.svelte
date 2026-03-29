@@ -1,12 +1,15 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Sheet from '$lib/components/ui/sheet';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { MediaQuery } from 'svelte/reactivity';
 	import {
 		ArrowLeft,
 		Plus,
@@ -30,6 +33,8 @@
 	import { generateId, toDbDate } from '$lib/utils';
 
 	let { data, form } = $props();
+
+	const isDesktop = new MediaQuery('(min-width: 768px)');
 
 	// ── Native data loading ──
 	let nativeProduct = $state<any>(null);
@@ -170,6 +175,127 @@
 		if (qty === 0) return 'bg-red-50/40 dark:bg-red-950/15';
 		if (qty <= 5) return 'bg-amber-50/40 dark:bg-amber-950/15';
 		return '';
+	}
+
+	// ── Label Printing ──
+	// Android: opens Thermal Bridge app overlay via intent URL (works from any browser)
+	// PC: uses browser print dialog with HTML label rendering
+	let labelIsAndroid = $state(false);
+
+	onMount(() => {
+		labelIsAndroid = /android/i.test(navigator.userAgent);
+	});
+
+	function openBridgeOverlay(variant: any) {
+		const params = new URLSearchParams({
+			productName: currentProduct.name,
+			barcode: variant.barcode,
+			variant: `Size: ${variant.size}`,
+			price: `BDT ${Math.round(variant.price ?? 0).toLocaleString('en')}`
+		});
+		const fallback = encodeURIComponent(window.location.href);
+		window.location.href = `intent://print-label?${params.toString()}#Intent;scheme=thermal-bridge;package=com.autolinium.thermal_bridge;S.browser_fallback_url=${fallback};end`;
+	}
+
+	// Pre-cache barcode PNGs for browser print fallback
+	let barcodePngs = $state<Record<string, string>>({});
+	let JsBarcodeLib: any = null;
+
+	$effect(() => {
+		if (typeof window !== 'undefined' && currentVariants.length > 0) {
+			import('jsbarcode').then((mod) => {
+				JsBarcodeLib = mod.default;
+				for (const v of currentVariants) {
+					if (v.barcode && !barcodePngs[v.id]) {
+						const canvas = document.createElement('canvas');
+						JsBarcodeLib(canvas, v.barcode, {
+							format: 'CODE128',
+							width: 1.5,
+							height: 40,
+							displayValue: true,
+							fontSize: 10,
+							margin: 2
+						});
+						barcodePngs[v.id] = canvas.toDataURL('image/png');
+					}
+				}
+			});
+		}
+	});
+
+	function buildBrowserLabelHtml(variants: any[]): string {
+		const labelW = '45mm';
+		const labelH = '40mm';
+		const labels = variants.map((variant) => {
+			const dataUrl = barcodePngs[variant.id] || '';
+			return `<div class="label">
+				<div class="product-name">${currentProduct.name}</div>
+				${dataUrl ? `<img src="${dataUrl}" />` : ''}
+				<div class="variant-info">Size: ${variant.size}${variant.color ? ` | Color: ${variant.color}` : ''}</div>
+				<div class="price">${formatCurrency(variant.price)}</div>
+			</div>`;
+		}).join('');
+
+		return `<!DOCTYPE html><html><head><style>
+			@page { size: ${labelW} ${labelH}; margin: 0; }
+			html, body { margin: 0; padding: 0; }
+			.label {
+				width: ${labelW}; height: ${labelH};
+				padding: 1mm; box-sizing: border-box;
+				page-break-after: always; break-after: page;
+				page-break-inside: avoid; break-inside: avoid;
+				display: flex; flex-direction: column;
+				align-items: center; justify-content: center;
+				font-family: Arial, sans-serif;
+			}
+			.label:last-child { page-break-after: auto; break-after: auto; }
+			.product-name { font-size: 8px; font-weight: bold; text-align: center; margin-bottom: 1mm; }
+			.variant-info { font-size: 7px; text-align: center; }
+			.price { font-size: 11px; font-weight: bold; margin-top: 1mm; }
+			img { max-width: 42mm; height: auto; }
+			@media print {
+				html, body { overflow: visible !important; height: auto !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+			}
+		</style></head><body>${labels}</body></html>`;
+	}
+
+	function printBrowserLabel(html: string) {
+		const blob = new Blob([html], { type: 'text/html' });
+		const url = URL.createObjectURL(blob);
+		const iframe = document.createElement('iframe');
+		iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:none;';
+		document.body.appendChild(iframe);
+		const cleanup = () => {
+			if (iframe.parentNode) document.body.removeChild(iframe);
+			URL.revokeObjectURL(url);
+		};
+		iframe.src = url;
+		iframe.onload = () => {
+			setTimeout(() => {
+				iframe.contentWindow?.focus();
+				iframe.contentWindow?.print();
+				iframe.contentWindow?.addEventListener('afterprint', cleanup);
+				setTimeout(cleanup, 10000);
+			}, 100);
+		};
+	}
+
+	function printVariantLabel(variant: any) {
+		if (labelIsAndroid) {
+			// Android: open Thermal Bridge overlay — user picks copies there
+			openBridgeOverlay(variant);
+		} else {
+			// PC: browser print dialog
+			printBrowserLabel(buildBrowserLabelHtml([variant]));
+		}
+	}
+
+	function printAllLabels() {
+		if (!labelIsAndroid) {
+			// PC: print all variants in one browser print job
+			printBrowserLabel(buildBrowserLabelHtml(currentVariants));
+		}
+		// Android: no "print all" — user prints per variant with copies in the overlay
 	}
 
 	// ── Mode transitions ──
@@ -401,14 +527,17 @@
 				</div>
 			</div>
 			<div class="flex gap-2">
-				<Button
-					variant="outline"
-					size="sm"
-					href="/inventory/{currentProduct.id}/labels"
-					class="cursor-pointer"
-				>
-					<Printer class="mr-1.5 h-3.5 w-3.5" /> Labels
-				</Button>
+				{#if !labelIsAndroid}
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={printAllLabels}
+						class="cursor-pointer"
+						title="Print all labels (browser)"
+					>
+						<Printer class="mr-1.5 h-3.5 w-3.5" /> Print All Labels
+					</Button>
+				{/if}
 				<Button
 					variant="outline"
 					size="sm"
@@ -813,6 +942,16 @@
 													<Button
 														variant="ghost"
 														size="icon"
+														class="h-8 w-8 cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground"
+														onclick={() => printVariantLabel(variant)}
+														aria-label="Print label"
+														title="Print label"
+													>
+														<Printer class="h-3.5 w-3.5" />
+													</Button>
+													<Button
+														variant="ghost"
+														size="icon"
 														class="h-8 w-8 cursor-pointer text-blue-600 hover:bg-blue-50 hover:text-blue-700"
 														onclick={() => startInlineEdit(variant)}
 														aria-label="Edit variant"
@@ -904,73 +1043,18 @@
 		</Card.Root>
 		<!-- ── Stock History ── -->
 		{#if currentStockHistory.length > 0}
-			<Card.Root>
-				<Card.Header class="pb-0">
-					<button
-						class="flex w-full cursor-pointer items-center justify-between"
-						onclick={() => (stockHistoryOpen = !stockHistoryOpen)}
-					>
-						<div class="flex items-center gap-2">
-							<History class="h-4 w-4 text-muted-foreground" />
-							<Card.Title>Stock History</Card.Title>
-							<span class="text-xs text-muted-foreground">
-								({currentStockHistory.length} entries)
-							</span>
-						</div>
-						<ChevronDown
-							class="h-4 w-4 text-muted-foreground transition-transform {stockHistoryOpen
-								? 'rotate-180'
-								: ''}"
-						/>
-					</button>
-				</Card.Header>
-				{#if stockHistoryOpen}
-					<Card.Content class="p-0 pt-3">
-						<div class="overflow-x-auto">
-							<Table.Root>
-								<Table.Header>
-									<Table.Row>
-										<Table.Head>Date</Table.Head>
-										<Table.Head>Size</Table.Head>
-										<Table.Head>Change</Table.Head>
-										<Table.Head>Reason</Table.Head>
-										<Table.Head class="hidden sm:table-cell">By</Table.Head>
-									</Table.Row>
-								</Table.Header>
-								<Table.Body>
-									{#each currentStockHistory as log}
-										<Table.Row>
-											<Table.Cell class="text-xs text-muted-foreground">
-												{formatDateTime(log.createdAt)}
-											</Table.Cell>
-											<Table.Cell>
-												<span
-													class="inline-flex h-6 min-w-6 items-center justify-center rounded bg-primary/10 px-1.5 text-[11px] font-bold text-primary"
-												>
-													{log.size}
-												</span>
-											</Table.Cell>
-											<Table.Cell>
-												<span
-													class="text-sm font-bold tabular-nums {log.changeAmount > 0
-														? 'text-emerald-600 dark:text-emerald-400'
-														: 'text-red-600 dark:text-red-400'}"
-												>
-													{log.changeAmount > 0 ? '+' : ''}{log.changeAmount}
-												</span>
-											</Table.Cell>
-											<Table.Cell class="text-sm">{log.reason}</Table.Cell>
-											<Table.Cell class="hidden text-xs text-muted-foreground sm:table-cell"
-												>{log.userName ?? 'System'}</Table.Cell
-											>
-										</Table.Row>
-									{/each}
-								</Table.Body>
-							</Table.Root>
-						</div>
-					</Card.Content>
-				{/if}
-			</Card.Root>
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={() => (stockHistoryOpen = true)}
+				class="cursor-pointer"
+			>
+				<History class="mr-1.5 h-3.5 w-3.5" />
+				Stock History
+				<span class="ml-1 text-xs text-muted-foreground">
+					({currentStockHistory.length})
+				</span>
+			</Button>
 		{/if}
 	{/if}
 </div>
@@ -1018,216 +1102,303 @@
 	{/each}
 </form>
 
-<!-- ── Add Variant Dialog ── -->
-<Dialog.Root bind:open={variantDialogOpen}>
-	<Dialog.Content>
-		<Dialog.Header>
-			<Dialog.Title>Add New Sizes</Dialog.Title>
-			<Dialog.Description>Add size variants to {currentProduct.name}.</Dialog.Description>
-		</Dialog.Header>
-		<form
-			method="POST"
-			action="?/addVariant"
-			use:enhance={() => {
-				addVariantLoading = true;
-				return async ({ update }) => {
-					addVariantLoading = false;
-					await update();
-				};
-			}}
-			class="space-y-4"
-		>
-			<!-- Size template selector -->
-			<div class="space-y-3 rounded-lg border p-3">
-				<div class="flex items-center justify-between">
-					<Label class="text-sm font-semibold">Select Sizes</Label>
-					<div class="flex items-center rounded-lg border bg-muted p-0.5">
-						<button
-							type="button"
-							class="h-7 rounded-md px-2.5 text-xs font-medium transition-all {variantTemplate ===
-							'alpha'
-								? 'bg-background text-foreground shadow-sm'
-								: 'text-muted-foreground hover:bg-muted-foreground/10'}"
-							onclick={() => (variantTemplate = 'alpha')}
-						>
-							Alpha
-						</button>
-						<button
-							type="button"
-							class="h-7 rounded-md px-2.5 text-xs font-medium transition-all {variantTemplate ===
-							'numeric'
-								? 'bg-background text-foreground shadow-sm'
-								: 'text-muted-foreground hover:bg-muted-foreground/10'}"
-							onclick={() => (variantTemplate = 'numeric')}
-						>
-							Numeric
-						</button>
-					</div>
-				</div>
-
-				{#if availableSizes.length > 0}
-					<div class="flex flex-wrap gap-2">
-						{#each availableSizes as size}
-							<button
-								type="button"
-								class="cursor-pointer rounded-md border px-2.5 py-1 text-sm font-semibold transition-colors {variantSelectedSizes.includes(
-									size
-								)
-									? 'border-primary bg-primary/10 text-primary'
-									: 'border-border hover:bg-muted'}"
-								onclick={() => toggleVariantSize(size)}
-							>
-								{size}
-							</button>
-						{/each}
-					</div>
-				{:else}
-					<p class="text-sm text-muted-foreground italic">
-						All sizes from this template already exist.
-					</p>
-				{/if}
-
-				<div class="flex items-center gap-2">
-					<Input
-						placeholder="Custom size…"
-						bind:value={customVariantSizeInput}
-						class="h-8 max-w-[200px] text-sm"
-						onkeydown={(e: KeyboardEvent) => {
-							if (e.key === 'Enter') {
-								e.preventDefault();
-								addCustomVariantSize();
-							}
-						}}
-					/>
-					<Button
+<!-- ── Add Variant Dialog / Sheet ── -->
+{#snippet addVariantForm()}
+	<form
+		method="POST"
+		action="?/addVariant"
+		use:enhance={() => {
+			addVariantLoading = true;
+			return async ({ update }) => {
+				addVariantLoading = false;
+				await update();
+			};
+		}}
+		class="space-y-4"
+	>
+		<!-- Size template selector -->
+		<div class="space-y-3 rounded-lg border p-3">
+			<div class="flex items-center justify-between">
+				<Label class="text-sm font-semibold">Select Sizes</Label>
+				<div class="flex items-center rounded-lg border bg-muted p-0.5">
+					<button
 						type="button"
-						variant="outline"
-						size="sm"
-						onclick={addCustomVariantSize}
-						class="cursor-pointer"
+						class="h-7 rounded-md px-2.5 text-xs font-medium transition-all {variantTemplate ===
+						'alpha'
+							? 'bg-background text-foreground shadow-sm'
+							: 'text-muted-foreground hover:bg-muted-foreground/10'}"
+						onclick={() => (variantTemplate = 'alpha')}
 					>
-						<Plus class="mr-1 h-3 w-3" /> Add
-					</Button>
-				</div>
-
-				{#if variantSelectedSizes.length > 0}
-					<div class="flex flex-wrap gap-1.5">
-						{#each variantSelectedSizes as size}
-							<span
-								class="inline-flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-0.5 text-sm font-medium"
-							>
-								{size}
-								<input type="hidden" name="sizes" value={size} />
-								<button
-									type="button"
-									class="cursor-pointer rounded-sm p-0.5 text-muted-foreground hover:text-destructive"
-									onclick={() => removeVariantSize(size)}
-								>
-									<X class="h-3 w-3" />
-								</button>
-							</span>
-						{/each}
-					</div>
-				{/if}
-			</div>
-
-			<div class="grid grid-cols-2 gap-3">
-				<div class="space-y-1.5">
-					<Label class="text-xs">Selling Price ({getCurrencySymbol()})</Label>
-					<Input
-						name="price"
-						type="number"
-						step="0.01"
-						placeholder="Default"
-						bind:value={newVariantPrice}
-						class="h-9 text-sm"
-					/>
-					<p class="text-[10px] text-muted-foreground">
-						{formatCurrency(currentProduct.templatePrice)}
-					</p>
-				</div>
-				<div class="space-y-1.5">
-					<Label class="text-xs">Cost Price ({getCurrencySymbol()})</Label>
-					<Input
-						name="costPrice"
-						type="number"
-						step="0.01"
-						placeholder="Default"
-						bind:value={newVariantCostPrice}
-						class="h-9 text-sm"
-					/>
-					<p class="text-[10px] text-muted-foreground">
-						{formatCurrency(currentProduct.costPrice ?? 0)}
-					</p>
+						Alpha
+					</button>
+					<button
+						type="button"
+						class="h-7 rounded-md px-2.5 text-xs font-medium transition-all {variantTemplate ===
+						'numeric'
+							? 'bg-background text-foreground shadow-sm'
+							: 'text-muted-foreground hover:bg-muted-foreground/10'}"
+						onclick={() => (variantTemplate = 'numeric')}
+					>
+						Numeric
+					</button>
 				</div>
 			</div>
 
-			<div class="grid grid-cols-2 gap-3">
-				<div class="space-y-1.5">
-					<Label class="text-xs">Discount (%)</Label>
-					<Input
-						name="discount"
-						type="number"
-						step="0.01"
-						placeholder="Default"
-						bind:value={newVariantDiscount}
-						class="h-9 text-sm"
-					/>
-					<p class="text-[10px] text-muted-foreground">
-						{currentProduct.defaultDiscount}%
-					</p>
+			{#if availableSizes.length > 0}
+				<div class="flex flex-wrap gap-2">
+					{#each availableSizes as size}
+						<button
+							type="button"
+							class="cursor-pointer rounded-md border px-2.5 py-1 text-sm font-semibold transition-colors {variantSelectedSizes.includes(
+								size
+							)
+								? 'border-primary bg-primary/10 text-primary'
+								: 'border-border hover:bg-muted'}"
+							onclick={() => toggleVariantSize(size)}
+						>
+							{size}
+						</button>
+					{/each}
 				</div>
-				<div class="space-y-1.5">
-					<Label class="text-xs">Initial Stock (per size)</Label>
-					<Input
-						name="initialStock"
-						type="number"
-						min="0"
-						placeholder="0"
-						bind:value={newVariantInitialStock}
-						class="h-9 text-sm"
-					/>
-				</div>
-			</div>
+			{:else}
+				<p class="text-sm text-muted-foreground italic">
+					All sizes from this template already exist.
+				</p>
+			{/if}
 
-			<Dialog.Footer>
-				<Button
-					type="button"
-					disabled={addVariantLoading || variantSelectedSizes.length === 0}
-					class="w-full cursor-pointer"
-					onclick={async (e) => {
-						if (isNative) {
-							addVariantLoading = true;
-							const price = newVariantPrice
-								? parseFloat(newVariantPrice)
-								: currentProduct.templatePrice;
-							const costPrice = newVariantCostPrice
-								? parseFloat(newVariantCostPrice)
-								: currentProduct.costPrice || 0;
-							const discount = newVariantDiscount
-								? parseFloat(newVariantDiscount)
-								: currentProduct.defaultDiscount || 0;
-							const initialStock = parseInt(newVariantInitialStock) || 0;
-							await nativeAddVariants(
-								variantSelectedSizes,
-								price,
-								costPrice,
-								discount,
-								initialStock
-							);
-							addVariantLoading = false;
-						} else {
-							const formElement = e.currentTarget.closest('form');
-							formElement?.requestSubmit();
+			<div class="flex items-center gap-2">
+				<Input
+					placeholder="Custom size…"
+					bind:value={customVariantSizeInput}
+					class="h-8 max-w-[200px] text-sm"
+					onkeydown={(e: KeyboardEvent) => {
+						if (e.key === 'Enter') {
+							e.preventDefault();
+							addCustomVariantSize();
 						}
 					}}
+				/>
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					onclick={addCustomVariantSize}
+					class="cursor-pointer"
 				>
-					{#if addVariantLoading}
-						<Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-					{/if}
-					Add {variantSelectedSizes.length} Size{variantSelectedSizes.length !== 1 ? 's' : ''}
+					<Plus class="mr-1 h-3 w-3" /> Add
 				</Button>
-			</Dialog.Footer>
-		</form>
-	</Dialog.Content>
-</Dialog.Root>
+			</div>
+
+			{#if variantSelectedSizes.length > 0}
+				<div class="flex flex-wrap gap-1.5">
+					{#each variantSelectedSizes as size}
+						<span
+							class="inline-flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-0.5 text-sm font-medium"
+						>
+							{size}
+							<input type="hidden" name="sizes" value={size} />
+							<button
+								type="button"
+								class="cursor-pointer rounded-sm p-0.5 text-muted-foreground hover:text-destructive"
+								onclick={() => removeVariantSize(size)}
+							>
+								<X class="h-3 w-3" />
+							</button>
+						</span>
+					{/each}
+				</div>
+			{/if}
+		</div>
+
+		<div class="grid grid-cols-2 gap-3">
+			<div class="space-y-1.5">
+				<Label class="text-xs">Selling Price ({getCurrencySymbol()})</Label>
+				<Input
+					name="price"
+					type="number"
+					step="0.01"
+					placeholder="Default"
+					bind:value={newVariantPrice}
+					class="h-9 text-sm"
+				/>
+				<p class="text-[10px] text-muted-foreground">
+					{formatCurrency(currentProduct.templatePrice)}
+				</p>
+			</div>
+			<div class="space-y-1.5">
+				<Label class="text-xs">Cost Price ({getCurrencySymbol()})</Label>
+				<Input
+					name="costPrice"
+					type="number"
+					step="0.01"
+					placeholder="Default"
+					bind:value={newVariantCostPrice}
+					class="h-9 text-sm"
+				/>
+				<p class="text-[10px] text-muted-foreground">
+					{formatCurrency(currentProduct.costPrice ?? 0)}
+				</p>
+			</div>
+		</div>
+
+		<div class="grid grid-cols-2 gap-3">
+			<div class="space-y-1.5">
+				<Label class="text-xs">Discount (%)</Label>
+				<Input
+					name="discount"
+					type="number"
+					step="0.01"
+					placeholder="Default"
+					bind:value={newVariantDiscount}
+					class="h-9 text-sm"
+				/>
+				<p class="text-[10px] text-muted-foreground">
+					{currentProduct.defaultDiscount}%
+				</p>
+			</div>
+			<div class="space-y-1.5">
+				<Label class="text-xs">Initial Stock (per size)</Label>
+				<Input
+					name="initialStock"
+					type="number"
+					min="0"
+					placeholder="0"
+					bind:value={newVariantInitialStock}
+					class="h-9 text-sm"
+				/>
+			</div>
+		</div>
+
+		<Button
+			type="button"
+			disabled={addVariantLoading || variantSelectedSizes.length === 0}
+			class="w-full cursor-pointer"
+			onclick={async (e) => {
+				if (isNative) {
+					addVariantLoading = true;
+					const price = newVariantPrice
+						? parseFloat(newVariantPrice)
+						: currentProduct.templatePrice;
+					const costPrice = newVariantCostPrice
+						? parseFloat(newVariantCostPrice)
+						: currentProduct.costPrice || 0;
+					const discount = newVariantDiscount
+						? parseFloat(newVariantDiscount)
+						: currentProduct.defaultDiscount || 0;
+					const initialStock = parseInt(newVariantInitialStock) || 0;
+					await nativeAddVariants(
+						variantSelectedSizes,
+						price,
+						costPrice,
+						discount,
+						initialStock
+					);
+					addVariantLoading = false;
+				} else {
+					const formElement = e.currentTarget.closest('form');
+					formElement?.requestSubmit();
+				}
+			}}
+		>
+			{#if addVariantLoading}
+				<Loader2 class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+			{/if}
+			Add {variantSelectedSizes.length} Size{variantSelectedSizes.length !== 1 ? 's' : ''}
+		</Button>
+	</form>
+{/snippet}
+
+{#if isDesktop.current}
+	<Dialog.Root bind:open={variantDialogOpen}>
+		<Dialog.Content>
+			<Dialog.Header>
+				<Dialog.Title>Add New Sizes</Dialog.Title>
+				<Dialog.Description>Add size variants to {currentProduct.name}.</Dialog.Description>
+			</Dialog.Header>
+			{@render addVariantForm()}
+		</Dialog.Content>
+	</Dialog.Root>
+{:else}
+	<Sheet.Root bind:open={variantDialogOpen}>
+		<Sheet.Content side="bottom" class="max-h-[85vh] rounded-t-2xl">
+			<Sheet.Header>
+				<Sheet.Title>Add New Sizes</Sheet.Title>
+				<Sheet.Description>Add size variants to {currentProduct.name}.</Sheet.Description>
+			</Sheet.Header>
+			<div class="overflow-y-auto px-4 pb-4">
+				{@render addVariantForm()}
+			</div>
+		</Sheet.Content>
+	</Sheet.Root>
+{/if}
+
+<!-- ── Stock History Dialog / Sheet ── -->
+{#snippet stockHistoryTable()}
+	<div class="overflow-x-auto">
+		<Table.Root>
+			<Table.Header>
+				<Table.Row>
+					<Table.Head>Date</Table.Head>
+					<Table.Head>Size</Table.Head>
+					<Table.Head>Change</Table.Head>
+					<Table.Head>Reason</Table.Head>
+					<Table.Head class="hidden sm:table-cell">By</Table.Head>
+				</Table.Row>
+			</Table.Header>
+			<Table.Body>
+				{#each currentStockHistory as log}
+					<Table.Row>
+						<Table.Cell class="text-xs text-muted-foreground">
+							{formatDateTime(log.createdAt)}
+						</Table.Cell>
+						<Table.Cell>
+							<span
+								class="inline-flex h-6 min-w-6 items-center justify-center rounded bg-primary/10 px-1.5 text-[11px] font-bold text-primary"
+							>
+								{log.size}
+							</span>
+						</Table.Cell>
+						<Table.Cell>
+							<span
+								class="text-sm font-bold tabular-nums {log.changeAmount > 0
+									? 'text-emerald-600 dark:text-emerald-400'
+									: 'text-red-600 dark:text-red-400'}"
+							>
+								{log.changeAmount > 0 ? '+' : ''}{log.changeAmount}
+							</span>
+						</Table.Cell>
+						<Table.Cell class="text-sm">{log.reason}</Table.Cell>
+						<Table.Cell class="hidden text-xs text-muted-foreground sm:table-cell"
+							>{log.userName ?? 'System'}</Table.Cell
+						>
+					</Table.Row>
+				{/each}
+			</Table.Body>
+		</Table.Root>
+	</div>
+{/snippet}
+
+{#if isDesktop.current}
+	<Dialog.Root bind:open={stockHistoryOpen}>
+		<Dialog.Content class="max-w-2xl">
+			<Dialog.Header>
+				<Dialog.Title>Stock History</Dialog.Title>
+				<Dialog.Description>{currentStockHistory.length} entries</Dialog.Description>
+			</Dialog.Header>
+			{@render stockHistoryTable()}
+		</Dialog.Content>
+	</Dialog.Root>
+{:else}
+	<Sheet.Root bind:open={stockHistoryOpen}>
+		<Sheet.Content side="bottom" class="max-h-[85vh] rounded-t-2xl">
+			<Sheet.Header>
+				<Sheet.Title>Stock History</Sheet.Title>
+				<Sheet.Description>{currentStockHistory.length} entries</Sheet.Description>
+			</Sheet.Header>
+			<div class="overflow-y-auto px-4 pb-4">
+				{@render stockHistoryTable()}
+			</div>
+		</Sheet.Content>
+	</Sheet.Root>
+{/if}
+

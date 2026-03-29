@@ -50,6 +50,6 @@ until docker compose exec pos_db pg_isready -U "$DB_USER" -d "$DB_NAME" &> /dev/
 done
 
 echo "Checking database connection and applying schema..."
-docker compose exec pos_app pnpm db:push
+docker compose exec pos_app pnpm db:migrate
 
 echo "--- Deployment Complete ---"
