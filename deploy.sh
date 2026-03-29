@@ -52,23 +52,24 @@ done
 echo "Checking database connection and applying schema..."
 
 # Seed drizzle migration journal for migrations already applied via db:push
-# This ensures db:migrate only runs new migrations going forward
-docker compose exec pos_db psql -U "$DB_USER" -d "$DB_NAME" -c "
-CREATE TABLE IF NOT EXISTS \"__drizzle_migrations\" (
+# drizzle-orm stores migrations in the "drizzle" schema
+docker compose exec -T pos_db psql -U "$DB_USER" -d "$DB_NAME" <<'EOSQL'
+CREATE SCHEMA IF NOT EXISTS drizzle;
+CREATE TABLE IF NOT EXISTS drizzle."__drizzle_migrations" (
   id serial PRIMARY KEY,
   hash text NOT NULL,
   created_at bigint
 );
-INSERT INTO \"__drizzle_migrations\" (hash, created_at)
+INSERT INTO drizzle."__drizzle_migrations" (hash, created_at)
 SELECT hash, created_at FROM (VALUES
-  ('0000_fearless_the_leader', 1771663150160),
-  ('0001_nappy_shadowcat', 1771664709464),
-  ('0002_famous_lady_vermin', 1772907373932),
-  ('0003_violet_silver_centurion', 1774109122822),
-  ('0004_keen_vance_astro', 1774109405517)
+  ('0000_fearless_the_leader', 1771663150160::bigint),
+  ('0001_nappy_shadowcat', 1771664709464::bigint),
+  ('0002_famous_lady_vermin', 1772907373932::bigint),
+  ('0003_violet_silver_centurion', 1774109122822::bigint),
+  ('0004_keen_vance_astro', 1774109405517::bigint)
 ) AS v(hash, created_at)
-WHERE NOT EXISTS (SELECT 1 FROM \"__drizzle_migrations\" LIMIT 1);
-"
+WHERE NOT EXISTS (SELECT 1 FROM drizzle."__drizzle_migrations" LIMIT 1);
+EOSQL
 
 docker compose exec pos_app pnpm db:migrate
 
