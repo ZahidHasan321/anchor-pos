@@ -11,18 +11,18 @@ RUN pnpm build
 
 FROM node:22-slim
 WORKDIR /app
-ENV NODE_ENV=production
 RUN corepack enable && corepack prepare pnpm@9 --activate && \
     addgroup --system appgroup && \
     adduser --system --home /home/appuser --ingroup appgroup appuser
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-lock.yaml ./
-# drizzle-kit and typescript are needed for db:push at deploy time
+# Install prod deps + drizzle-kit/typescript for db:migrate at deploy time
 RUN pnpm install --prod --frozen-lockfile && pnpm add drizzle-kit typescript
+ENV NODE_ENV=production
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
-# Only copy schema file needed by drizzle-kit push (not the entire src/)
+# Copy schema file needed by drizzle-kit (not the entire src/)
 COPY --from=builder /app/src/lib/server/db/schema.ts ./src/lib/server/db/schema.ts
 COPY --from=builder /app/scripts ./scripts
 USER appuser
