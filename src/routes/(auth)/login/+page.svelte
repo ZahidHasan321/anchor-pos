@@ -146,16 +146,29 @@
 							<Lock
 								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
 							/>
-							<Input
-								id="password"
-								name="password"
-								type={showPassword ? 'text' : 'password'}
-								placeholder="••••••••"
-								class="h-11 px-10"
-								required
-								autocomplete="current-password"
-								disabled={loading}
-							/>
+							{#if showPassword}
+								<Input
+									id="password"
+									name="password"
+									type="text"
+									placeholder="••••••••"
+									class="h-11 px-10"
+									required
+									autocomplete="current-password"
+									disabled={loading}
+								/>
+							{:else}
+								<Input
+									id="password"
+									name="password"
+									type="password"
+									placeholder="••••••••"
+									class="h-11 px-10"
+									required
+									autocomplete="current-password"
+									disabled={loading}
+								/>
+							{/if}
 							<button
 								type="button"
 								class="absolute top-1/2 right-3 z-10 -translate-y-1/2 cursor-pointer rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
