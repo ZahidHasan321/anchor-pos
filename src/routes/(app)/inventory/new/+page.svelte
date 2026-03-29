@@ -70,7 +70,7 @@
 	<title>New Product — Clothing POS</title>
 </svelte:head>
 
-<div class="p-4 pb-24 sm:p-6 md:pb-6">
+<div class="min-w-0 overflow-x-hidden p-4 pb-24 sm:p-6 md:pb-6">
 	<div class="mb-5 flex items-center gap-4">
 		<Button
 			variant="outline"
@@ -201,10 +201,10 @@
 							</span>
 						{/if}
 					</div>
-					<div class="flex items-center rounded-lg border bg-muted p-0.5">
+					<div class="flex w-full items-center rounded-lg border bg-muted p-0.5 sm:w-auto">
 						<button
 							type="button"
-							class="h-7 rounded-md px-2.5 text-xs font-medium transition-all {selectedTemplate ===
+							class="h-7 flex-1 rounded-md px-2.5 text-xs font-medium transition-all sm:flex-initial {selectedTemplate ===
 							'alpha'
 								? 'bg-background text-foreground shadow-sm'
 								: 'text-muted-foreground hover:bg-muted-foreground/10'}"
@@ -214,7 +214,7 @@
 						</button>
 						<button
 							type="button"
-							class="h-7 rounded-md px-2.5 text-xs font-medium transition-all {selectedTemplate ===
+							class="h-7 flex-1 rounded-md px-2.5 text-xs font-medium transition-all sm:flex-initial {selectedTemplate ===
 							'numeric'
 								? 'bg-background text-foreground shadow-sm'
 								: 'text-muted-foreground hover:bg-muted-foreground/10'}"
@@ -306,7 +306,7 @@
 														}
 													};
 												}}
-												class="h-8 w-20 border-blue-200 text-sm focus-visible:ring-blue-500/30 dark:border-blue-800"
+												class="h-8 w-16 sm:w-20 border-blue-200 text-sm focus-visible:ring-blue-500/30 dark:border-blue-800"
 												placeholder="0"
 											/>
 										</td>
@@ -325,7 +325,7 @@
 														}
 													};
 												}}
-												class="h-8 w-24 text-sm"
+												class="h-8 w-18 sm:w-24 text-sm"
 												placeholder={defaultSellingPrice || '0.00'}
 											/>
 										</td>
@@ -344,7 +344,7 @@
 														}
 													};
 												}}
-												class="h-8 w-24 text-sm"
+												class="h-8 w-18 sm:w-24 text-sm"
 												placeholder={defaultCostPrice || '0.00'}
 											/>
 										</td>
