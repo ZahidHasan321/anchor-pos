@@ -19,48 +19,45 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	const storeTimezone = 'Asia/Dhaka';
-	const getStoreDate = (d: Date = new Date()) => {
+
+	// Helper: get current date parts in store timezone
+	const getStoreDateParts = (d: Date = new Date()) => {
 		const parts = new Intl.DateTimeFormat('en-US', {
 			timeZone: storeTimezone,
 			year: 'numeric',
 			month: '2-digit',
 			day: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit',
 			hour12: false
 		})
 			.formatToParts(d)
 			.reduce((acc, p) => ({ ...acc, [p.type]: p.value }), {} as Record<string, string>);
-		const h = parseInt(parts.hour);
-		return new Date(
-			parseInt(parts.year),
-			parseInt(parts.month) - 1,
-			parseInt(parts.day),
-			h === 24 ? 0 : h,
-			parseInt(parts.minute),
-			parseInt(parts.second)
-		);
+		return {
+			year: parseInt(parts.year),
+			month: parseInt(parts.month) - 1, // 0-indexed
+			day: parseInt(parts.day)
+		};
 	};
 
-	const nowInStore = getStoreDate();
-	const today = new Date(nowInStore);
-	today.setHours(0, 0, 0, 0);
+	// Helper: create a proper UTC Date from Dhaka date components (Asia/Dhaka = UTC+6, no DST)
+	const dhakaDate = (year: number, month: number, day: number, h = 0, m = 0, s = 0, ms = 0) =>
+		new Date(Date.UTC(year, month, day, h - 6, m, s, ms));
 
-	const yesterday = new Date(today);
-	yesterday.setDate(yesterday.getDate() - 1);
+	const now = getStoreDateParts();
+	const today = dhakaDate(now.year, now.month, now.day);
+	const tomorrow = dhakaDate(now.year, now.month, now.day + 1);
 
-	const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+	const yesterday = dhakaDate(now.year, now.month, now.day - 1);
+
+	const firstDayOfMonth = dhakaDate(now.year, now.month, 1);
 
 	// Last month same period: day 1 to min(today's day-of-month, last day of prev month)
-	const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-	const lastDayOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0).getDate();
-	const compareDayOfMonth = Math.min(today.getDate(), lastDayOfPrevMonth);
-	const lastMonthEnd = new Date(today.getFullYear(), today.getMonth() - 1, compareDayOfMonth + 1);
+	const lastDayOfPrevMonth = new Date(Date.UTC(now.year, now.month, 0)).getUTCDate();
+	const compareDayOfMonth = Math.min(now.day, lastDayOfPrevMonth);
+	const lastMonthStart = dhakaDate(now.year, now.month - 1, 1);
+	const lastMonthEnd = dhakaDate(now.year, now.month - 1, compareDayOfMonth + 1);
 
-	// Last 7 days range
-	const sevenDaysAgo = new Date(today);
-	sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // includes today = 7 days
+	// Last 7 days range (includes today = 7 days)
+	const sevenDaysAgo = dhakaDate(now.year, now.month, now.day - 6);
 
 	const isNative = env.IS_NATIVE;
 
@@ -94,14 +91,14 @@ export const load: PageServerLoad = async ({ locals }) => {
 						total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`
 					})
 					.from(orders)
-					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, today))),
+					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, today), lt(orders.createdAt, tomorrow))),
 				db
 					.select({
 						count: sql<number>`count(*)`,
 						total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`
 					})
 					.from(orders)
-					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, firstDayOfMonth))),
+					.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, firstDayOfMonth), lt(orders.createdAt, tomorrow))),
 				db
 					.select({ total: sql<number>`coalesce(sum(${cashbook.amount}), 0)` })
 					.from(cashbook)
@@ -109,7 +106,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 						and(
 							eq(cashbook.type, 'out'),
 							eq(cashbook.category, 'expense'),
-							gte(cashbook.createdAt, today)
+							gte(cashbook.createdAt, today),
+							lt(cashbook.createdAt, tomorrow)
 						)
 					),
 				db
@@ -122,7 +120,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 						and(
 							eq(orders.status, 'completed'),
 							eq(orderItems.status, 'completed'),
-							gte(orders.createdAt, today)
+							gte(orders.createdAt, today),
+							lt(orders.createdAt, tomorrow)
 						)
 					),
 				db
@@ -169,13 +168,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 			const rows = await db
 				.select({
-					day: sql<string>`to_char(${orders.createdAt}, 'YYYY-MM-DD')`,
+					day: sql<string>`to_char(${orders.createdAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY-MM-DD')`,
 					total: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`
 				})
 				.from(orders)
-				.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, sevenDaysAgo)))
-				.groupBy(sql`to_char(${orders.createdAt}, 'YYYY-MM-DD')`)
-				.orderBy(sql`to_char(${orders.createdAt}, 'YYYY-MM-DD')`);
+				.where(and(eq(orders.status, 'completed'), gte(orders.createdAt, sevenDaysAgo), lt(orders.createdAt, tomorrow)))
+				.groupBy(sql`to_char(${orders.createdAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY-MM-DD')`)
+				.orderBy(sql`to_char(${orders.createdAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY-MM-DD')`);
 
 			return rows;
 		})(),
@@ -194,7 +193,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 				.where(
 					and(
 						eq(orders.status, 'completed'),
-						gte(orders.createdAt, today)
+						gte(orders.createdAt, today),
+						lt(orders.createdAt, tomorrow)
 					)
 				);
 
@@ -264,7 +264,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 					and(
 						eq(orders.status, 'completed'),
 						eq(orderItems.status, 'completed'),
-						gte(orders.createdAt, firstDayOfMonth)
+						gte(orders.createdAt, firstDayOfMonth),
+						lt(orders.createdAt, tomorrow)
 					)
 				)
 				.groupBy(orderItems.productName, orderItems.variantLabel)

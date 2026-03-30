@@ -267,7 +267,95 @@
 
 				<!-- Size table -->
 				{#if selectedSizes.length > 0}
-					<div class="overflow-x-auto rounded-lg border">
+					<!-- Mobile: card layout -->
+					<div class="space-y-2 sm:hidden">
+						{#each selectedSizes as size}
+							<div class="rounded-lg border bg-background">
+								<div class="flex items-center justify-between border-b bg-muted/40 px-3 py-1.5">
+									<span
+										class="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-primary/10 px-2 text-xs font-bold text-primary"
+									>
+										{size}
+									</span>
+									<button
+										type="button"
+										class="cursor-pointer rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+										onclick={() => removeSize(size)}
+										title="Remove {size}"
+									>
+										<X class="h-3.5 w-3.5" />
+									</button>
+								</div>
+								<div class="grid grid-cols-3 gap-x-2 px-3 py-2">
+									<div class="space-y-1">
+										<Label class="text-[11px] font-medium text-blue-600 dark:text-blue-400">Qty</Label>
+										<Input
+											type="number"
+											min="0"
+											inputmode="numeric"
+											value={sizeData[size].quantity}
+											oninput={(e: Event) => {
+												sizeData = {
+													...sizeData,
+													[size]: {
+														...sizeData[size],
+														quantity: (e.target as HTMLInputElement).value
+													}
+												};
+											}}
+											class="h-9 border-blue-200 text-sm focus-visible:ring-blue-500/30 dark:border-blue-800"
+											placeholder="0"
+										/>
+									</div>
+									<div class="space-y-1">
+										<Label class="text-[11px] font-medium text-muted-foreground">Selling</Label>
+										<Input
+											type="number"
+											step="0.01"
+											min="0"
+											inputmode="decimal"
+											value={sizeData[size].sellingPrice}
+											oninput={(e: Event) => {
+												sizeData = {
+													...sizeData,
+													[size]: {
+														...sizeData[size],
+														sellingPrice: (e.target as HTMLInputElement).value
+													}
+												};
+											}}
+											class="h-9 text-sm"
+											placeholder={defaultSellingPrice || '0.00'}
+										/>
+									</div>
+									<div class="space-y-1">
+										<Label class="text-[11px] font-medium text-muted-foreground">Cost</Label>
+										<Input
+											type="number"
+											step="0.01"
+											min="0"
+											inputmode="decimal"
+											value={sizeData[size].costPrice}
+											oninput={(e: Event) => {
+												sizeData = {
+													...sizeData,
+													[size]: {
+														...sizeData[size],
+														costPrice: (e.target as HTMLInputElement).value
+													}
+												};
+											}}
+											class="h-9 text-sm"
+											placeholder={defaultCostPrice || '0.00'}
+										/>
+									</div>
+								</div>
+							</div>
+						{/each}
+					</div>
+
+					<!-- Desktop: table layout -->
+					<div class="hidden rounded-lg border sm:block">
 						<table class="w-full text-sm">
 							<thead>
 								<tr class="border-b bg-muted/50">
@@ -306,7 +394,7 @@
 														}
 													};
 												}}
-												class="h-8 w-16 sm:w-20 border-blue-200 text-sm focus-visible:ring-blue-500/30 dark:border-blue-800"
+												class="h-8 w-20 border-blue-200 text-sm focus-visible:ring-blue-500/30 dark:border-blue-800"
 												placeholder="0"
 											/>
 										</td>
@@ -325,7 +413,7 @@
 														}
 													};
 												}}
-												class="h-8 w-18 sm:w-24 text-sm"
+												class="h-8 w-24 text-sm"
 												placeholder={defaultSellingPrice || '0.00'}
 											/>
 										</td>
@@ -344,7 +432,7 @@
 														}
 													};
 												}}
-												class="h-8 w-18 sm:w-24 text-sm"
+												class="h-8 w-24 text-sm"
 												placeholder={defaultCostPrice || '0.00'}
 											/>
 										</td>

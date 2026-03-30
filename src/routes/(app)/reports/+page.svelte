@@ -68,8 +68,8 @@
 		nativeStaffPerformance = null;
 		nativeTopCustomers = null;
 
-		const startIso = `${startDate} 00:00:00+00`;
-		const endIso = `${endDate} 23:59:59+00`;
+		const startIso = `${startDate} 00:00:00+06:00`;
+		const endIso = `${endDate} 23:59:59+06:00`;
 
 		// Summaries
 		Promise.all([
@@ -232,12 +232,12 @@
 				}));
 			});
 
-		// Chart data
+		// Chart data — offset UTC timestamps to Asia/Dhaka (UTC+6) for grouping
 		const groupingFmt: Record<string, string> = {
-			hour: "strftime('%Y-%m-%d %H', created_at)",
-			day: "strftime('%Y-%m-%d', created_at)",
-			month: "strftime('%Y-%m', created_at)",
-			year: "strftime('%Y', created_at)"
+			hour: "strftime('%Y-%m-%d %H', created_at, '+6 hours')",
+			day: "strftime('%Y-%m-%d', created_at, '+6 hours')",
+			month: "strftime('%Y-%m', created_at, '+6 hours')",
+			year: "strftime('%Y', created_at, '+6 hours')"
 		};
 		const chartExpr = groupingFmt[chartGrouping] ?? groupingFmt.day;
 		powersync.db

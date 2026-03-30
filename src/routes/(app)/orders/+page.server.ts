@@ -2,7 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { orders, customers, users } from '$lib/server/db/schema';
-import { eq, and, gte, lte, desc, sql, or } from 'drizzle-orm';
+import { eq, and, gte, lt, desc, sql, or } from 'drizzle-orm';
 import env from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
@@ -22,8 +22,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const isNative = env.IS_NATIVE;
 
 	const conditions: any[] = [];
-	if (dateFrom) conditions.push(gte(orders.createdAt, new Date(dateFrom + 'T00:00:00')));
-	if (dateTo) conditions.push(lte(orders.createdAt, new Date(dateTo + 'T23:59:59.999')));
+	if (dateFrom) conditions.push(gte(orders.createdAt, new Date(dateFrom + 'T00:00:00+06:00')));
+	if (dateTo) conditions.push(lt(orders.createdAt, new Date(new Date(dateTo + 'T00:00:00+06:00').getTime() + 86400000)));
 	if (statusFilter) conditions.push(eq(orders.status, statusFilter as any));
 	if (search) {
 		conditions.push(

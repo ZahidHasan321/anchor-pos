@@ -36,69 +36,67 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const customFrom = url.searchParams.get('from');
 	const customTo = url.searchParams.get('to');
 
-	// Helper to get date in store timezone using formatToParts (avoids ICU narrow-space AM/PM parsing issues)
-	const getStoreDate = (d: Date = new Date()) => {
+	// Helper: get current date/time components in store timezone (Asia/Dhaka)
+	const getStoreDateParts = (d: Date = new Date()) => {
 		const parts = new Intl.DateTimeFormat('en-US', {
 			timeZone: storeTimezone,
 			year: 'numeric',
 			month: '2-digit',
 			day: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit',
 			hour12: false
 		})
 			.formatToParts(d)
 			.reduce((acc, p) => ({ ...acc, [p.type]: p.value }), {} as Record<string, string>);
-		const h = parseInt(parts.hour);
-		return new Date(
-			parseInt(parts.year),
-			parseInt(parts.month) - 1,
-			parseInt(parts.day),
-			h === 24 ? 0 : h,
-			parseInt(parts.minute),
-			parseInt(parts.second)
-		);
+		return {
+			year: parseInt(parts.year),
+			month: parseInt(parts.month) - 1, // 0-indexed
+			day: parseInt(parts.day)
+		};
 	};
 
-	const nowInStore = getStoreDate();
+	// Helper: create a proper UTC Date from Dhaka date components (Asia/Dhaka = UTC+6, no DST)
+	// Uses Date constructor for month/day overflow handling, then adjusts for UTC+6
+	const dhakaDate = (year: number, month: number, day: number, h = 0, m = 0, s = 0, ms = 0) => {
+		// Use UTC constructor so month/day overflow is handled (e.g. day 32 → next month)
+		// Then subtract 6 hours to convert from Dhaka wall-clock to actual UTC
+		return new Date(Date.UTC(year, month, day, h - 6, m, s, ms));
+	};
+
+	const now = getStoreDateParts();
 	let startDate: Date;
-	let endDate: Date = new Date(nowInStore);
-	endDate.setHours(23, 59, 59, 999);
+	// endDate uses start of NEXT day with lt (<) for correct boundary (no sub-millisecond gaps)
+	let endDate: Date = dhakaDate(now.year, now.month, now.day + 1);
 
 	switch (period) {
 		case 'today':
-			startDate = new Date(nowInStore);
-			startDate.setHours(0, 0, 0, 0);
+			startDate = dhakaDate(now.year, now.month, now.day);
 			break;
 		case 'week':
-			startDate = new Date(nowInStore);
-			startDate.setDate(nowInStore.getDate() - 7);
-			startDate.setHours(0, 0, 0, 0);
+			startDate = dhakaDate(now.year, now.month, now.day - 7);
 			break;
 		case 'month':
-			startDate = new Date(nowInStore.getFullYear(), nowInStore.getMonth(), 1);
-			startDate.setHours(0, 0, 0, 0);
+			startDate = dhakaDate(now.year, now.month, 1);
 			break;
 		case 'year':
-			startDate = new Date(nowInStore.getFullYear(), 0, 1);
-			startDate.setHours(0, 0, 0, 0);
+			startDate = dhakaDate(now.year, 0, 1);
 			break;
 		case 'custom':
-			startDate = customFrom
-				? new Date(`${customFrom}T00:00:00`)
-				: new Date(nowInStore.getFullYear(), nowInStore.getMonth(), 1);
+			if (customFrom) {
+				const [y, m, d] = customFrom.split('-').map(Number);
+				startDate = dhakaDate(y, m - 1, d);
+			} else {
+				startDate = dhakaDate(now.year, now.month, 1);
+			}
 			if (isNaN(startDate.getTime()))
-				startDate = new Date(nowInStore.getFullYear(), nowInStore.getMonth(), 1);
-			startDate.setHours(0, 0, 0, 0);
+				startDate = dhakaDate(now.year, now.month, 1);
 
 			if (customTo) {
-				endDate = new Date(`${customTo}T23:59:59`);
+				const [y, m, d] = customTo.split('-').map(Number);
+				endDate = dhakaDate(y, m - 1, d + 1); // start of next day
 			} else {
-				endDate = new Date(nowInStore);
-				endDate.setHours(23, 59, 59, 999);
+				endDate = dhakaDate(now.year, now.month, now.day + 1);
 			}
-			if (isNaN(endDate.getTime())) endDate = new Date(nowInStore);
+			if (isNaN(endDate.getTime())) endDate = dhakaDate(now.year, now.month, now.day + 1);
 			break;
 		case 'all':
 		default:
@@ -109,10 +107,12 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 						.orderBy(orders.createdAt)
 						.limit(1)
 				: [];
-			startDate = firstOrderResult[0]?.date
-				? new Date(firstOrderResult[0].date)
-				: new Date(nowInStore.getFullYear(), nowInStore.getMonth(), 1);
-			startDate.setHours(0, 0, 0, 0);
+			if (firstOrderResult[0]?.date) {
+				const fd = getStoreDateParts(new Date(firstOrderResult[0].date));
+				startDate = dhakaDate(fd.year, fd.month, fd.day);
+			} else {
+				startDate = dhakaDate(now.year, now.month, 1);
+			}
 			break;
 	}
 
@@ -131,18 +131,24 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		chartGrouping = 'year';
 	}
 
+	// Format a Date to YYYY-MM-DD in store timezone (dates are already Dhaka-aware UTC instants)
 	const formatDateToStore = (d: Date) => {
-		const year = d.getFullYear();
-		const month = String(d.getMonth() + 1).padStart(2, '0');
-		const day = String(d.getDate()).padStart(2, '0');
-		return `${year}-${month}-${day}`;
+		const parts = new Intl.DateTimeFormat('en-US', {
+			timeZone: storeTimezone,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit'
+		})
+			.formatToParts(d)
+			.reduce((acc, p) => ({ ...acc, [p.type]: p.value }), {} as Record<string, string>);
+		return `${parts.year}-${parts.month}-${parts.day}`;
 	};
 
 	const dateExpressionMap = {
-		hour: sql<string>`to_char(${orders.createdAt}, 'YYYY-MM-DD HH24')`,
-		day: sql<string>`to_char(${orders.createdAt}, 'YYYY-MM-DD')`,
-		month: sql<string>`to_char(${orders.createdAt}, 'YYYY-MM')`,
-		year: sql<string>`to_char(${orders.createdAt}, 'YYYY')`
+		hour: sql<string>`to_char(${orders.createdAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY-MM-DD HH24')`,
+		day: sql<string>`to_char(${orders.createdAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY-MM-DD')`,
+		month: sql<string>`to_char(${orders.createdAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY-MM')`,
+		year: sql<string>`to_char(${orders.createdAt} AT TIME ZONE 'Asia/Dhaka', 'YYYY')`
 	};
 
 	// 2. Streamed data (Deferred)
@@ -150,7 +156,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		storeName: settings.store_name ?? 'Store',
 		period,
 		startDate: formatDateToStore(startDate),
-		endDate: formatDateToStore(endDate),
+		endDate: formatDateToStore(new Date(endDate.getTime() - 1)), // endDate is start-of-next-day, display the actual last day
 		chartGrouping,
 
 		// Summaries (Instantly visible cards)
@@ -270,6 +276,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 				.leftJoin(products, eq(productVariants.productId, products.id))
 				.where(
 					and(
+						eq(orders.status, 'completed'),
 						eq(orderItems.status, 'completed'),
 						gte(orders.createdAt, startDate),
 						lt(orders.createdAt, endDate)

@@ -34,9 +34,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		return json([], { status: 200 });
 	}
 
-	const startDate = new Date(from);
-	const endDate = new Date(to);
-	endDate.setHours(23, 59, 59, 999);
+	// Parse date strings as Dhaka timezone boundaries (Asia/Dhaka = UTC+6, no DST)
+	const startDate = new Date(`${from}T00:00:00+06:00`);
+	const endDate = new Date(new Date(`${to}T00:00:00+06:00`).getTime() + 86400000); // start of next day for lt (<)
 
 	if (type === 'products') {
 		const data = await db
@@ -56,6 +56,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			.where(
 				and(
 					eq(orders.status, 'completed'),
+					eq(orderItems.status, 'completed'),
 					gte(orders.createdAt, startDate),
 					lt(orders.createdAt, endDate)
 				)
@@ -157,6 +158,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			.where(
 				and(
 					eq(cashbook.type, 'out'),
+					eq(cashbook.category, 'expense'),
 					gte(cashbook.createdAt, startDate),
 					lt(cashbook.createdAt, endDate)
 				)
